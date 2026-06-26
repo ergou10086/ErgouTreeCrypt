@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.*?>
+<StackPane xmlns:fx="http://javafx.com/fxml" fx:id="rootStack"
+           fx:controller="hbnu.project.ergoutreecrypt.ui.MainController"
+           styleClass="light">
+
+    <VBox fx:id="rootPane" styleClass="app-root">
+
+        <!-- ===== 自定义标题栏 ===== -->
+        <HBox fx:id="titleBar" styleClass="title-bar" alignment="CENTER_LEFT" spacing="10">
+            <padding>
+                <Insets top="8" right="12" bottom="8" left="16"/>
+            </padding>
+            <ImageView fitWidth="24" fitHeight="24" preserveRatio="true" styleClass="title-logo" smooth="true">
+                <Image url="@img/logo.png"/>
+            </ImageView>
+            <Label fx:id="appTitleLabel" styleClass="title-text" text="ErgouTreeCrypt"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="langButton" styleClass="title-tool" onAction="#onToggleLang"/>
+            <Button fx:id="themeButton" styleClass="title-tool" text="☽" onAction="#onToggleTheme"/>
+            <Button fx:id="minBtn" styleClass="title-win,win-min" text="—" onAction="#onMinimize"/>
+            <Button fx:id="closeBtn" styleClass="title-win,win-close" text="✕" onAction="#onClose"/>
+        </HBox>
+
+        <!-- ===== 菜单栏 ===== -->
+        <MenuBar fx:id="menuBar" styleClass="app-menu" VBox.vgrow="NEVER">
+            <Menu fx:id="settingsMenu">
+                <MenuItem fx:id="settingsMenuItem" onAction="#onOpenSettings"/>
+                <SeparatorMenuItem/>
+                <MenuItem fx:id="aboutMenuItem" onAction="#onAbout"/>
+            </Menu>
+        </MenuBar>
+
+        <!-- ===== 标签页：文件加密 / 音视频加密 ===== -->
+        <TabPane fx:id="mainTabs" styleClass="main-tabs" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+            <Tab fx:id="fileTab">
+                <VBox styleClass="tab-body">
+
+                    <!-- ===== 内容区（响应式：内容列限制最大宽度并居中） ===== -->
+                    <ScrollPane fx:id="contentScroll" styleClass="content-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
+                        <HBox alignment="TOP_CENTER">
+                            <VBox fx:id="contentColumn" styleClass="content" spacing="16" maxWidth="720"
+                                  HBox.hgrow="ALWAYS">
+                                <padding>
+                                    <Insets top="18" right="24" bottom="18" left="24"/>
+                                </padding>
+
+                                <!-- 模式分段切换 -->
+                                <HBox styleClass="segmented" alignment="CENTER" fx:id="segmented">
+                                    <ToggleButton fx:id="encryptTab" styleClass="seg-btn" selected="true">
+                                        <toggleGroup>
+                                            <ToggleGroup fx:id="modeGroup"/>
+                                        </toggleGroup>
+                                    </ToggleButton>
+                                    <ToggleButton fx:id="decryptTab" styleClass="seg-btn" toggleGroup="$modeGroup"/>
+                                </HBox>
+
+                                <!-- 文件拖拽卡片 -->
+                                <VBox fx:id="dropZone" styleClass="card,drop-zone" spacing="8" alignment="CENTER">
+                                    <Label styleClass="drop-icon" text="⤓"/>
+                                    <Label fx:id="dropHintLabel" styleClass="drop-hint"/>
+                                    <Label fx:id="dropSubLabel" styleClass="drop-sub"/>
+                                    <HBox spacing="10" alignment="CENTER">
+                                        <Button fx:id="chooseFileBtn" styleClass="btn-ghost"
+                                                onAction="#onChooseFileBtn"/>
+                                        <Button fx:id="chooseFolderBtn" styleClass="btn-ghost"
+                                                onAction="#onChooseFolderBtn"/>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- 已选文件信息卡片 -->
+                                <VBox fx:id="fileCard" styleClass="card,file-card" spacing="6" managed="false"
+                                      visible="false">
+                                    <HBox alignment="CENTER_LEFT" spacing="12">
+                                        <Label styleClass="file-icon" text="▤"/>
+                                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                            <Label fx:id="fileNameLabel" styleClass="file-name"/>
+                                            <Label fx:id="fileMetaLabel" styleClass="file-meta"/>
+                                        </VBox>
+                                        <Button fx:id="clearFileBtn" styleClass="btn-ghost" onAction="#onClearFile"/>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- 输出路径卡片 -->
+                                <VBox fx:id="outputCard" styleClass="card" spacing="8" managed="false" visible="false">
+                                    <Label fx:id="outputLabel" styleClass="card-title"/>
+                                    <HBox spacing="8" alignment="CENTER_LEFT">
+                                        <TextField fx:id="outputFileField" styleClass="text-input" HBox.hgrow="ALWAYS"/>
+                                        <Button fx:id="outputBrowseBtn" styleClass="btn-ghost"
+                                                onAction="#onBrowseOutput"/>
+                                    </HBox>
+                                </VBox>
+
+                                <!-- 密码卡片 -->
+                                <VBox styleClass="card" spacing="10">
+                                    <Label fx:id="passwordCardTitle" styleClass="card-title"/>
+                                    <StackPane>
+                                        <PasswordField fx:id="passwordField" styleClass="text-input"/>
+                                        <TextField fx:id="passwordVisibleField" styleClass="text-input" managed="false"
+                                                   visible="false"/>
+                                    </StackPane>
+                                    <HBox spacing="8" alignment="CENTER_LEFT">
+                                        <Label fx:id="strengthLabel" styleClass="strength-label"/>
+                                        <Region HBox.hgrow="ALWAYS"/>
+                                        <CheckBox fx:id="showPasswordCheck" styleClass="check"
+                                                  onAction="#onToggleShowPassword"/>
+                                        <Button fx:id="genPasswordBtn" styleClass="btn-ghost"
+                                                onAction="#onGeneratePassword"/>
+                                        <Button fx:id="copyPasswordBtn" styleClass="btn-ghost"
+                                                onAction="#onCopyPassword"/>
+                                    </HBox>
+                                    <VBox fx:id="confirmBox" spacing="6">
+                                        <PasswordField fx:id="confirmField" styleClass="text-input"/>
+                                        <Label fx:id="mismatchLabel" styleClass="error-text" managed="false"
+                                               visible="false"/>
+                                    </VBox>
+                                </VBox>
+
+                                <!-- 高级选项（可折叠） -->
+                                <VBox styleClass="card" spacing="4">
+                                    <HBox fx:id="optionsHeader" styleClass="options-header" alignment="CENTER_LEFT"
+                                          spacing="8">
+                                        <Label fx:id="optionsTitle" styleClass="card-title"/>
+                                        <Region HBox.hgrow="ALWAYS"/>
+                                        <Label fx:id="optionsChevron" styleClass="chevron" text="⌄"/>
+                                    </HBox>
+                                    <VBox fx:id="optionsBody" styleClass="options-body" spacing="12" managed="false"
+                                          visible="false">
+                                        <Separator/>
+                                        <!-- 加密专属选项 -->
+                                        <VBox fx:id="encryptOptions" spacing="10">
+                                            <Label fx:id="commentsLabel" styleClass="field-label"/>
+                                            <TextArea fx:id="commentsArea" styleClass="text-area" prefRowCount="2"/>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="paranoidCheck" styleClass="check"/>
+                                                <Label fx:id="paranoidInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="reedSolomonCheck" styleClass="check"/>
+                                                <Label fx:id="reedSolomonInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="deniabilityCheck" styleClass="check"/>
+                                                <Label fx:id="deniabilityInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="compressCheck" styleClass="check"/>
+                                                <Label fx:id="compressInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="compressAfterCheck" styleClass="check"/>
+                                                <Label fx:id="compressAfterInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <ComboBox fx:id="compressFormatCombo" styleClass="text-input"
+                                                      prefWidth="140" managed="false" visible="false"
+                                                      maxWidth="Infinity"/>
+                                            <PasswordField fx:id="archivePasswordField" styleClass="text-input"
+                                                          managed="false" visible="false"
+                                                          promptText="Archive password (optional)"/>
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <HBox alignment="CENTER_LEFT" spacing="2">
+                                                    <CheckBox fx:id="splitCheck" styleClass="check"/>
+                                                    <Label fx:id="splitInfo" styleClass="info-icon" text="i"/>
+                                                </HBox>
+                                                <Spinner fx:id="splitSizeSpinner" styleClass="spinner" prefWidth="110"
+                                                         disable="true"/>
+                                                <Label fx:id="splitUnitLabel" styleClass="field-hint" text="MiB"/>
+                                            </HBox>
+                                        </VBox>
+                                        <!-- 解密专属选项 -->
+                                        <VBox fx:id="decryptOptions" spacing="10" managed="false" visible="false">
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="forceDecryptCheck" styleClass="check"/>
+                                                <Label fx:id="forceDecryptInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="autoUnzipCheck" styleClass="check"/>
+                                                <Label fx:id="autoUnzipInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="verifyFirstCheck" styleClass="check"/>
+                                                <Label fx:id="verifyFirstInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="recursiveExtractCheck" styleClass="check"/>
+                                                <Label fx:id="recursiveExtractInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                        </VBox>
+                                        <Separator/>
+                                        <!-- 密钥文件 -->
+                                        <VBox spacing="8">
+                                            <HBox alignment="CENTER_LEFT" spacing="8">
+                                                <Label fx:id="keyfilesLabel" styleClass="field-label"/>
+                                                <Region HBox.hgrow="ALWAYS"/>
+                                                <HBox alignment="CENTER_LEFT" spacing="2">
+                                                    <CheckBox fx:id="keyfileOrderedCheck" styleClass="check"/>
+                                                    <Label fx:id="keyfileOrderedInfo" styleClass="info-icon" text="i"/>
+                                                </HBox>
+                                                <Button fx:id="addKeyfileBtn" styleClass="btn-ghost"
+                                                        onAction="#onAddKeyfile"/>
+                                            </HBox>
+                                            <VBox fx:id="keyfileList" styleClass="keyfile-list" spacing="4"/>
+                                            <Label fx:id="keyfileEmptyLabel" styleClass="field-hint"/>
+                                        </VBox>
+                                    </VBox>
+                                </VBox>
+                            </VBox>
+                        </HBox>
+                    </ScrollPane>
+
+                    <!-- ===== 底部操作栏 ===== -->
+                    <VBox styleClass="footer" spacing="10">
+                        <padding>
+                            <Insets top="14" right="24" bottom="18" left="24"/>
+                        </padding>
+                        <VBox fx:id="progressBox" spacing="6" managed="false" visible="false">
+                            <HBox alignment="CENTER_LEFT" spacing="8">
+                                <Label fx:id="statusLabel" styleClass="status-text"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="progressInfoLabel" styleClass="status-info"/>
+                            </HBox>
+                            <ProgressBar fx:id="progressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
+                        </VBox>
+                        <HBox spacing="12" alignment="CENTER_RIGHT">
+                            <Button fx:id="cancelBtn" styleClass="btn-secondary" managed="false" visible="false"
+                                    onAction="#onCancel"/>
+                            <Button fx:id="verifyBtn" styleClass="btn-secondary" managed="false" visible="false"
+                                    onAction="#onVerifyIntegrity"/>
+                            <Button fx:id="actionBtn" styleClass="btn-accent" onAction="#onAction"/>
+                        </HBox>
+                    </VBox>
+                </VBox>
+            </Tab>
+
+            <!-- 音视频加密标签页（独立 FXML + 控制器） -->
+            <Tab fx:id="mediaTab">
+                <fx:include fx:id="mediaView" source="av-view.fxml" VBox.vgrow="ALWAYS"/>
+            </Tab>
+        </TabPane>
+    </VBox>
+</StackPane>

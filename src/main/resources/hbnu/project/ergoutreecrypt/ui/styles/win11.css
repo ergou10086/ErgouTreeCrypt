@@ -1,0 +1,2139 @@
+/* ======================================================================================
+ * ErgouTreeCrypt — Windows 11 Fluent Design 风格样式表
+ *
+ * 设计规范来源：
+ *   Microsoft Fluent Design System — Windows 11 / WinUI 3
+ *   https://learn.microsoft.com/en-us/windows/apps/design/
+ *
+ * 颜色令牌 (Design Tokens)
+ *   浅色 (.root.light)：窗口背景 #f3f3f3，卡片 #ffffff，主文字 #1a1a1a，强调色 #0067c0
+ *   深色 (.root.dark)：窗口背景 #202020，卡片 #2c2c2c，主文字 #f2f2f2，强调色 #4cc2ff
+ *
+ * 圆角体系 (Corner Radius)
+ *   窗口/对话框/弹出菜单：8px  — 最大化时通过 .maximized 类自动去除顶部圆角
+ *   卡片/按钮/输入框等页面内控件：4px (部分 8px 以获得更柔和外观)
+ *
+ * 阴影体系 (Elevation / Shadow)
+ *   窗口：dropshadow(gaussian, rgba(0,0,0,0.14), 24, 0, 0, 6)
+ *   卡片：dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2)
+ *   菜单：dropshadow(gaussian, rgba(0,0,0,0.12), 12, 0, 0, 4)
+ *
+ * 字体 (Typography)
+ *   全局："Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif
+ *   正文：13px，标题：14–16px，辅助文本：12px
+ *
+ * 切换方式：
+ *   通过给 Scene 根节点添加/移除 .light 或 .dark 样式类来驱动 CSS 变量。
+ *   设置中提供 "跟随系统" 选项，自动检测 Windows 深浅色模式并切换。
+ *
+ * 覆盖说明：
+ *   本样式表完全覆盖 JavaFX Modena 默认样式及 BootstrapFX 0.4.0 的所有样式。
+ *   所有控件均从零开始重新设计，不留任何残留渐变、内阴影或默认图标背景。
+ * ====================================================================================== */
+
+/* ==========================================================================
+ * SECTION 0 — BootstrapFX & Modena 全局重置
+ * ========================================================================== */
+
+/* 彻底清除所有可能从 BootstrapFX 泄露的样式 */
+.root,
+.dialog-pane,
+.alert,
+.button,
+.toggle-button,
+.check-box,
+.radio-button,
+.combo-box,
+.text-field,
+.text-area,
+.password-field,
+.spinner,
+.progress-bar,
+.scroll-bar,
+.scroll-pane,
+.tooltip,
+.menu-bar,
+.menu,
+.menu-item,
+.context-menu,
+.tab-pane,
+.list-view,
+.table-view,
+.tree-view,
+.label,
+.separator,
+.titled-pane,
+.split-pane,
+.slider {
+
+    /* 重置 BootstrapFX 常见的渐变和阴影 */
+    -fx-background-insets: 0;
+    -fx-background-radius: 0;
+    /* 覆盖 BootstrapFX 的默认按钮渐变 */
+    -fx-body-color: transparent;
+    -fx-body-color-up: transparent;
+    -fx-body-color-mid: transparent;
+    -fx-outer-border: transparent;
+    -fx-inner-border: transparent;
+    -fx-inner-border-horizontal: transparent;
+    -fx-inner-border-bottomup: transparent;
+    -fx-shadow-highlight-color: transparent;
+    -fx-text-box-border: transparent;
+    -fx-text-base-color: transparent;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+    -fx-selection-bar: transparent;
+    -fx-selection-bar-non-focused: transparent;
+    -fx-cell-focus-inner-border: transparent;
+    -fx-cell-hover-color: transparent;
+    -fx-cell-selection-color: transparent;
+    -fx-focused-text-base-color: transparent;
+    -fx-accent: transparent;
+    -fx-control-inner-background: transparent;
+    -fx-control-inner-background-alt: transparent;
+    -fx-mark-color: transparent;
+    -fx-mark-highlight-color: transparent;
+
+    /* 重置 Modena 的默认内边距 */
+    -fx-padding: 0;
+}
+
+/* 全局字体 */
+.root {
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ==========================================================================
+ * SECTION 1 — CSS 变量系统 (Design Tokens)
+ * ========================================================================== */
+
+/* ---------- 浅色主题 ---------- */
+.root.light {
+    /* 背景 */
+    -bg-window:           rgba(243, 243, 243, 0.85);   /* Mica 仿云母效果 (SolidBackgroundFillColorBase) */
+    -bg-window-solid:     #f3f3f3;
+    -bg-card:             #ffffff;                        /* SolidBackgroundFillColorSecondary */
+    -bg-card-hover:       #f7f9fc;
+    -bg-input:            #fbfbfb;
+    -bg-input-hover:      #f6f6f6;
+    -bg-subtle:           #f0f0f0;                        /* SubtleFillColorTransparent */
+    -bg-overlay:          rgba(0, 0, 0, 0.04);
+
+    /* 边框 */
+    -border-soft:         #e8e8e8;                        /* SurfaceStrokeColorDefault */
+    -border-strong:       #d2d2d2;
+    -border-card:         rgba(0, 0, 0, 0.06);
+    -border-focus:        #0067c0;
+
+    /* 文字 */
+    -text-primary:        #1a1a1a;                        /* TextFillColorPrimary */
+    -text-secondary:      #5f6368;                        /* TextFillColorSecondary */
+    -text-tertiary:       #9aa0a6;                        /* TextFillColorTertiary */
+    -text-disabled:       #bdbdbd;
+
+    /* 强调色 */
+    -accent:              #0067c0;                        /* AccentFillColorDefault */
+    -accent-hover:        #1976d2;
+    -accent-press:        #005ba1;
+    -accent-fg:           #ffffff;                        /* 强调色上的文字 */
+    -accent-subtle:       rgba(0, 103, 192, 0.08);
+
+    /* 功能色 */
+    -danger:              #c42b1c;
+    -danger-hover:        #d83b2b;
+    -danger-fg:           #ffffff;
+    -success:             #0f7b0f;
+    -success-fg:          #ffffff;
+    -warning:             #e87800;
+
+    /* 阴影 (阴影色) */
+    -shadow:              rgba(0, 0, 0, 0.08);
+    -shadow-strong:       rgba(0, 0, 0, 0.14);
+    -shadow-menu:         rgba(0, 0, 0, 0.12);
+
+    /* 标题栏 / 窗口边框 */
+    -titlebar:            rgba(238, 238, 238, 0.0);
+    -window-border:       rgba(0, 0, 0, 0.10);
+
+    /* 滚动条 */
+    -scrollbar-thumb:     rgba(0, 0, 0, 0.20);
+    -scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+
+    /* 图标色 (Ikonli font-icon) */
+    -icon-color:          #5f6368;
+    -icon-accent:         #0067c0;
+}
+
+/* ---------- 深色主题 ---------- */
+.root.dark {
+    /* 背景 */
+    -bg-window:           rgba(32, 32, 32, 0.85);        /* Mica 仿云母效果 */
+    -bg-window-solid:     #202020;
+    -bg-card:             #2c2c2c;
+    -bg-card-hover:       #343434;
+    -bg-input:            #303030;
+    -bg-input-hover:      #3a3a3a;
+    -bg-subtle:           #262626;
+    -bg-overlay:          rgba(255, 255, 255, 0.04);
+
+    /* 边框 */
+    -border-soft:         #3a3a3a;
+    -border-strong:       #4a4a4a;
+    -border-card:         rgba(255, 255, 255, 0.07);
+    -border-focus:        #4cc2ff;
+
+    /* 文字 */
+    -text-primary:        #f2f2f2;
+    -text-secondary:      #cacaca;
+    -text-tertiary:       #8d8d8d;
+    -text-disabled:       #5a5a5a;
+
+    /* 强调色 */
+    -accent:              #4cc2ff;
+    -accent-hover:        #62cbff;
+    -accent-press:        #3aa8e0;
+    -accent-fg:           #1c1c1c;
+    -accent-subtle:       rgba(76, 194, 255, 0.12);
+
+    /* 功能色 */
+    -danger:              #ff99a4;
+    -danger-hover:        #ffb3bb;
+    -danger-fg:           #1c1c1c;
+    -success:             #6ccb5f;
+    -success-fg:          #1c1c1c;
+    -warning:             #ffb74d;
+
+    /* 阴影 (深色下阴影更重) */
+    -shadow:              rgba(0, 0, 0, 0.35);
+    -shadow-strong:       rgba(0, 0, 0, 0.50);
+    -shadow-menu:         rgba(0, 0, 0, 0.40);
+
+    /* 标题栏 / 窗口边框 */
+    -titlebar:            rgba(26, 26, 26, 0.0);
+    -window-border:       rgba(255, 255, 255, 0.08);
+
+    /* 滚动条 */
+    -scrollbar-thumb:     rgba(255, 255, 255, 0.20);
+    -scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+
+    /* 图标色 */
+    -icon-color:          #cacaca;
+    -icon-accent:         #4cc2ff;
+}
+
+/* ==========================================================================
+ * SECTION 2 — 窗口根节点 (Window Root)
+ * ========================================================================== */
+
+/* 透明窗口根：圆角 + 细描边 + 投影，模拟 Win11 窗口 */
+.app-root {
+    -fx-background-color: -bg-window;
+    -fx-background-radius: 8;
+    -fx-border-color: -window-border;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, -shadow-strong, 24, 0, 0, 6);
+}
+
+/* 最大化时去除圆角和边框，以无缝贴合屏幕 */
+.app-root.maximized {
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-width: 0;
+    -fx-effect: null;
+}
+
+/* StackPane 最外层透明，留出阴影空间 */
+.root {
+    -fx-padding: 0;
+}
+
+/* ==========================================================================
+ * SECTION 3 — 标题栏 (Title Bar)
+ *    对应 FXML 中的 .title-bar, .title-logo, .title-text, .title-tool, .title-win
+ * ========================================================================== */
+
+.title-bar {
+    -fx-background-color: -titlebar;
+    -fx-background-radius: 8 8 0 0;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+}
+
+/* 最大化时标题栏也去除顶部圆角 */
+.app-root.maximized .title-bar {
+    -fx-background-radius: 0;
+}
+
+.title-logo {
+    -fx-fit-width: 24;
+    -fx-fit-height: 24;
+}
+
+.title-text {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -text-primary;
+}
+
+/* 标题栏工具按钮（语言切换、主题切换） */
+.title-tool {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 6;
+    -fx-padding: 4 10 4 10;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+    -fx-min-height: 28;
+}
+
+.title-tool:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-text-fill: -text-primary;
+}
+
+.title-tool:pressed {
+    -fx-background-color: -bg-subtle;
+}
+
+/* 标题栏窗口控制按钮（最小化、关闭） */
+.title-win {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 0;
+    -fx-min-width: 46;
+    -fx-pref-width: 46;
+    -fx-min-height: 32;
+    -fx-padding: 4 0 4 0;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+}
+
+.win-min:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-text-fill: -text-primary;
+}
+
+.win-min:pressed {
+    -fx-background-color: -bg-subtle;
+}
+
+.win-close {
+    -fx-background-radius: 0 8 0 0;
+}
+
+.win-close:hover {
+    -fx-background-color: #c42b1c;
+    -fx-text-fill: #ffffff;
+}
+
+.win-close:pressed {
+    -fx-background-color: #a02018;
+    -fx-text-fill: #ffffff;
+}
+
+.app-root.maximized .win-close {
+    -fx-background-radius: 0;
+}
+
+/* ==========================================================================
+ * SECTION 4 — 菜单栏 (Menu Bar)
+ *    对应 FXML 中的 .app-menu (MenuBar)
+ *    覆盖 JavaFX Modena 默认菜单样式
+ * ========================================================================== */
+
+.app-menu {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 0;
+    -fx-min-height: 30;
+}
+
+.app-menu > .menu-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 顶层菜单 */
+.app-menu .menu {
+    -fx-padding: 4 10 4 10;
+    -fx-background-radius: 4;
+}
+
+.app-menu .menu .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+.app-menu .menu:hover,
+.app-menu .menu:showing {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* 下拉菜单容器 (ContextMenu) */
+/* 注意：弹出菜单属于独立 Popup，有独立 Scene。
+   但若该 Scene 的根继承了 window 的样式类，则 looked-up color 可用。
+   为安全起见，此处同时提供硬编码后备，并通过 .root.dark 祖先选择器覆盖深色。 */
+
+.app-menu .context-menu,
+.context-menu {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-color: #e8e8e8;
+    -fx-border-radius: 8;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 12, 0, 0, 4);
+    -fx-min-width: 180;
+}
+
+.root.dark .app-menu .context-menu,
+.root.dark .context-menu {
+    -fx-background-color: #2c2c2c;
+    -fx-border-color: #3a3a3a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+/* 菜单项 */
+.app-menu .menu-item,
+.context-menu .menu-item {
+    -fx-padding: 8 12 8 12;
+    -fx-background-radius: 6;
+    -fx-background-color: transparent;
+}
+
+.app-menu .menu-item .label,
+.context-menu .menu-item .label {
+    -fx-text-fill: #1a1a1a;
+    -fx-font-size: 12px;
+}
+
+.root.dark .app-menu .menu-item .label,
+.root.dark .context-menu .menu-item .label {
+    -fx-text-fill: #f2f2f2;
+}
+
+.app-menu .menu-item:hover,
+.context-menu .menu-item:hover {
+    -fx-background-color: #f0f0f0;
+}
+
+.root.dark .app-menu .menu-item:hover,
+.root.dark .context-menu .menu-item:hover {
+    -fx-background-color: #3a3a3a;
+}
+
+.app-menu .menu-item:pressed,
+.context-menu .menu-item:pressed {
+    -fx-background-color: #e0e0e0;
+}
+
+.root.dark .app-menu .menu-item:pressed,
+.root.dark .context-menu .menu-item:pressed {
+    -fx-background-color: #4a4a4a;
+}
+
+/* 菜单分割线 */
+.app-menu .separator .line,
+.context-menu .separator .line {
+    -fx-border-color: #e8e8e8;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 2 6 2 6;
+}
+
+.root.dark .app-menu .separator .line,
+.root.dark .context-menu .separator .line {
+    -fx-border-color: #3a3a3a;
+}
+
+/* 加速键文本 */
+.app-menu .menu-item .accelerator-text,
+.context-menu .menu-item .accelerator-text {
+    -fx-text-fill: -text-tertiary;
+    -fx-font-size: 11px;
+}
+
+/* ==========================================================================
+ * SECTION 5 — 标签页 (TabPane)
+ *    对应 FXML 中的 .main-tabs (TabPane, tabClosingPolicy="UNAVAILABLE")
+ *    覆盖 Modena 默认标签样式
+ * ========================================================================== */
+
+.main-tabs {
+    -fx-background-color: transparent;
+    -fx-tab-min-height: 36;
+    -fx-tab-max-height: 36;
+    -fx-open-tab-animation: none;
+    -fx-close-tab-animation: none;
+}
+
+/* 标签头部区域背景透明 */
+.main-tabs > .tab-header-area {
+    -fx-padding: 0 16 0 16;
+}
+
+.main-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* 标签头部滚动按钮隐藏（UNAVAILABLE 模式） */
+.main-tabs > .tab-header-area > .control-buttons-tab {
+    -fx-opacity: 0;
+    -fx-pref-width: 0;
+    -fx-max-width: 0;
+}
+
+/* 单个标签 */
+.main-tabs .tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-padding: 8 20 8 20;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.main-tabs .tab .tab-label {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+}
+
+.main-tabs .tab:hover .tab-label {
+    -fx-text-fill: -text-primary;
+}
+
+/* 选中标签：底部 2px 强调色下划线指示器 */
+.main-tabs .tab:selected {
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-background-color: transparent;
+}
+
+.main-tabs .tab:selected .tab-label {
+    -fx-text-fill: -accent;
+}
+
+/* 去除选中标签的默认虚线焦点 */
+.main-tabs .tab:focused {
+    -fx-background-insets: 0;
+}
+
+.main-tabs > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+/* 标签内容区域 */
+.main-tabs .tab-content-area {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 标签体 */
+.tab-body {
+    -fx-background-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 6 — 内容区域 & 滚动条 (Scroll Pane & Scroll Bar)
+ *    对应 FXML 中的 .content-scroll, .content
+ *    覆盖 Modena 默认滚动条样式
+ * ========================================================================== */
+
+.content-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+    -fx-fit-to-width: true;
+}
+
+.content-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* 移除 ScrollPane 默认边框 */
+.content-scroll,
+.content-scroll:focused {
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+/* 垂直滚动条 */
+.content-scroll .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12;
+    -fx-padding: 2;
+}
+
+.content-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-width: 8;
+}
+
+.content-scroll .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.content-scroll .scroll-bar:vertical .thumb:pressed {
+    -fx-background-color: -text-tertiary;
+}
+
+/* 水平滚动条 */
+.content-scroll .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-height: 12;
+    -fx-padding: 2;
+}
+
+.content-scroll .scroll-bar:horizontal .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-height: 8;
+}
+
+.content-scroll .scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+/* 隐藏滚动条箭头按钮和轨道 */
+.content-scroll .scroll-bar .increment-arrow,
+.content-scroll .scroll-bar .decrement-arrow,
+.content-scroll .scroll-bar .increment-button,
+.content-scroll .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-opacity: 0;
+}
+
+.content-scroll .scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+/* 全局滚动条样式（覆盖所有 ScrollPane） */
+.scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12;
+    -fx-padding: 2;
+}
+
+.scroll-bar:vertical .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-width: 8;
+}
+
+.scroll-bar:vertical .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-height: 12;
+    -fx-padding: 2;
+}
+
+.scroll-bar:horizontal .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-height: 8;
+}
+
+.scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow,
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-opacity: 0;
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+.content {
+    -fx-background-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 7 — 卡片容器 (Card Container)
+ *    对应 FXML 中的 .card，用于密码区、输出路径区、高级选项区等
+ * ========================================================================== */
+
+.card {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-card;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 16;
+    -fx-effect: dropshadow(gaussian, -shadow, 10, 0, 0, 2);
+}
+
+.card-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+/* ==========================================================================
+ * SECTION 8 — 分段控件 (Segmented Control / ToggleButton as Tab)
+ *    对应 FXML 中的 .segmented, .seg-btn (ToggleButton 用作加解密切换)
+ *    覆盖 Modena ToggleButton 默认样式
+ * ========================================================================== */
+
+.segmented {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 3;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.seg-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 6;
+    -fx-padding: 8 36 8 36;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    /* 清除 ToggleButton 默认选中样式 */
+    -fx-background-insets: 0;
+}
+
+.seg-btn:hover {
+    -fx-text-fill: -text-primary;
+    -fx-background-color: transparent;
+}
+
+.seg-btn:selected {
+    -fx-background-color: -bg-card;
+    -fx-text-fill: -accent;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.06), 4, 0, 0, 1.5);
+}
+
+.seg-btn:focused {
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 9 — 拖放区域 (Drop Zone)
+ *    对应 FXML 中的 .drop-zone, .drag-over, .drop-icon, .drop-hint, .drop-sub
+ * ========================================================================== */
+
+.drop-zone {
+    -fx-border-color: -border-strong;
+    -fx-border-style: segments(7, 5, 7, 5);
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-padding: 32 24 32 24;
+    -fx-cursor: hand;
+}
+
+.drop-zone:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+/* 拖拽悬停高亮：边框变强调色，背景变强调色浅色 */
+.drop-zone.drag-over {
+    -fx-border-color: -accent;
+    -fx-border-style: solid;
+    -fx-background-color: -accent-subtle;
+}
+
+.drop-icon {
+    -fx-font-size: 32px;
+    -fx-text-fill: -accent;
+    -fx-opacity: 0.8;
+}
+
+.drop-hint {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+.drop-sub {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+}
+
+/* ==========================================================================
+ * SECTION 10 — 文件信息卡片 (File Card)
+ *    对应 FXML 中的 .file-card, .file-icon, .file-name, .file-meta
+ *    以及 MediaCrypt 中的 .av-file-card, .av-output-card
+ * ========================================================================== */
+
+.file-card {
+    /* 继承 .card 样式，额外微调 */
+}
+
+.av-file-card {
+    /* 继承 .card 样式 */
+}
+
+.av-output-card {
+    /* 继承 .card 样式 */
+}
+
+.file-icon {
+    -fx-font-size: 24px;
+    -fx-text-fill: -accent;
+}
+
+.file-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+.file-meta {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+
+/* ==========================================================================
+ * SECTION 11 — 文本输入控件 (TextField, PasswordField, TextArea)
+ *    对应 FXML 中的 .text-input, .text-area
+ *    覆盖 Modena 所有默认输入框样式
+ * ========================================================================== */
+
+.text-input,
+.text-field,
+.password-field {
+    -fx-background-color: -bg-input;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 12 9 12;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.text-input:hover,
+.text-field:hover,
+.password-field:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.text-input:focused,
+.text-field:focused,
+.password-field:focused {
+    -fx-background-color: -bg-input;
+    /* 底部 2px 强调色底线 (Win11 风格) */
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.text-input:disabled,
+.text-field:disabled,
+.password-field:disabled {
+    -fx-opacity: 0.5;
+    -fx-background-color: -bg-subtle;
+    -fx-border-color: -border-soft;
+    -fx-text-fill: -text-disabled;
+}
+
+/* TextArea */
+.text-area {
+    -fx-background-color: -bg-input;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.text-area:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.text-area:focused {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.text-area:disabled {
+    -fx-opacity: 0.5;
+}
+
+.text-area .content {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.text-area .scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.text-area .scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 12 — 标签 & 文本 (Labels)
+ *    对应 FXML 中的 .field-label, .field-hint, .strength-label, .error-text,
+ *    .status-text, .status-info
+ * ========================================================================== */
+
+/* 通用 Label 颜色 */
+.label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+}
+
+.field-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-secondary;
+}
+
+.field-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+}
+
+.strength-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+
+.error-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: -danger;
+    -fx-font-weight: 600;
+}
+
+.status-text {
+    -fx-font-size: 13px;
+    -fx-text-fill: -text-primary;
+}
+
+.status-info {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+
+/* ==========================================================================
+ * SECTION 13 — 按钮 (Buttons)
+ *    主操作按钮 .btn-accent、次按钮 .btn-secondary、幽灵按钮 .btn-ghost
+ *    全局 Button 重置 + 覆盖 Modena + BootstrapFX 默认样式
+ * ========================================================================== */
+
+/* 彻底重置所有按钮的默认外观 */
+.button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* ---- .btn-accent：强调按钮 (主操作) ---- */
+.btn-accent {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-background-radius: 4;
+    -fx-padding: 9 28 9 28;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.btn-accent:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.btn-accent:pressed {
+    -fx-background-color: -accent-press;
+}
+
+.btn-accent:disabled {
+    -fx-opacity: 0.5;
+    -fx-cursor: default;
+}
+
+/* ---- .btn-secondary：次要按钮 (取消、设置等) ---- */
+.btn-secondary {
+    -fx-background-color: -bg-card;
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 22 9 22;
+    -fx-cursor: hand;
+}
+
+.btn-secondary:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.btn-secondary:pressed {
+    -fx-background-color: -bg-subtle;
+    -fx-border-color: -text-secondary;
+}
+
+.btn-secondary:disabled {
+    -fx-opacity: 0.5;
+    -fx-border-color: -border-soft;
+    -fx-cursor: default;
+}
+
+/* ---- .btn-ghost：幽灵按钮 (清空、添加、浏览等小操作) ---- */
+.btn-ghost {
+    -fx-background-color: transparent;
+    -fx-text-fill: -accent;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-background-radius: 4;
+    -fx-padding: 5 12 5 12;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.btn-ghost:hover {
+    -fx-background-color: -accent-subtle;
+}
+
+.btn-ghost:pressed {
+    -fx-background-color: derive(-accent, 80%);
+}
+
+.btn-ghost:disabled {
+    -fx-opacity: 0.5;
+    -fx-text-fill: -text-disabled;
+    -fx-cursor: default;
+}
+
+/* ==========================================================================
+ * SECTION 14 — 复选框 (CheckBox)
+ *    对应 FXML 中的 .check
+ *    完整覆盖 Modena 默认复选框样式
+ * ========================================================================== */
+
+.check-box {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    /* 半个汉字宽度 (约 0.5em) 的间距 */
+    -fx-label-padding: 0 0 0 6;
+}
+
+.check-box > .box {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-max-width: 18;
+    -fx-max-height: 18;
+    -fx-padding: 2;
+}
+
+.check-box:hover > .box {
+    -fx-border-color: -text-tertiary;
+}
+
+.check-box:selected > .box {
+    -fx-background-color: -accent;
+    -fx-border-color: -accent;
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: -accent-fg;
+    -fx-shape: "M2,5.5 L5,9 L10,2.5";
+    -fx-stroke: -accent-fg;
+    -fx-stroke-width: 2;
+    -fx-scale-x: 0.7;
+    -fx-scale-y: 0.7;
+    -fx-padding: 0 0 0 0;
+}
+
+.check-box:focused > .box {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.check-box:disabled {
+    -fx-opacity: 0.5;
+    -fx-text-fill: -text-disabled;
+}
+
+/* BootstrapFX .check 兼容别名 */
+.check {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-label-padding: 0 0 0 6;
+}
+
+.check .box {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 3;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+}
+
+.check:hover .box {
+    -fx-border-color: -accent;
+}
+
+.check:selected .box {
+    -fx-background-color: -accent;
+    -fx-border-color: -accent;
+}
+
+.check:selected .mark {
+    -fx-background-color: -accent-fg;
+}
+
+/* ==========================================================================
+ * SECTION 15 — 单选框 (RadioButton)
+ *    覆盖 Modena 默认样式
+ * ========================================================================== */
+
+.radio-button {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-label-padding: 0 0 0 6;
+}
+
+.radio-button > .radio {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 50%;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-padding: 3;
+}
+
+.radio-button:hover > .radio {
+    -fx-border-color: -text-tertiary;
+}
+
+.radio-button:selected > .radio {
+    -fx-border-color: -accent;
+}
+
+.radio-button:selected > .radio > .dot {
+    -fx-background-color: -accent;
+    -fx-background-radius: 50%;
+    -fx-padding: 4;
+}
+
+.radio-button:focused > .radio {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.radio-button:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* ==========================================================================
+ * SECTION 16 — 下拉框 (ComboBox)
+ *    对应 FXML 中 styleClass="text-input" 的 ComboBox
+ *    覆盖 Modena 默认下拉框 + 弹出列表样式
+ * ========================================================================== */
+
+.combo-box {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-font-size: 13px;
+}
+
+.combo-box:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.combo-box:focused {
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.combo-box:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* 下拉框的列表单元格 */
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+}
+
+/* 下拉箭头区域 */
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 8 0 0;
+}
+
+.combo-box .arrow {
+    -fx-background-color: -text-secondary;
+    -fx-shape: "M0,0 L3,3 L6,0 Z";
+    -fx-scale-x: 0.9;
+    -fx-scale-y: 0.9;
+}
+
+/* ---- 弹出列表 (Popup，独立的 Scene) ---- */
+/* 必须同时使用硬编码颜色（Popup 可能不继承 looked-up 变量）和 .root.dark 后备 */
+
+.combo-box-popup {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-color: #e8e8e8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 12, 0, 0, 4);
+}
+
+.root.dark .combo-box-popup .list-view {
+    -fx-background-color: #2c2c2c;
+    -fx-border-color: #3a3a3a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1a1a1a;
+    -fx-padding: 8 14 8 14;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.root.dark .combo-box-popup .list-cell {
+    -fx-text-fill: #f2f2f2;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #f0f0f0;
+}
+.root.dark .combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #3a3a3a;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #cce5ff;
+    -fx-text-fill: #1a1a1a;
+}
+.root.dark .combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #1a3a5c;
+    -fx-text-fill: #f2f2f2;
+}
+
+/* 滚动条在弹出列表中的样式 */
+.combo-box-popup .list-view .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(0, 0, 0, 0.20);
+}
+
+.root.dark .combo-box-popup .list-view .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(255, 255, 255, 0.20);
+}
+
+/* ==========================================================================
+ * SECTION 17 — 微调器 (Spinner)
+ *    对应 FXML 中的 .spinner (splitSizeSpinner)
+ *    覆盖 Modena 默认 Spinner 样式，支持可编辑模式下手动输入数字
+ * ========================================================================== */
+
+.spinner {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+}
+
+.spinner:hover {
+    -fx-border-color: -text-tertiary;
+}
+
+.spinner:focused {
+    -fx-border-color: -accent;
+}
+
+/* 可编辑 Spinner 内部的输入框 */
+.spinner .text-field {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 8 10 8 10;
+    -fx-background-radius: 4 0 0 4;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.spinner .text-field:focused {
+    -fx-background-color: rgba(0, 103, 192, 0.06);
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.spinner:focused .text-field {
+    -fx-background-color: rgba(0, 103, 192, 0.04);
+}
+
+.root.dark .spinner .text-field:focused {
+    -fx-background-color: rgba(76, 194, 255, 0.08);
+}
+
+.root.dark .spinner:focused .text-field {
+    -fx-background-color: rgba(76, 194, 255, 0.05);
+}
+
+/* 确保聚焦环传递给 Spinner 整体 */
+.spinner:focused > .text-field,
+.spinner > .text-field:focused {
+    -fx-border-color: transparent;
+}
+
+.spinner .increment-arrow-button,
+.spinner .decrement-arrow-button {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 6 8 6 8;
+}
+
+.spinner .increment-arrow-button:hover,
+.spinner .decrement-arrow-button:hover {
+     -fx-background-color: -bg-subtle;
+     -fx-background-radius: 0 4 4 0;
+}
+
+.spinner .decrement-arrow-button:hover {
+    -fx-background-radius: 4 0 0 4;
+}
+
+.spinner .increment-arrow,
+.spinner .decrement-arrow {
+    -fx-background-color: -text-secondary;
+    -fx-scale-x: 0.8;
+    -fx-scale-y: 0.8;
+}
+
+.spinner .increment-arrow-button:pressed .increment-arrow,
+.spinner .decrement-arrow-button:pressed .decrement-arrow {
+    -fx-background-color: -text-primary;
+}
+
+.spinner:disabled {
+    -fx-opacity: 0.5;
+}
+
+.spinner:disabled .text-field {
+    -fx-text-fill: -text-disabled;
+}
+
+/* ==========================================================================
+ * SECTION 18 — 进度条 (ProgressBar)
+ *    对应 FXML 中的 .progress (ProgressBar)
+ *    覆盖 Modena 默认进度条样式
+ * ========================================================================== */
+
+.progress-bar {
+    -fx-pref-height: 6;
+    -fx-min-height: 6;
+    -fx-max-height: 6;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+}
+
+.progress-bar > .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+}
+
+.progress-bar > .bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+.progress-bar:indeterminate > .bar {
+    -fx-background-color: linear-gradient(to right, transparent, -accent, transparent);
+}
+
+/* 兼容 .progress 类 */
+.progress {
+    -fx-pref-height: 6;
+}
+
+.progress > .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 3;
+}
+
+.progress > .bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+/* ==========================================================================
+ * SECTION 19 — 提示框 (Tooltip)
+ *    对应 FXML 中的 .tooltip, .info-tooltip
+ *    覆盖 Modena 默认气泡提示样式
+ * ========================================================================== */
+
+.tooltip {
+    -fx-font-size: 12px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    -fx-background-color: rgba(38, 38, 38, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-background-radius: 6;
+    -fx-padding: 9 13 9 13;
+    -fx-max-width: 320;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 12, 0, 0, 4);
+    -fx-show-delay: 120ms;
+    -fx-show-duration: 20s;
+    -fx-hide-delay: 120ms;
+}
+
+/* 浅色模式下的 tooltip 也可以是深色（Windows 默认行为） */
+.root.dark .tooltip {
+    -fx-background-color: rgba(50, 50, 50, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+.info-tooltip {
+    -fx-font-size: 12px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    -fx-background-color: rgba(38, 38, 38, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-background-radius: 6;
+    -fx-padding: 9 13 9 13;
+    -fx-max-width: 320;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 12, 0, 0, 4);
+}
+
+/* ==========================================================================
+ * SECTION 20 — 信息图标 (Info Icon)
+ *    对应 FXML 中的 .info-icon (圆形 "i" 徽标)
+ * ========================================================================== */
+
+.info-icon {
+    -fx-font-size: 7px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -accent-fg;
+    -fx-background-color: -text-tertiary;
+    -fx-background-radius: 50%;
+    -fx-min-width: 11px;
+    -fx-min-height: 11px;
+    -fx-pref-width: 11px;
+    -fx-pref-height: 11px;
+    -fx-max-width: 11px;
+    -fx-max-height: 11px;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+    -fx-padding: 0;
+    -fx-content-display: center;
+    -fx-opacity: 0.65;
+}
+
+.info-icon:hover {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-opacity: 1.0;
+}
+
+/* ==========================================================================
+ * SECTION 21 — 折叠头 (Options Header / Collapsible Section)
+ *    对应 FXML 中的 .options-header, .chevron
+ * ========================================================================== */
+
+.options-header {
+    -fx-cursor: hand;
+    -fx-padding: 4 0 4 0;
+}
+
+.options-header:hover .chevron {
+    -fx-text-fill: -accent;
+}
+
+.chevron {
+    -fx-font-size: 16px;
+    -fx-text-fill: -text-secondary;
+}
+
+.options-body {
+    -fx-padding: 4 0 0 0;
+}
+
+/* ==========================================================================
+ * SECTION 22 — 密钥文件列表 (Keyfile List)
+ *    对应 FXML 中的 .keyfile-list, .keyfile-row
+ * ========================================================================== */
+
+.keyfile-list {
+    -fx-padding: 2 0 2 0;
+    -fx-spacing: 4;
+}
+
+.keyfile-row {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10 6 10;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.keyfile-row .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+/* ==========================================================================
+ * SECTION 23 — 底部操作栏 (Footer)
+ *    对应 FXML 中的 .footer
+ * ========================================================================== */
+
+.footer {
+    -fx-background-color: -titlebar;
+    -fx-background-radius: 0 0 8 8;
+    -fx-border-color: -border-soft transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* 最大化时底部也去除圆角 */
+.app-root.maximized .footer {
+    -fx-background-radius: 0;
+}
+
+/* ==========================================================================
+ * SECTION 24 — Toast 通知 (Toast Notification)
+ *    Java 代码创建的 .toast, .toast-info, .toast-success, .toast-error
+ * ========================================================================== */
+
+.toast {
+    -fx-background-radius: 8;
+    -fx-padding: 10 18 10 18;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 14, 0, 0, 4);
+}
+
+.toast-info {
+    -fx-background-color: #323232;
+}
+
+.toast-success {
+    -fx-background-color: #0f7b0f;
+}
+
+.toast-error {
+    -fx-background-color: #c42b1c;
+}
+
+/* ==========================================================================
+ * SECTION 25 — 分割线 (Separator)
+ *    对应 FXML 中的 Separator
+ * ========================================================================== */
+
+.separator .line {
+    -fx-border-color: -border-soft;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 1 0 0 0;
+}
+
+.separator:horizontal .line {
+    -fx-border-color: -border-soft;
+}
+
+.separator:vertical .line {
+    -fx-border-color: transparent -border-soft transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* ==========================================================================
+ * SECTION 26 — ControlsFX ToggleSwitch (Win11 风格开关)
+ *    对应 ControlsFX 的 .toggle-switch 样式类
+ *    实现 Win11 风格的椭圆形轨道和圆形滑块
+ *    使用方法见文件末尾 Java 代码示例
+ * ========================================================================== */
+
+.toggle-switch {
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* 滑块区域（轨道） */
+.toggle-switch .thumb-area {
+    -fx-background-color: -border-strong;
+    -fx-background-radius: 12;
+    -fx-pref-width: 40;
+    -fx-pref-height: 20;
+    -fx-min-width: 40;
+    -fx-min-height: 20;
+    -fx-max-width: 40;
+    -fx-max-height: 20;
+}
+
+/* 未选中时的滑块（圆形） */
+.toggle-switch .thumb {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 16;
+    -fx-pref-height: 16;
+    -fx-min-width: 16;
+    -fx-min-height: 16;
+    -fx-max-width: 16;
+    -fx-max-height: 16;
+    -fx-translate-x: 2;
+    -fx-translate-y: 2;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 4, 0, 0, 1.5);
+}
+
+/* 未选中时悬浮 */
+.toggle-switch:hover .thumb-area {
+    -fx-background-color: -text-tertiary;
+}
+
+.toggle-switch:hover .thumb {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 6, 0, 0, 2);
+}
+
+/* 选中状态：轨道变强调色 */
+.toggle-switch:selected .thumb-area {
+    -fx-background-color: -accent;
+}
+
+.toggle-switch:selected:hover .thumb-area {
+    -fx-background-color: -accent-hover;
+}
+
+/* 选中时滑块滑到右侧 */
+.toggle-switch:selected .thumb {
+    -fx-translate-x: 22;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+/* 按下状态 */
+.toggle-switch:pressed .thumb-area {
+    -fx-background-color: -text-secondary;
+}
+
+.toggle-switch:selected:pressed .thumb-area {
+    -fx-background-color: -accent-press;
+}
+
+/* 禁用状态 */
+.toggle-switch:disabled {
+    -fx-opacity: 0.4;
+    -fx-cursor: default;
+}
+
+/* ==========================================================================
+ * SECTION 27 — ControlsFX RangeSlider
+ *    覆盖默认样式为 Win11 风格
+ * ========================================================================== */
+
+.range-slider {
+    -fx-padding: 0;
+}
+
+.range-slider .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 2;
+    -fx-pref-height: 4;
+}
+
+.range-slider .range-bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 2;
+}
+
+.range-slider .thumb {
+    -fx-background-color: -bg-card;
+    -fx-border-color: -accent;
+    -fx-border-radius: 50%;
+    -fx-background-radius: 50%;
+    -fx-border-width: 2;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+.range-slider .thumb:hover {
+    -fx-background-color: -accent-subtle;
+    -fx-border-color: -accent-hover;
+}
+
+.range-slider .thumb:pressed {
+    -fx-background-color: -accent;
+}
+
+/* ==========================================================================
+ * SECTION 28 — 对话框 (Dialog / Alert / DialogPane)
+ *    覆盖 Modena 默认对话框样式，用于 SettingsDialog 和 About Alert
+ * ========================================================================== */
+
+.dialog-pane {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-card;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 0;
+    -fx-effect: dropshadow(gaussian, -shadow-strong, 24, 0, 0, 6);
+}
+
+.dialog-pane > .content.label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-padding: 16 24 16 24;
+}
+
+.dialog-pane > .header-panel {
+    -fx-background-color: transparent;
+    -fx-padding: 20 24 8 24;
+}
+
+.dialog-pane > .header-panel > .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+}
+
+.dialog-pane > .button-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 12 24 20 24;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-spacing: 8;
+}
+
+/* 对话框中的按钮使用统一的 Win11 风格 */
+/* Alert 确认按钮自动获得 default 样式类 */
+.dialog-pane .button {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-background-radius: 4;
+    -fx-padding: 8 20 8 20;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.dialog-pane .button:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.dialog-pane .button:pressed {
+    -fx-background-color: -accent-press;
+}
+
+/* 非 default 按钮用次要样式 */
+.dialog-pane .button:cancel {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1;
+    -fx-font-weight: 400;
+}
+
+.dialog-pane .button:cancel:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* 设置对话框 */
+.settings-dialog {
+    -fx-background-color: -bg-card;
+}
+
+.settings-dialog .dialog-pane {
+    -fx-background-color: -bg-card;
+}
+
+.settings-grid {
+    -fx-background-color: -bg-card;
+    -fx-hgap: 16;
+    -fx-vgap: 12;
+    -fx-padding: 20 24 12 24;
+}
+
+/* ==========================================================================
+ * SECTION 29 — 文本输入对话框 (TextInputDialog)
+ *    用于归档密码弹窗等
+ * ========================================================================== */
+
+.text-input-dialog {
+    -fx-background-color: -bg-card;
+}
+
+.text-input-dialog .dialog-pane {
+    -fx-background-color: -bg-card;
+}
+
+.text-input-dialog .content {
+    -fx-padding: 8 24 16 24;
+}
+
+.text-input-dialog .text-field {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 12 9 12;
+    -fx-text-fill: -text-primary;
+}
+
+.text-input-dialog .text-field:focused {
+    -fx-border-color: -accent;
+}
+
+/* ==========================================================================
+ * SECTION 30 — 文件选择器按钮 (已包含在 .btn-ghost 中，此处留空)
+ * ========================================================================== */
+
+/* ==========================================================================
+ * SECTION 31 — TableView / ListView / TreeView (前瞻性设计)
+ *    若将来使用这些控件，确保已有 Win11 风格
+ * ========================================================================== */
+
+/* ---- ListView ---- */
+.list-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+}
+
+.list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 14 8 14;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.list-view .list-cell:filled:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.list-view .list-cell:filled:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.list-view .list-cell:filled:selected:hover {
+    -fx-background-color: derive(-accent-subtle, -5%);
+}
+
+/* ---- TableView ---- */
+.table-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 8 8 0 0;
+}
+
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent -border-soft transparent transparent;
+    -fx-border-width: 0 1 0 0;
+    -fx-padding: 4 12 4 12;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+
+.table-view .column-header:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.table-view .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 2;
+}
+
+.table-view .table-row-cell:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.table-view .table-row-cell:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+}
+
+/* ---- TreeView ---- */
+.tree-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+}
+
+.tree-view .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 6 8 6 8;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.tree-view .tree-cell:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.tree-view .tree-cell:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.tree-view .arrow {
+    -fx-background-color: -text-secondary;
+}
+
+/* ==========================================================================
+ * SECTION 32 — Ikonli 图标字体 (FontIcon)
+ *    确保 .font-icon 和 .ikonli-font-icon 颜色继承主题
+ * ========================================================================== */
+
+.font-icon,
+.ikonli-font-icon,
+.glyph-icon {
+    -fx-icon-color: -icon-color;
+    -fx-fill: -icon-color;
+}
+
+.font-icon:hover,
+.ikonli-font-icon:hover {
+    -fx-icon-color: -icon-accent;
+    -fx-fill: -icon-accent;
+}
+
+/* ==========================================================================
+ * SECTION 33 — 辅助类 (Utilities)
+ * ========================================================================== */
+
+/* 禁用状态的通用透明度 */
+.disabled {
+    -fx-opacity: 0.5;
+}
+
+/* 光标样式辅助 */
+.clickable {
+    -fx-cursor: hand;
+}
+
+/* ==========================================================================
+ * SECTION 34 — 滑块控件 (Slider) 基础样式
+ * ========================================================================== */
+
+.slider {
+    -fx-padding: 0;
+}
+
+.slider .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 2;
+    -fx-pref-height: 4;
+}
+
+.slider .thumb {
+    -fx-background-color: -accent;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+.slider .thumb:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.slider .thumb:pressed {
+    -fx-background-color: -accent-press;
+}
+
+/* ==========================================================================
+ *                           使 用 方 法
+ * ==========================================================================
+ *
+ * 一、CSS 加载与主题切换 (ThemeManager.java)
+ * --------------------------------------------------------------------------
+ *
+ * ThemeManager 负责加载 win11.css 并通过根节点的 .light / .dark 样式类切换主题。
+ * 支持三种模式：
+ *   - LIGHT：始终浅色
+ *   - DARK：始终深色
+ *   - SYSTEM：跟随 Windows 系统主题，通过定时检测注册表自动切换
+ *
+ * 二、跟随系统主题 (System Theme Detection)
+ * --------------------------------------------------------------------------
+ *
+ * Windows 深浅色模式通过注册表键检测：
+ *   HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme
+ *   值为 0 = 深色模式，1 = 浅色模式
+ *
+ * 通过在后台线程中定时轮询此注册表值来检测系统主题变化。
+ * 若设置中选择 "跟随系统"，则自动切换。
+ *
+ * 三、窗口最大化/还原监听 (.maximized 类)
+ * --------------------------------------------------------------------------
+ *
+ * 通过监听 Stage.maximizedProperty()，当窗口最大化时给 .app-root 添加 .maximized 类，
+ * 去除窗口圆角和阴影。还原时移除该类。
+ *
+ * 四、FXML 注意事项
+ * --------------------------------------------------------------------------
+ *
+ * 1. FXML 根节点 StackPane 需要设置 styleClass="light" 作为默认值，
+ *    或者由 ThemeManager 在 attach 时设置。
+ *
+ * 2. 控件通过 styleClass 引用本样式表中的类名，例如：
+ *      <Button styleClass="btn-accent" text="Encrypt"/>
+ *      <TextField styleClass="text-input"/>
+ *      <CheckBox styleClass="check"/>
+ *
+ * 3. 对于 ControlsFX ToggleSwitch，在 FXML 中无法直接使用，
+ *    需要在 Java 代码中创建并添加到布局中。
+ *
+ * 五、Java 代码示例
+ * ==========================================================================
+ *
+ * // ---- 1. 加载样式表并设置主题 (在 Application.start 中) ----
+ * Scene scene = new Scene(root);
+ * scene.setFill(Color.TRANSPARENT);
+ *
+ * ThemeManager themeManager = new ThemeManager();
+ * themeManager.attach(scene);  // 加载 win11.css + 应用主题
+ *
+ * // ---- 2. 监听窗口最大化 (在 Application.start 中) ----
+ * Stage stage = ...;
+ * stage.maximizedProperty().addListener((obs, oldVal, newVal) -> {
+ *     if (stage.getScene() != null && stage.getScene().getRoot() != null) {
+ *         Node appRoot = stage.getScene().getRoot().lookup(".app-root");
+ *         if (appRoot != null) {
+ *             if (newVal) {
+ *                 appRoot.getStyleClass().add("maximized");
+ *             } else {
+ *                 appRoot.getStyleClass().remove("maximized");
+ *             }
+ *         }
+ *     }
+ * });
+ *
+ * // ---- 3. 切换主题 ----
+ * themeManager.toggle();           // 在浅色/深色之间手动切换
+ * themeManager.setTheme(Theme.DARK);  // 显式设置
+ * themeManager.setFollowSystem(true); // 跟随系统
+ *
+ * // ---- 4. 使用 ControlsFX ToggleSwitch ----
+ * import org.controlsfx.control.ToggleSwitch;
+ *
+ * ToggleSwitch toggleSwitch = new ToggleSwitch();
+ * toggleSwitch.getStyleClass().add("toggle-switch");  // 应用 Win11 样式
+ * toggleSwitch.setSelected(true);
+ * toggleSwitch.selectedProperty().addListener((obs, oldVal, newVal) -> {
+ *     System.out.println("Switch toggled: " + newVal);
+ * });
+ * someContainer.getChildren().add(toggleSwitch);
+ *
+ * // ---- 5. 在设置中持久化主题偏好 ----
+ * SettingsManager.setThemeMode("SYSTEM");  // 或 "LIGHT" / "DARK"
+ * String mode = SettingsManager.getThemeMode();
+ *
+ * // ---- 6. 复杂动画的替代方案 (Java Animation) ----
+ * // CSS 不支持 -fx-transition，如需渐变动画，使用 JavaFX Timeline：
+ * //
+ * // Timeline fadeIn = new Timeline(
+ * //     new KeyFrame(Duration.ZERO, new KeyValue(node.opacityProperty(), 0.0)),
+ * //     new KeyFrame(Duration.millis(200), new KeyValue(node.opacityProperty(), 1.0))
+ * // );
+ * // fadeIn.play();
+ *
+ * ==========================================================================
+ *                           END OF FILE
+ * ========================================================================== */

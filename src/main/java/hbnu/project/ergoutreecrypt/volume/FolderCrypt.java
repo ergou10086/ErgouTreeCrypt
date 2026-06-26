@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -258,7 +259,7 @@ public final class FolderCrypt {
                     decryptArchive(u.encFile, destParent, opts, stats, depth + 1);
                 } else {
                     Path copyOut = destParent.resolve(u.outputName);
-                    Files.copy(u.encFile, copyOut, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    Files.copy(u.encFile, copyOut, StandardCopyOption.REPLACE_EXISTING);
                     stats.archivesPassthrough++;
                 }
             } else if (u.isChunkDir) {

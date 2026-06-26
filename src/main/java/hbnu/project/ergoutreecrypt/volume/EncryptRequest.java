@@ -5,44 +5,95 @@ import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import java.util.List;
 
 /**
- * 加密请求 DTO，对应 Go EncryptRequest。
+ * 加密请求 DTO，聚合加密所需全部参数。
+ *
+ * @author ErgouTree
  */
 public final class EncryptRequest {
 
+    /**
+     * 待加密的输入文件路径（单文件模式）。
+     */
     private String inputFile;
 
+    /**
+     * 待加密的多个输入文件路径（多文件模式）。
+     */
     private List<String> inputFiles;
 
+    /**
+     * 加密输出文件路径。
+     */
     private String outputFile;
 
-    // 可为 null/empty
+    /**
+     * 加密密码（可为 null 或空表示无密码模式）。
+     */
     private String password;
 
+    /**
+     * 密钥文件路径列表，可为 null 或空。
+     */
     private List<String> keyfiles;
 
+    /**
+     * 密钥文件是否有序（顺序拼接哈希 vs XOR）。
+     */
     private boolean keyfileOrdered;
 
+    /**
+     * 注释（明文存储于 header，不会被加密）。
+     */
     private String comments = "";
 
+    /**
+     * 是否使用偏执模式（Argon2 8 passes + Serpent-CTR + HMAC-SHA3）。
+     */
     private boolean paranoid;
 
+    /**
+     * 是否启用 Reed-Solomon 纠错编码。
+     */
     private boolean reedSolomon;
 
+    /**
+     * 是否添加可否认加密外层。
+     */
     private boolean deniability;
 
+    /**
+     * 是否先压缩再加密（单文件内部压缩）。
+     */
     private boolean compress;
 
+    /**
+     * 是否将输出切分为固定大小的分卷碎片。
+     */
     private boolean split;
 
+    /**
+     * 每分卷的最大字节数（单位 MiB）。
+     */
     private int chunkSize;
 
-    // 归档（加密后压缩）
-    private String archiveFormat;   // null 或 "ZIP"/"GZ"/"TAR_GZ"
-    private String archivePassword; // 可为 null
+    /**
+     * 加密后压缩的归档格式，null 表示不压缩。
+     */
+    private String archiveFormat;
 
-    // add more fields as needed for split units later
+    /**
+     * 归档加密密码，可为 null。
+     */
+    private String archivePassword;
+
+    /**
+     * 进度与取消回调。
+     */
     private ProgressReporter reporter;
 
+    /**
+     * Reed-Solomon 编解码器实例。
+     */
     private RsCodecs rsCodecs;
 
     public String getInputFile() {

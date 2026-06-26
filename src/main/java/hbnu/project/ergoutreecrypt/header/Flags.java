@@ -1,24 +1,55 @@
 package hbnu.project.ergoutreecrypt.header;
 
 /**
- * 卷头选项标志
+ * 卷头选项标志位。
  *
  * <p>5 字节布局：{@code [paranoid, useKeyfiles, keyfileOrdered, reedSolomon, padded]}，
- * 每字节取值为 0 或 1。
+ * 每字节取值为 0 或 1，供卷头 RS 编码/解码使用。
  *
  * @author ErgouTree
  */
 public final class Flags {
 
+    /**
+     * 偏执模式（额外 Serpent-CTR 加密层）。
+     */
     private boolean paranoid;
+
+    /**
+     * 是否使用 keyfile 辅助派生密钥。
+     */
     private boolean useKeyfiles;
+
+    /**
+     * keyfile 是否有序（顺序拼接 vs XOR）。
+     */
     private boolean keyfileOrdered;
+
+    /**
+     * 是否启用 Reed-Solomon 纠错编码。
+     */
     private boolean reedSolomon;
+
+    /**
+     * 载荷是否经过 PKCS#7 填充。
+     */
     private boolean padded;
 
+    /**
+     * 创建全 false 的默认标志位。
+     */
     public Flags() {
     }
 
+    /**
+     * 按位置创建标志位。
+     *
+     * @param paranoid       偏执模式
+     * @param useKeyfiles    使用 keyfile
+     * @param keyfileOrdered keyfile 有序模式
+     * @param reedSolomon    启用 RS 纠错
+     * @param padded         启用填充
+     */
     public Flags(boolean paranoid, boolean useKeyfiles, boolean keyfileOrdered,
                  boolean reedSolomon, boolean padded) {
         this.paranoid = paranoid;
@@ -27,8 +58,6 @@ public final class Flags {
         this.reedSolomon = reedSolomon;
         this.padded = padded;
     }
-
-    // ---- accessors ----
 
     public boolean isParanoid() { return paranoid; }
     public void setParanoid(boolean paranoid) { this.paranoid = paranoid; }
@@ -46,7 +75,10 @@ public final class Flags {
     public void setPadded(boolean padded) { this.padded = padded; }
 
     /**
-     * 转换为 5 字节数组，对应 Go {@code Flags.ToBytes()}。
+     * 转换为 5 字节数组，按位置顺序：paranoid, useKeyfiles, keyfileOrdered, reedSolomon, padded。
+     * true → 1, false → 0。
+     *
+     * @return 5 字节标志位数组
      */
     public byte[] toBytes() {
         byte[] b = new byte[5];
@@ -69,8 +101,10 @@ public final class Flags {
     }
 
     /**
-     * 从字节数组解析 Flags，对应 Go {@code FlagsFromBytes}。
-     * 若输入不足 5 字节则返回全 false 的 Flags。
+     * 从 5 字节数组解析标志位。若输入不足 5 字节则返回全 false 的默认值。
+     *
+     * @param b 5 字节标志位数组
+     * @return 解析后的 Flags 实例
      */
     public static Flags fromBytes(byte[] b) {
         if (b == null || b.length < 5) {

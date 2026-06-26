@@ -12,40 +12,67 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 卷头读取器
+ * 卷头读取器。
  *
- * <p>从输入流中读取并 RS 解码卷头字段。即使 RS 解码出错也返回 header（用于强行解密场景），通过 {@link ReadResult} 的 decodeError 字段标明损坏程度。
+ * <p>从输入流中按序读取并 RS 解码卷头的各字段。即使 RS 解码出错也尽可能返回 header
+ * （用于强行解密场景），通过 {@link ReadResult} 的 decodeError 字段标明损坏类型与程度。
  *
  * @author ErgouTree
  */
 public final class HeaderReader {
 
-    /** 错误：卷头损坏（RS 无法纠正）。 */
+    /**
+     * 错误信息：卷头损坏（RS 无法纠正）。
+     */
     public static final String ERR_CORRUPTED_HEADER = "volume header is damaged";
-    /** 错误：version 格式非法。 */
+
+    /**
+     * 错误信息：version 格式非法。
+     */
     public static final String ERR_INVALID_VERSION = "invalid version format";
-    /** 错误：注释长度字段损坏。 */
+
+    /**
+     * 错误信息：注释长度字段损坏。
+     */
     public static final String ERR_INVALID_COMMENT_LENGTH = "unable to read comments length";
 
-    /** 版本格式：{@code v<数字>.<两位数字>}。与 Go {@code ^v\d\.\d{2}$} 一致并锚定。 */
+    /**
+     * 版本格式正则：{@code v<数字>.<两位数字>}，与 Go 端 {@code ^v\d\.\d{2}$} 一致并锚定。
+     */
     private static final Pattern VERSION_RE = Pattern.compile("^v\\d\\.\\d{2}$");
 
-    /** 注释长度格式：5 位十进制数字。 */
+    /**
+     * 注释长度格式：5 位十进制数字。
+     */
     private static final Pattern COMMENT_LEN_RE = Pattern.compile("^\\d{5}$");
 
+    /**
+     * 输入流，从中顺序读取 header 各字段。
+     */
     private final InputStream in;
+
+    /**
+     * 预初始化的 RS 编解码器。
+     */
     private final RsCodecs rs;
 
+    /**
+     * @param in header 数据的输入流
+     * @param rs 预初始化的 RS 编解码器集合
+     */
     public HeaderReader(InputStream in, RsCodecs rs) {
         this.in = in;
         this.rs = rs;
     }
 
     /**
-     * 读取并 RS 解码完整卷头。对应 Go {@code Reader.ReadHeader()}。
+     * 读取并 RS 解码完整卷头。
      *
-     * @return ReadResult 含解码后的 header 及错误信息
-     * @throws IOException          I/O 错误（version/格式等致命错误也包装为 IOException）
+     * <p>依次读取 version、注释长度、注释、flags、salt、hkdfSalt、serpentIV、nonce、
+     * keyHash、keyfileHash、authTag 共 11 个字段，每个字段先 RS 解码再赋值。
+     *
+     * @return 含解码后 header 及错误详情的 ReadResult
+     * @throws IOException 致命 I/O 错误或非法 version/注释格式
      */
     public ReadResult readHeader() throws IOException {
         VolumeHeader h = new VolumeHeader();
@@ -54,7 +81,7 @@ public final class HeaderReader {
         boolean nonCommentDecodeError = false;
         int bytesRead = 0;
 
-        // 1. version: 15→5 (RS5)
+        // 1. version: RS5(15→5)
         byte[] versionEnc = new byte[HeaderLayout.VERSION_ENC_SIZE];
         int n = readFull(versionEnc);
         bytesRead += n;
@@ -66,12 +93,11 @@ public final class HeaderReader {
         }
         h.setVersion(new String(vd.data, StandardCharsets.UTF_8));
 
-        // Validate version
         if (!matchVersion(vd.data)) {
             throw new IOException(ERR_INVALID_VERSION);
         }
 
-        // 2. comment length: 15→5 (RS5)
+        // 2. comment length: RS5(15→5)
         byte[] commentLenEnc = new byte[HeaderLayout.COMMENT_LEN_ENC_SIZE];
         n = readFull(commentLenEnc);
         bytesRead += n;
@@ -94,12 +120,12 @@ public final class HeaderReader {
             throw new IOException(ERR_INVALID_COMMENT_LENGTH);
         }
 
-        // D-02 defense-in-depth: cap to MaxCommentLen
+        // 防御上限检查
         if (commentsLen < 0 || commentsLen > VolumeHeader.MAX_COMMENT_LEN) {
             throw new IOException(ERR_INVALID_COMMENT_LENGTH);
         }
 
-        // 3. comments: each UTF-8 byte RS1(3→1)，收集所有字节后以 UTF-8 转回 String
+        // 3. comments: 每个 UTF-8 字节 RS1(3→1)，收集后以 UTF-8 转为字符串
         byte[] commentBytes = new byte[commentsLen];
         for (int i = 0; i < commentsLen; i++) {
             byte[] charEnc = new byte[HeaderLayout.COMMENT_CHAR_ENC_SIZE];
@@ -115,7 +141,7 @@ public final class HeaderReader {
         }
         h.setComments(new String(commentBytes, StandardCharsets.UTF_8));
 
-        // 4. flags: 15→5 (RS5)
+        // 4. flags: RS5(15→5)
         byte[] flagsEnc = new byte[HeaderLayout.FLAGS_ENC_SIZE];
         n = readFull(flagsEnc);
         bytesRead += n;
@@ -127,7 +153,7 @@ public final class HeaderReader {
         }
         h.setFlags(Flags.fromBytes(fd.data));
 
-        // 5. salt: 48→16 (RS16)
+        // 5. salt: RS16(48→16)
         byte[] saltEnc = new byte[HeaderLayout.SALT_ENC_SIZE];
         n = readFull(saltEnc);
         bytesRead += n;
@@ -139,7 +165,7 @@ public final class HeaderReader {
         }
         h.setSalt(sd.data);
 
-        // 6. hkdfSalt: 96→32 (RS32)
+        // 6. hkdfSalt: RS32(96→32)
         byte[] hkdfSaltEnc = new byte[HeaderLayout.HKDF_SALT_ENC_SIZE];
         n = readFull(hkdfSaltEnc);
         bytesRead += n;
@@ -151,7 +177,7 @@ public final class HeaderReader {
         }
         h.setHkdfSalt(hd.data);
 
-        // 7. serpentIV: 48→16 (RS16)
+        // 7. serpentIV: RS16(48→16)
         byte[] serpentIVEnc = new byte[HeaderLayout.SERPENT_IV_ENC_SIZE];
         n = readFull(serpentIVEnc);
         bytesRead += n;
@@ -163,7 +189,7 @@ public final class HeaderReader {
         }
         h.setSerpentIV(sid.data);
 
-        // 8. nonce: 72→24 (RS24)
+        // 8. nonce: RS24(72→24)
         byte[] nonceEnc = new byte[HeaderLayout.NONCE_ENC_SIZE];
         n = readFull(nonceEnc);
         bytesRead += n;
@@ -175,7 +201,7 @@ public final class HeaderReader {
         }
         h.setNonce(nd.data);
 
-        // 9. keyHash: 192→64 (RS64)
+        // 9. keyHash: RS64(192→64)
         byte[] keyHashEnc = new byte[HeaderLayout.KEY_HASH_ENC_SIZE];
         n = readFull(keyHashEnc);
         bytesRead += n;
@@ -187,7 +213,7 @@ public final class HeaderReader {
         }
         h.setKeyHash(khd.data);
 
-        // 10. keyfileHash: 96→32 (RS32)
+        // 10. keyfileHash: RS32(96→32)
         byte[] keyfileHashEnc = new byte[HeaderLayout.KEYFILE_HASH_ENC_SIZE];
         n = readFull(keyfileHashEnc);
         bytesRead += n;
@@ -199,7 +225,7 @@ public final class HeaderReader {
         }
         h.setKeyfileHash(kfhd.data);
 
-        // 11. authTag: 192→64 (RS64)
+        // 11. authTag: RS64(192→64)
         byte[] authTagEnc = new byte[HeaderLayout.AUTH_TAG_ENC_SIZE];
         n = readFull(authTagEnc);
         bytesRead += n;
@@ -211,7 +237,7 @@ public final class HeaderReader {
         }
         h.setAuthTag(atd.data);
 
-        // Assemble result
+        // 汇总错误信息
         Throwable error = decodeErrors.isEmpty() ? null
                 : new RuntimeException(String.join("; ", decodeErrors));
 
@@ -219,8 +245,10 @@ public final class HeaderReader {
     }
 
     /**
-     * 仅读取 version 字段以判断文件格式。对应 Go {@code PeekVersion}。
+     * 仅读取 version 字段以快速判断文件格式（不消费后续数据）。
      *
+     * @param in header 数据的输入流
+     * @param rs 预初始化的 RS 编解码器集合
      * @return version 字符串（如 "v2.14"）
      * @throws IOException I/O 错误或 RS 解码失败
      */
@@ -237,13 +265,18 @@ public final class HeaderReader {
     }
 
     /**
-     * 检查版本字符串是否匹配格式 {@code v\d.\d\d}。与 Go {@code MatchVersion} 对应。
+     * 检查 version 字节是否匹配格式 {@code v\d.\d\d}。
+     *
+     * @param b 解码后的 version 字节
+     * @return 若匹配格式则返回 true
      */
     public static boolean matchVersion(byte[] b) {
         return VERSION_RE.matcher(new String(b, StandardCharsets.UTF_8)).matches();
     }
 
-    /** 读满整个缓冲区，遇到 EOF 抛出异常。 */
+    /**
+     * 读满整个缓冲区，不足时阻塞等待，遇到 EOF 则抛出异常。
+     */
     private int readFull(byte[] buf) throws IOException {
         int offset = 0;
         int len = buf.length;

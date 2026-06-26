@@ -23,20 +23,43 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 归档解压 + 自动检测/解密密码保护的内部文件。
+ * 归档解压工具，支持自动检测并解密内部 AES-256-CTR 加密的文件条目。
+ *
+ * <p>支持的归档格式：ZIP、GZ、TAR.GZ。加密文件以 12 字节魔数头 {@code EGTC_ARCHV1} 标识。
  *
  * @author ErgouTree
  */
 public final class ArchiveExtractor {
 
-    private static final byte[] MAGIC = "EGTC_ARCHV1\0".getBytes(); // 12 bytes
-    private static final int HEADER_SIZE = 12 + 16 + 16; // magic + salt + IV = 44 bytes
+    /**
+     * 加密文件魔数标识（12 字节）。
+     */
+    private static final byte[] MAGIC = "EGTC_ARCHV1\0".getBytes();
+
+    /**
+     * 加密文件头总大小：魔数(12) + salt(16) + IV(16) = 44 字节。
+     */
+    private static final int HEADER_SIZE = 12 + 16 + 16;
+
+    /**
+     * AES 密钥长度（32 字节，AES-256）。
+     */
     private static final int KEY_SIZE = 32;
+
+    /**
+     * PBKDF2-HMAC-SHA256 迭代次数。
+     */
     private static final int PBKDF2_ITERATIONS = 100_000;
 
     private ArchiveExtractor() {
     }
 
+    /**
+     * 判断文件是否为支持的归档格式（根据扩展名）。
+     *
+     * @param file 文件路径
+     * @return 若扩展名为 .zip / .gz / .tgz / .tar.gz / .rar / .7z 则返回 true
+     */
     public static boolean isArchive(Path file) {
         String name = file.getFileName().toString().toLowerCase();
         return name.endsWith(".zip")
@@ -47,7 +70,10 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 检测文件是否为本工具 AES 加密过的（头部有 EGTC_ARCHV1 魔数）。
+     * 检测文件是否以 EGTC_ARCHV1 魔数开头，即是否为本工具 AES 加密的文件。
+     *
+     * @param file 待检测的文件路径
+     * @return 若文件头匹配魔数则返回 true
      */
     public static boolean isEncryptedFile(Path file) {
         try (InputStream in = Files.newInputStream(file)) {
@@ -60,15 +86,23 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 解压归档到目标目录，保留归档内的条目名与目录结构；对内部 AES 加密条目就地解密
-     * （去除 {@code .enc} 后缀），不生成临时文件。用于文件夹/分卷场景的二次解密。
+     * 解压归档到目标目录，保留内部条目名与目录结构。
      *
+     * <p>对内部 AES 加密条目（{@code .enc} 后缀）就地解密并去除后缀，不生成临时文件。
+     * 用于文件夹/分卷场景的二次解密。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码（可为 null/空）
      * @return 解压（并去 AES 层）后的文件路径列表
+     * @throws IOException               I/O 错误或密码错误
+     * @throws PasswordNeededException   若遇到加密文件但未提供密码
      */
     public static List<Path> extractPreserving(Path archive, Path destDir, String password) throws IOException {
         Files.createDirectories(destDir);
         String name = archive.getFileName().toString().toLowerCase();
 
+        // 根据扩展名选择对应的解压方法
         List<Path> rawFiles;
         if (name.endsWith(".zip")) {
             rawFiles = extractZip(archive, destDir);
@@ -80,13 +114,13 @@ public final class ArchiveExtractor {
             throw new IOException("Unsupported archive format: " + name);
         }
 
+        // 对加密条目去除 .enc 后缀并就地解密
         List<Path> result = new ArrayList<>();
         for (Path f : rawFiles) {
             if (isEncryptedFile(f)) {
                 if (password == null || password.isEmpty()) {
                     throw PasswordNeededException.of(f);
                 }
-                // 去除 .enc 后缀，就地解密保留原名与目录结构
                 String fn = f.getFileName().toString();
                 String outName = fn.endsWith(".enc") ? fn.substring(0, fn.length() - 4) : fn + ".dec";
                 Path out = f.resolveSibling(outName);
@@ -100,6 +134,18 @@ public final class ArchiveExtractor {
         return result;
     }
 
+    /**
+     * 解压归档到目标目录。
+     *
+     * <p>内部加密条目解密后输出为临时文件（非原地解密）。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码（可为 null/空）
+     * @return 解压后的文件路径列表
+     * @throws IOException               I/O 错误或密码错误
+     * @throws PasswordNeededException   若遇到加密文件但未提供密码
+     */
     public static List<Path> extract(Path archive, Path destDir, String password) throws IOException {
         Files.createDirectories(destDir);
         String name = archive.getFileName().toString().toLowerCase();
@@ -135,7 +181,12 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 解密单个 AES 加密文件，返回解密后路径。
+     * 解密单个 AES-256-CTR 加密文件到临时文件。
+     *
+     * @param file     加密文件路径
+     * @param password 解密密码
+     * @return 解密后的临时文件路径
+     * @throws IOException 密码错误或文件损坏
      */
     private static Path decryptFile(Path file, String password) throws IOException {
         try (InputStream fin = Files.newInputStream(file)) {
@@ -149,10 +200,12 @@ public final class ArchiveExtractor {
             fin.readNBytes(salt, 0, 16);
             fin.readNBytes(iv, 0, 16);
 
+            // PBKDF2-HMAC-SHA256 派生 AES 密钥
             SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
             PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_SIZE * 8);
             SecretKeySpec key = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), "AES");
 
+            // AES-256-CTR 解密
             Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
 
@@ -168,7 +221,12 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 将 AES 加密文件解密到指定输出路径。
+     * 将 AES 加密文件解密到指定的输出路径。
+     *
+     * @param file     加密文件路径
+     * @param output   解密输出路径
+     * @param password 解密密码
+     * @throws IOException 密码错误或文件损坏
      */
     private static void decryptFileTo(Path file, Path output, String password) throws IOException {
         try (InputStream fin = Files.newInputStream(file)) {
@@ -200,7 +258,11 @@ public final class ArchiveExtractor {
         }
     }
 
-    // ---- ZIP ----
+    // ==================== ZIP 解压 ====================
+
+    /**
+     * 解压 ZIP 归档，返回所有提取文件路径。
+     */
     private static List<Path> extractZip(Path archive, Path destDir) throws IOException {
         List<Path> files = new ArrayList<>();
         try (InputStream fin = Files.newInputStream(archive);
@@ -211,7 +273,9 @@ public final class ArchiveExtractor {
         return files;
     }
 
-    // ---- TAR.GZ ----
+    /**
+     * 解压 TAR.GZ（或 TGZ）归档，返回所有提取文件路径。
+     */
     private static List<Path> extractTarGz(Path archive, Path destDir) throws IOException {
         List<Path> files = new ArrayList<>();
         try (InputStream fin = Files.newInputStream(archive);
@@ -222,7 +286,9 @@ public final class ArchiveExtractor {
         return files;
     }
 
-    // ---- GZ ----
+    /**
+     * 解压单文件 GZ 压缩包，返回提取的文件路径。
+     */
     private static List<Path> extractGz(Path archive, Path destDir) throws IOException {
         List<Path> files = new ArrayList<>();
         String outName = archive.getFileName().toString();
@@ -239,12 +305,17 @@ public final class ArchiveExtractor {
         return files;
     }
 
+    /**
+     * 遍历归档流条目并提取到目标目录，防护 Zip-Slip 路径穿越。
+     */
     private static void extractEntries(ArchiveInputStream<?> ais, Path destDir, List<Path> files) throws IOException {
         ArchiveEntry entry;
         while ((entry = ais.getNextEntry()) != null) {
             if (ais.canReadEntryData(entry)) {
                 String entryName = entry.getName();
                 Path outPath = destDir.resolve(entryName).normalize();
+
+                // Zip-Slip 防护：确保输出路径在目标目录之下
                 if (!outPath.startsWith(destDir)) {
                     throw new IOException("Bad archive entry (zip-slip): " + entryName);
                 }
@@ -261,21 +332,39 @@ public final class ArchiveExtractor {
         }
     }
 
-    // ================================================================
-    // 密码需求异常
-    // ================================================================
+    // ==================== 密码需求异常 ====================
+
+    /**
+     * 归档密码缺失异常，携带需要密码的加密文件路径。
+     */
     public static final class PasswordNeededException extends IOException {
+
+        /**
+         * 需要密码才能解密的文件路径。
+         */
         private final Path encryptedFile;
 
+        /**
+         * @param f 加密文件路径
+         */
         PasswordNeededException(Path f) {
             super("Archive password required");
             this.encryptedFile = f;
         }
 
+        /**
+         * 创建密码缺失异常。
+         *
+         * @param f 加密文件路径
+         * @return 异常实例
+         */
         public static PasswordNeededException of(Path f) {
             return new PasswordNeededException(f);
         }
 
+        /**
+         * 返回需要密码的加密文件路径。
+         */
         public Path getEncryptedFile() {
             return encryptedFile;
         }

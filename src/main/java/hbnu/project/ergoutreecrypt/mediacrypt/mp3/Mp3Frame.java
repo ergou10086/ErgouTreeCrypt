@@ -12,7 +12,7 @@ import hbnu.project.ergoutreecrypt.mediacrypt.ByteRange;
  * @param frameLength  整帧字节长度（含帧头）
  * @param headerLength 帧头长度（固定 4）
  * @param crcLength    CRC 长度（0 或 2）
- * @param sideInfoLength side info 长度'
+ * @param sideInfoLength side info 长度
  *
  * @author ErgouTree
  */

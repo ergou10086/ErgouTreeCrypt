@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Main-Class: hbnu.project.ergoutreecrypt.Launcher
+Class-Path: javafx-controls-21.0.6.jar javafx-graphics-21.0.6-win.jar co
+ ntrolsfx-11.2.1.jar commons-codec-1.17.1.jar bootstrapfx-core-0.4.0.jar
+  commons-compress-1.27.1.jar javafx-controls-21.0.6-win.jar commons-io-
+ 2.16.1.jar javafx-base-21.0.6.jar javafx-graphics-21.0.6.jar javafx-fxm
+ l-21.0.6.jar javafx-fxml-21.0.6-win.jar ikonli-javafx-12.3.1.jar ikonli
+ -core-12.3.1.jar javafx-base-21.0.6-win.jar commons-lang3-3.16.0.jar bc
+ prov-jdk18on-1.78.1.jar
+

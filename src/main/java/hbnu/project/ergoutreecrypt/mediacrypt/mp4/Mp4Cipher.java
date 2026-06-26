@@ -16,9 +16,8 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata;
 /**
  * MP4（ISO-BMFF）格式保持加密。
  *
- * <p>默认 <b>V-MDAT 档</b>（{@link MediaCryptProfile#V_MDAT}）：对整个 {@code mdat} payload 连续 XChaCha20 XOR，
- * 其余 box（{@code ftyp}/{@code moov} 采样表等）原样保留 → 容器结构合法、{@code ffprobe} 可读出时长/分辨率/编码类型，
- * 但解码出的音视频是噪声。
+ * <p>默认 <b>V-MDAT 档</b>（{@link MediaCryptProfile#V_MDAT}）：
+ * 对整个 {@code mdat} payload 连续 XChaCha20 XOR，其余 box（{@code ftyp}/{@code moov} 采样表等）原样保留 → 容器结构合法、{@code ffprobe} 可读出时长/分辨率/编码类型，但解码出的音视频是噪声。
  *
  * <p>元数据载体：文件末尾追加自定义 {@code uuid} box（{@link Mp4UuidMetadata}），不改变 {@code mdat} 偏移。
  *

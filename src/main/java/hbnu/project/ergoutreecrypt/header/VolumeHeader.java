@@ -3,51 +3,117 @@ package hbnu.project.ergoutreecrypt.header;
 import java.util.Arrays;
 
 /**
- * 卷头字段容器
+ * 卷头字段容器。
  *
- * <p>包含版本、注释、标志位以及所有密码学参数（salt / hkdfSalt / serpentIV / nonce / keyHash / keyfileHash / authTag）。注释为明文存储，不会被加密。
+ * <p>包含版本、注释、标志位以及所有密码学参数（salt、hkdfSalt、serpentIV、nonce、
+ * keyHash、keyfileHash、authTag）。注释以明文存储，不会被加密。
  *
  * @author ErgouTree
  */
 public final class VolumeHeader {
 
-    /** 当前协议版本，解密老文件时会被读取值覆盖。 */
+    /**
+     * 当前协议版本。解密老文件时会被读取值覆盖。
+     */
     public static final String CURRENT_VERSION = "v2.14";
 
-    /** 注释最大长度。 */
+    /**
+     * 注释最大长度（UTF-8 字节数上限）。
+     */
     public static final int MAX_COMMENT_LEN = 99999;
 
-    // ---- 各字段原始长度（RS 编码前）----
+    // ==================== 各字段原始长度（RS 编码前） ====================
 
-    /** Argon2 salt 长度（16 字节）。 */
+    /**
+     * Argon2 salt 长度：16 字节。
+     */
     public static final int SALT_SIZE = 16;
-    /** HKDF-SHA3 salt 长度（32 字节）。 */
+
+    /**
+     * HKDF-SHA3 salt 长度：32 字节。
+     */
     public static final int HKDF_SALT_SIZE = 32;
-    /** Serpent IV 长度（16 字节）。 */
+
+    /**
+     * Serpent IV 长度：16 字节。
+     */
     public static final int SERPENT_IV_SIZE = 16;
-    /** XChaCha20 nonce 长度（24 字节）。 */
+
+    /**
+     * XChaCha20 nonce 长度：24 字节。
+     */
     public static final int NONCE_SIZE = 24;
-    /** Key hash 长度（v2: HMAC-SHA3-512，v1: SHA3-512(key)），均为 64 字节。 */
+
+    /**
+     * Key hash 长度：64 字节（v2 HMAC-SHA3-512 / v1 SHA3-512(key)）。
+     */
     public static final int KEY_HASH_SIZE = 64;
-    /** Keyfile hash 长度（SHA3-256），32 字节。 */
+
+    /**
+     * Keyfile hash 长度：32 字节（SHA3-256）。
+     */
     public static final int KEYFILE_HASH_SIZE = 32;
-    /** Auth tag 长度（BLAKE2b 或 HMAC-SHA3），64 字节。 */
+
+    /**
+     * Auth tag 长度：64 字节（BLAKE2b 或 HMAC-SHA3 载荷标签）。
+     */
     public static final int AUTH_TAG_SIZE = 64;
 
-    // ---- 字段 ----
+    // ==================== 实例字段 ====================
 
+    /**
+     * 协议版本字符串（如 "v2.14"）。
+     */
     private String version;
+
+    /**
+     * 明文注释（UTF-8 编码，最长 99999 字节）。
+     */
     private String comments;
+
+    /**
+     * 卷头选项标志位。
+     */
     private Flags flags;
+
+    /**
+     * Argon2id salt（16 字节）。
+     */
     private byte[] salt;
+
+    /**
+     * HKDF-SHA3 salt（32 字节）。
+     */
     private byte[] hkdfSalt;
+
+    /**
+     * Serpent-CTR IV（16 字节）。
+     */
     private byte[] serpentIV;
+
+    /**
+     * XChaCha20 nonce（24 字节）。
+     */
     private byte[] nonce;
+
+    /**
+     * 密钥验证哈希（64 字节）。
+     */
     private byte[] keyHash;
+
+    /**
+     * keyfile 哈希（32 字节，SHA3-256）。
+     */
     private byte[] keyfileHash;
+
+    /**
+     * 载荷认证标签（64 字节）。
+     */
     private byte[] authTag;
 
-    /** 创建空 header（供 Reader 填充）。 */
+    /**
+     * 创建空 header（字段均为默认值/零长度数组），供 Reader 填充。
+     */
     public VolumeHeader() {
         this.version = CURRENT_VERSION;
         this.comments = "";
@@ -62,7 +128,12 @@ public final class VolumeHeader {
     }
 
     /**
-     * 创建含密码学参数的新 header，对应 Go {@code NewVolumeHeader}。
+     * 创建含密码学参数的新 header（加密时使用）。
+     *
+     * @param salt      Argon2 salt（16 字节）
+     * @param hkdfSalt  HKDF salt（32 字节）
+     * @param serpentIV Serpent IV（16 字节）
+     * @param nonce     XChaCha20 nonce（24 字节）
      */
     public VolumeHeader(byte[] salt, byte[] hkdfSalt, byte[] serpentIV, byte[] nonce) {
         this();
@@ -74,7 +145,9 @@ public final class VolumeHeader {
     }
 
     /**
-     * 是否为 v1.x 旧版本卷。对应 Go {@code VolumeHeader.IsLegacyV1()}。
+     * 是否为 v1.x 旧版本卷。
+     *
+     * @return 若 version 以 "v1" 开头则返回 true
      */
     public boolean isLegacyV1() {
         return version != null && version.length() >= 2 && version.startsWith("v1");

@@ -12,7 +12,9 @@ import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import MediaCryptCancelledException;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec;
+import MediaCryptException;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptOptions;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat;
@@ -542,7 +544,7 @@ public class MediaCryptController {
         runTask(progress -> {
             boolean ok = codec.verifyIntegrity(input, pwdBytes, progress);
             if (!ok) {
-                throw new hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptException(
+                throw new MediaCryptException(
                         Messages.get("av.status.failed.verify.noIntegrity"));
             }
         }, Messages.get("av.status.success.verify"));
@@ -690,7 +692,7 @@ public class MediaCryptController {
 
                 // 噪音文件解密校验
                 if (noiseMode && !codec.isEncrypted(actualInput)) {
-                    throw new hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptException(
+                    throw new MediaCryptException(
                             Messages.get("av.error.notEncrypted"));
                 }
 
@@ -767,7 +769,7 @@ public class MediaCryptController {
                 },
                 err -> {
                     boolean cancelled = err instanceof
-                            hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException
+                            MediaCryptCancelledException
                             || err instanceof InterruptedException;
                     if (cancelled) {
                         avStatusLabel.setText(Messages.get("status.cancelled"));

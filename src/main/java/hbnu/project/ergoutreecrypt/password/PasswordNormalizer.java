@@ -24,7 +24,7 @@ public final class PasswordNormalizer {
     }
 
     /**
-     * 将输入归一为 Unicode NFC 形式。对应 Go {@code Normalize}。
+     * 将输入归一为 Unicode NFC 形式。
      */
     public static String normalize(String pw) {
         if (pw == null) {
@@ -34,7 +34,7 @@ public final class PasswordNormalizer {
     }
 
     /**
-     * 加密时使用的 KDF 输入：NFC 归一化后的 UTF-8 字节。对应 Go {@code EncodeForKDF}。
+     * 加密时使用的 KDF 输入：NFC 归一化后的 UTF-8 字节。
      */
     public static byte[] encodeForKdf(String pw) {
         return normalize(pw == null ? "" : pw).getBytes(StandardCharsets.UTF_8);
@@ -42,7 +42,6 @@ public final class PasswordNormalizer {
 
     /**
      * 解密时依次尝试的密码候选形态（去重后最多 3 个）。
-     * 对应 Go {@code Candidates}。
      *
      * <ol>
      *   <li>NFC — 新卷 + 旧 ASCII/NFC 卷（优先，命中率最高）</li>
@@ -76,7 +75,7 @@ public final class PasswordNormalizer {
     }
 
     /**
-     * 密码中是否含非 ASCII 字符。对应 Go {@code ContainsNonASCII}。
+     * 密码中是否含非 ASCII 字符。
      */
     public static boolean containsNonASCII(String pw) {
         if (pw == null) {

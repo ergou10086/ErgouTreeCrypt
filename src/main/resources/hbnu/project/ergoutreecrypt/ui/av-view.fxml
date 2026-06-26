@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane fx:id="avRoot" xmlns:fx="http://javafx.com/fxml"
+           fx:controller="hbnu.project.ergoutreecrypt.ui.MediaCryptController">
+    <VBox styleClass="tab-body">
+
+        <ScrollPane styleClass="content-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
+            <HBox alignment="TOP_CENTER">
+                <VBox styleClass="content" spacing="16" maxWidth="720" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
+
+                    <!-- 加密/解密分段切换 -->
+                    <HBox styleClass="segmented" alignment="CENTER">
+                        <ToggleButton fx:id="avEncryptTab" styleClass="seg-btn" selected="true">
+                            <toggleGroup><ToggleGroup fx:id="avModeGroup"/></toggleGroup>
+                        </ToggleButton>
+                        <ToggleButton fx:id="avDecryptTab" styleClass="seg-btn" toggleGroup="$avModeGroup"/>
+                    </HBox>
+
+                    <!-- 拖拽区 -->
+                    <VBox fx:id="avDropZone" styleClass="card,drop-zone" spacing="8" alignment="CENTER">
+                        <Label styleClass="drop-icon" text="♪"/>
+                        <Label fx:id="avDropHint" styleClass="drop-hint"/>
+                        <Label fx:id="avDropSub" styleClass="drop-sub"/>
+                    </VBox>
+
+                    <!-- 已选文件 -->
+                    <VBox fx:id="avFileCard" styleClass="card,file-card" spacing="6" managed="false" visible="false">
+                        <HBox alignment="CENTER_LEFT" spacing="12">
+                            <Label styleClass="file-icon" text="▤"/>
+                            <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                <Label fx:id="avFileName" styleClass="file-name"/>
+                                <Label fx:id="avFileMeta" styleClass="file-meta"/>
+                            </VBox>
+                            <Button fx:id="avClearFileBtn" styleClass="btn-ghost" onAction="#onClearFile"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 输出路径卡片 -->
+                    <VBox fx:id="avOutputCard" styleClass="card" spacing="8" managed="false" visible="false">
+                        <Label fx:id="avOutputLabel" styleClass="card-title"/>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <TextField fx:id="avOutputFileField" styleClass="text-input" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="avOutputBrowseBtn" styleClass="btn-ghost" onAction="#onBrowseOutput"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 密码 -->
+                    <VBox styleClass="card" spacing="10">
+                        <Label fx:id="avPasswordTitle" styleClass="card-title"/>
+                        <StackPane>
+                            <PasswordField fx:id="avPasswordField" styleClass="text-input"/>
+                            <TextField fx:id="avPasswordVisibleField" styleClass="text-input" managed="false" visible="false"/>
+                        </StackPane>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <CheckBox fx:id="avShowPasswordCheck" styleClass="check" onAction="#onToggleShowPassword"/>
+                        </HBox>
+                        <VBox fx:id="avConfirmBox" spacing="6">
+                            <PasswordField fx:id="avConfirmField" styleClass="text-input"/>
+                            <Label fx:id="avMismatchLabel" styleClass="error-text" managed="false" visible="false"/>
+                        </VBox>
+                    </VBox>
+
+                    <!-- 加密选项 -->
+                    <VBox fx:id="avEncryptOptions" styleClass="card" spacing="12">
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <Label fx:id="avProfileLabel" styleClass="card-title"/>
+                            <Label fx:id="avProfileInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <ComboBox fx:id="avProfileCombo" styleClass="text-input" maxWidth="Infinity"/>
+                        <Separator/>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avParanoidCheck" styleClass="check"/>
+                            <Label fx:id="avParanoidInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avIntegrityCheck" styleClass="check" selected="true"/>
+                            <Label fx:id="avIntegrityInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <Separator/>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avCompressAfterCheck" styleClass="check"/>
+                            <Label fx:id="avCompressAfterInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <ComboBox fx:id="avCompressFormatCombo" styleClass="text-input"
+                                  prefWidth="140" managed="false" visible="false"
+                                  maxWidth="Infinity"/>
+                        <PasswordField fx:id="avArchivePasswordField" styleClass="text-input"
+                                      managed="false" visible="false"
+                                      promptText="Archive password (optional)"/>
+                    </VBox>
+
+                    <!-- 解密选项 -->
+                    <VBox fx:id="avDecryptOptions" styleClass="card" spacing="10" managed="false" visible="false">
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avNoiseDecryptCheck" styleClass="check"/>
+                            <Label fx:id="avNoiseDecryptInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <Label fx:id="avNoiseDecryptHint" styleClass="field-hint" wrapText="true"/>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avDecompressAfterCheck" styleClass="check"/>
+                            <Label fx:id="avDecompressAfterInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <PasswordField fx:id="avDecompressPasswordField" styleClass="text-input"
+                                      promptText="Archive password (optional)"/>
+                    </VBox>
+                </VBox>
+            </HBox>
+        </ScrollPane>
+
+        <!-- 底部操作栏 -->
+        <VBox styleClass="footer" spacing="10">
+            <padding><Insets top="14" right="24" bottom="18" left="24"/></padding>
+            <VBox fx:id="avProgressBox" spacing="6" managed="false" visible="false">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <Label fx:id="avStatusLabel" styleClass="status-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="avProgressInfo" styleClass="status-info"/>
+                </HBox>
+                <ProgressBar fx:id="avProgressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
+            </VBox>
+            <HBox spacing="12" alignment="CENTER_RIGHT">
+                <Button fx:id="avCancelBtn" styleClass="btn-secondary" managed="false" visible="false" onAction="#onCancel"/>
+                <Button fx:id="avVerifyBtn" styleClass="btn-secondary" managed="false" visible="false"
+                        onAction="#onVerifyIntegrity"/>
+                <Button fx:id="avActionBtn" styleClass="btn-accent" onAction="#onAction"/>
+            </HBox>
+        </VBox>
+    </VBox>
+</StackPane>

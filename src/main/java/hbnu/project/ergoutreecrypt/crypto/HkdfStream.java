@@ -5,21 +5,26 @@ import org.bouncycastle.crypto.generators.HKDFBytesGenerator;
 import org.bouncycastle.crypto.params.HKDFParameters;
 
 /**
- * HKDF-SHA3-256 字节流
- * <p>
- * HKDF 返回一个 {@code io.Reader}，按需连续产出 expand 阶段的密钥流。本类用 BouncyCastle 的 {@link HKDFBytesGenerator} 实现可连续读取多次 {@link #read(int)} 会从同一条 expand 流上顺序取字节。
- * <p>
- * info 为空（null），与 Go 的 {@code nil} 一致；hash 为 SHA3-256。
+ * HKDF-SHA3-256 扩展字节流。
+ *
+ * <p>封装 BouncyCastle 的 {@link HKDFBytesGenerator}，提供可连续读取的 expand 阶段字节流。
+ * 连续多次调用 {@link #read(int)} 会从同一条 expand 流上顺序取字节。
+ * info 参数为空（null），哈希函数为 SHA3-256。
  *
  * @author ErgouTree
  * @since 2026/6/16
  */
 public final class HkdfStream {
 
+    /**
+     * BouncyCastle HKDF expand 字节生成器。
+     */
     private final HKDFBytesGenerator generator;
 
     /**
-     * @param key  IKM（输入密钥材料）：Argon2 派生密钥（v1 为 XOR 后的密钥）
+     * 初始化 HKDF 流。
+     *
+     * @param key  IKM（输入密钥材料）：Argon2 派生密钥（v1 为 XOR 后密钥）
      * @param salt HKDF salt（32 字节，来自 header）
      */
     public HkdfStream(byte[] key, byte[] salt) {
@@ -28,8 +33,11 @@ public final class HkdfStream {
     }
 
     /**
-     * 从 HKDF expand 流顺序读取 {@code n} 字节。连续调用会在同一条流上继续推进，
-     * 等价于 Go 对 {@code io.Reader} 的 {@code io.ReadFull}。
+     * 从 HKDF expand 流顺序读取 n 字节。
+     * 连续调用会在同一条流上继续推进，每次返回新分配的数组。
+     *
+     * @param n 需要读取的字节数
+     * @return 新分配的 n 字节数组
      */
     public byte[] read(int n) {
         byte[] out = new byte[n];

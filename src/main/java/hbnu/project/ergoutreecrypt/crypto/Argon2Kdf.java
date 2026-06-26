@@ -6,16 +6,16 @@ import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
 
 /**
- * Argon2id 密钥派生
- * <p>
- * 参数必须与 Picocrypt-NG 内核完全一致，否则既有卷无法解密。
+ * Argon2id 密钥派生函数（KDF）。
+ *
+ * <p>根据安全模式选择迭代次数与并行度，从密码与 salt 派生 32 字节加密密钥。
+ * 内存量固定为 1 GiB。派生结果为全零时视为 Argon2 故障并抛出异常。
+ *
+ * <p>参数对照：
  * <ul>
  *   <li>普通模式：4 passes / 1 GiB / 4 threads</li>
  *   <li>偏执模式：8 passes / 1 GiB / 8 threads</li>
- *   <li>输出 32 字节</li>
  * </ul>
- * <p>
- * 原项目的 {@code argon2.IDKey} 内存单位为 KiB
  *
  * @author ErgouTree
  */
@@ -25,11 +25,11 @@ public final class Argon2Kdf {
     }
 
     /**
-     * 从密码与 salt 派生 32 字节密钥。
+     * 从密码与 salt 派生 32 字节加密密钥。
      *
      * @param password 已归一化（NFC）的密码 UTF-8 字节
      * @param salt     16 字节 Argon2 salt
-     * @param paranoid 是否使用偏执模式参数
+     * @param paranoid 是否使用偏执模式参数（更多迭代与线程）
      * @return 32 字节派生密钥
      * @throws IllegalStateException 若派生结果为全零，视为 Argon2 故障
      */
@@ -58,6 +58,7 @@ public final class Argon2Kdf {
         byte[] key = new byte[CryptoConstants.ARGON2_KEY_SIZE];
         generator.generateBytes(password, key);
 
+        // 全零结果视为 Argon2 致命故障
         if (Arrays.equals(key, new byte[CryptoConstants.ARGON2_KEY_SIZE])) {
             throw new IllegalStateException("fatal Argon2 error: produced zero key");
         }

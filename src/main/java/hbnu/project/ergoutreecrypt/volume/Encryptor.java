@@ -1,12 +1,24 @@
 package hbnu.project.ergoutreecrypt.volume;
 
-import hbnu.project.ergoutreecrypt.crypto.*;
+import hbnu.project.ergoutreecrypt.crypto.Argon2Kdf;
+import hbnu.project.ergoutreecrypt.crypto.CipherSuite;
+import hbnu.project.ergoutreecrypt.crypto.CryptoConstants;
+import hbnu.project.ergoutreecrypt.crypto.HkdfStream;
+import hbnu.project.ergoutreecrypt.crypto.Mac;
+import hbnu.project.ergoutreecrypt.crypto.MacFactory;
+import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
+import hbnu.project.ergoutreecrypt.crypto.SecureZero;
+import hbnu.project.ergoutreecrypt.crypto.SubkeyReader;
 import hbnu.project.ergoutreecrypt.encoding.Padding;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
-import hbnu.project.ergoutreecrypt.header.*;
+import hbnu.project.ergoutreecrypt.header.Flags;
+import hbnu.project.ergoutreecrypt.header.HeaderAuth;
+import hbnu.project.ergoutreecrypt.header.HeaderLayout;
+import hbnu.project.ergoutreecrypt.header.HeaderWriter;
+import hbnu.project.ergoutreecrypt.header.VolumeHeader;
 import hbnu.project.ergoutreecrypt.keyfile.KeyfileProcessor;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 import hbnu.project.ergoutreecrypt.password.Passwordless;
@@ -15,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -22,18 +35,18 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 /**
- * 8 阶段加密编排，对应 Go {@code internal/volume/encrypt.go}。
+ * 加密编排器（8 阶段流水线）。
  *
  * <p>流水线：
  * <ol>
- *   <li>preprocess — 多文件 zip</li>
+ *   <li>preprocess — 多文件预处理</li>
  *   <li>generateValues — 随机 salt/nonce/IV + header</li>
- *   <li>writeHeader — RS 编码写 header（占位 auth）</li>
- *   <li>deriveKeys — Argon2id 密码派生（无密码时用随机 key）</li>
+ *   <li>writeHeader — RS 编码写 header（auth 值占位）</li>
+ *   <li>deriveKeys — Argon2id 密码派生</li>
  *   <li>processKeyfiles — keyfile 哈希 + XOR</li>
  *   <li>computeAuth — v2 header HMAC</li>
  *   <li>encryptPayload — XChaCha20(+Serpent) + MAC + 可选 RS</li>
- *   <li>finalize — writeAt 回填 auth → rename</li>
+ *   <li>finalize — 回填 auth → 原子重命名 → 可选 deniability/分卷/压缩</li>
  * </ol>
  *
  * @author ErgouTree
@@ -44,7 +57,10 @@ public final class Encryptor {
     }
 
     /**
-     * 主入口
+     * 主入口：执行完整加密流程。
+     *
+     * @param req 加密请求参数
+     * @throws Exception 密码学或 I/O 错误
      */
     public static void encrypt(EncryptRequest req) throws Exception {
         OperationContext ctx = new OperationContext();
@@ -67,15 +83,16 @@ public final class Encryptor {
         }
     }
 
-    // ================================================================
-    // Phase 1: Preprocess
-    // ================================================================
+    // ==================== Phase 1: Preprocess ====================
+
+    /**
+     * 加密预处理：多文件合并为临时文件。
+     */
     private static void encryptPreprocess(OperationContext ctx, EncryptRequest req) throws Exception {
         List<String> files = req.getInputFiles();
         if (files != null && !files.isEmpty()) {
             if (files.size() > 1 || req.isCompress()) {
                 ctx.setStatus("Compressing...");
-                // 简化版：单文件直接加密，多文件逐个追加（后续迭代补 zip）
                 Path tmp = Files.createTempFile("ergou", ".tmp");
                 ctx.tempFile = tmp.toString();
                 try (OutputStream out = Files.newOutputStream(tmp)) {
@@ -92,9 +109,11 @@ public final class Encryptor {
         }
     }
 
-    // ================================================================
-    // Phase 2: Generate values
-    // ================================================================
+    // ==================== Phase 2: Generate values ====================
+
+    /**
+     * 生成随机密码学材料并构建 VolumeHeader。
+     */
     private static void encryptGenerateValues(OperationContext ctx, EncryptRequest req) throws IOException {
         ctx.setStatus("Generating values...");
 
@@ -106,7 +125,7 @@ public final class Encryptor {
         Path inPath = Path.of(ctx.inputFile);
         ctx.total = Files.size(inPath);
 
-        // Padded = last partial < 1 MiB - 128 bytes
+        // 末块不足 1 MiB - 128 字节时标记为需要填充
         ctx.padded = (ctx.total % CryptoConstants.MIB) >= (CryptoConstants.MIB - Padding.BLOCK_SIZE);
 
         ctx.header = new VolumeHeader(salt, hkdfSalt, serpentIV, nonce);
@@ -121,9 +140,11 @@ public final class Encryptor {
         ctx.header.setFlags(flags);
     }
 
-    // ================================================================
-    // Phase 3: Write header
-    // ================================================================
+    // ==================== Phase 3: Write header ====================
+
+    /**
+     * RS 编码并写入 header（auth 值位置写入零占位符）。
+     */
     private static void encryptWriteHeader(OperationContext ctx, EncryptRequest req) throws IOException {
         String incomplete = req.getOutputFile() + ".incomplete";
         try (OutputStream out = Files.newOutputStream(Path.of(incomplete))) {
@@ -132,13 +153,13 @@ public final class Encryptor {
         }
     }
 
-    // ================================================================
-    // Phase 4: Derive keys
-    // ================================================================
+    // ==================== Phase 4: Derive keys ====================
+
+    /**
+     * Argon2id 密码派生。无密码时使用公开默认密码。
+     */
     private static void encryptDeriveKeys(OperationContext ctx, EncryptRequest req) {
         ctx.setStatus("Deriving key...");
-
-        // 无密码时使用公开默认密码，保证"无密码"文件人人可解密
         String effectivePw = Passwordless.effectivePassword(req.getPassword());
         byte[] pwBytes = PasswordNormalizer.encodeForKdf(effectivePw);
         byte[] key = Argon2Kdf.deriveKey(pwBytes, ctx.header.getSalt(), req.isParanoid());
@@ -146,9 +167,11 @@ public final class Encryptor {
         ctx.setKey(key);
     }
 
-    // ================================================================
-    // Phase 5: Process keyfiles
-    // ================================================================
+    // ==================== Phase 5: Process keyfiles ====================
+
+    /**
+     * Keyfile 处理：计算各 keyfile 的 SHA3-256 哈希并合并。
+     */
     private static void encryptProcessKeyfiles(OperationContext ctx, EncryptRequest req) throws IOException {
         List<String> kfPaths = req.getKeyfiles();
         if (kfPaths == null || kfPaths.isEmpty()) {
@@ -174,13 +197,13 @@ public final class Encryptor {
         }
     }
 
-    // ================================================================
-    // Phase 6: Compute auth
-    // ================================================================
+    // ==================== Phase 6: Compute auth ====================
+
+    /**
+     * 计算 v2 header HMAC-SHA3-512 认证码。
+     */
     private static void encryptComputeAuth(OperationContext ctx, EncryptRequest req) {
         ctx.setStatus("Computing auth...");
-
-        // v2: HKDF BEFORE keyfile XOR
         HkdfStream hkdf = new HkdfStream(ctx.key, ctx.header.getHkdfSalt());
         ctx.subkeyReader = new SubkeyReader(hkdf);
 
@@ -189,12 +212,13 @@ public final class Encryptor {
         ctx.header.setKeyfileHash(ctx.keyfileHash);
     }
 
-    // ================================================================
-    // Phase 7: Encrypt payload
-    // ================================================================
+    // ==================== Phase 7: Encrypt payload ====================
+
+    /**
+     * 加密载荷：XChaCha20(+Serpent) 加密 + MAC 累积 + 可选 RS 编码。
+     */
     private static void encryptPayload(OperationContext ctx, EncryptRequest req) throws Exception {
-        // Keyfile XOR (AFTER HKDF init for v2) — only when password is present
-        // For keyfile-only mode, key was already set to keyfileKey in encryptProcessKeyfiles
+        // v2: keyfile XOR 在 HKDF 初始化之后（仅当有密码时）
         boolean keyfileOnly = (req.getPassword() == null || req.getPassword().isEmpty())
                 && ctx.useKeyfiles;
         if (ctx.useKeyfiles && ctx.keyfileKey != null && !keyfileOnly) {
@@ -232,8 +256,10 @@ public final class Encryptor {
                     break;
                 }
 
+                // XChaCha20(+Serpent) 加密
                 cs.encrypt(dst, src, n);
 
+                // 可选 RS 编码
                 byte[] writeData;
                 if (req.isReedSolomon()) {
                     writeData = encodeWithRS(dst, n, req.getRsCodecs());
@@ -249,11 +275,13 @@ public final class Encryptor {
                 if (ctx.total > 0) {
                     float progress = (float) done / ctx.total;
                     long elapsed = System.currentTimeMillis() - startMs;
-                    String speed = elapsed > 0 ? String.format("%.1f MiB/s", done / 1048576.0 / (elapsed / 1000.0)) : "";
+                    String speed = elapsed > 0
+                            ? String.format("%.1f MiB/s", done / 1048576.0 / (elapsed / 1000.0))
+                            : "";
                     ctx.updateProgress(progress, speed);
                 }
 
-                // Rekey every 60 GiB
+                // 每 60 GiB rekey 一次
                 if (counter >= CryptoConstants.REKEY_THRESHOLD) {
                     cs.rekey();
                     counter = 0;
@@ -265,28 +293,30 @@ public final class Encryptor {
         SecureZero.zero(serpentKey);
     }
 
-    // ================================================================
-    // Phase 8: Finalize
-    // ================================================================
+    // ==================== Phase 8: Finalize ====================
+
+    /**
+     * 最终化：回填 auth 值、原子重命名，按序执行分卷→压缩→可否认加密。
+     */
     private static void encryptFinalize(OperationContext ctx, EncryptRequest req) throws Exception {
         ctx.setStatus("Finalizing...");
 
+        // 回填 auth 值（keyHash / keyfileHash / authTag）
         byte[] authTag = ctx.cipherSuite.sum();
         String incomplete = req.getOutputFile() + ".incomplete";
-
         try (FileChannel ch = FileChannel.open(Path.of(incomplete), StandardOpenOption.WRITE)) {
             HeaderWriter.writeAuthValues(ch,
                     HeaderLayout.authValuesOffset(
-                            ctx.header.getComments().getBytes(java.nio.charset.StandardCharsets.UTF_8).length),
+                            ctx.header.getComments().getBytes(StandardCharsets.UTF_8).length),
                     ctx.header.getKeyHash(), ctx.header.getKeyfileHash(), authTag,
                     req.getRsCodecs());
         }
 
-        // Rename .incomplete → final
+        // 原子重命名
         Files.move(Path.of(incomplete), Path.of(req.getOutputFile()),
                 StandardCopyOption.REPLACE_EXISTING);
 
-        // Add deniability wrapper if requested
+        // 可选：可否认加密外层
         if (req.isDeniability()) {
             Deniability.addDeniability(req.getOutputFile(),
                     Passwordless.effectivePassword(req.getPassword()), ctx.reporter);
@@ -295,16 +325,15 @@ public final class Encryptor {
         boolean archive = req.getArchiveFormat() != null && !req.getArchiveFormat().isEmpty();
         boolean split = req.isSplit() && req.getChunkSize() > 0;
 
-        // 顺序约定：先分卷得到一块块加密文件，再（若启用压缩）将它们整体打成一个压缩包。
-        // 压缩永远是最后一步。
-        Path chunkDir = null; // 记录分卷碎片所在文件夹（单文件场景会自动创建）
+        // 顺序约定：先分卷，再（若启用）压缩。压缩永远是最后一步
+        Path chunkDir = null;
         if (split) {
             ctx.setStatus("Splitting...");
-            long chunkBytes = (long) req.getChunkSize() * CryptoConstants.MIB; // 每卷大小，单位 MiB
+            long chunkBytes = (long) req.getChunkSize() * CryptoConstants.MIB;
             Path outPath = Path.of(req.getOutputFile());
             String outName = outPath.getFileName().toString();
 
-            // 检查是否已经在分卷碎片文件夹内（FolderCrypt 已预先创建）
+            // 检测是否已在分卷碎片文件夹内
             String folderName = outName;
             if (folderName.toLowerCase().endsWith(".ergou")) {
                 folderName = folderName.substring(0, folderName.length() - ".ergou".length());
@@ -317,9 +346,7 @@ public final class Encryptor {
 
             Path fileToSplit;
             if (!alreadyInChunkFolder) {
-                // 单文件分卷：创建以原文件同名的文件夹，把分卷加密结果输出到其中
                 chunkDir = parent.resolve(folderName);
-                // 若同名文件已存在（如源文件与输出同目录），使用带后缀的文件夹名
                 if (Files.exists(chunkDir) && !Files.isDirectory(chunkDir)) {
                     folderName = folderName + "_ergou_split";
                     chunkDir = parent.resolve(folderName);
@@ -335,7 +362,7 @@ public final class Encryptor {
             }
 
             Splitter.split(fileToSplit, chunkBytes);
-            Files.deleteIfExists(fileToSplit); // 删除未分卷的原始文件
+            Files.deleteIfExists(fileToSplit);
         }
 
         if (archive) {
@@ -345,9 +372,7 @@ public final class Encryptor {
             Path parent = outPath.getParent() != null ? outPath.getParent() : Path.of(".");
 
             if (split) {
-                // 收集所有分卷碎片 base.0, base.1, ... 打入单一压缩包
                 List<Path> chunks = Splitter.listChunks(outPath);
-                // 归档放在分卷文件夹的父目录中，以分卷文件夹名命名
                 Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                 String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(fmt);
                 Path archivePath = archiveParent.resolve(archiveName);
@@ -356,7 +381,6 @@ public final class Encryptor {
                 for (Path c : chunks) {
                     Files.deleteIfExists(c);
                 }
-                // 删除空的分卷碎片文件夹
                 try {
                     Files.deleteIfExists(parent);
                 } catch (IOException ignored) {
@@ -370,12 +394,15 @@ public final class Encryptor {
             }
         }
 
-        // Cleanup temp
+        // 清理临时文件
         if (ctx.tempFile != null) {
             Files.deleteIfExists(Path.of(ctx.tempFile));
         }
     }
 
+    /**
+     * 加密失败时清理临时文件与不完整输出。
+     */
     private static void cleanupEncrypt(OperationContext ctx, EncryptRequest req) {
         if (ctx.tempFile != null) {
             try {
@@ -389,14 +416,17 @@ public final class Encryptor {
         }
     }
 
-    // ================================================================
-    // RS 编码辅助
-    // ================================================================
+    // ==================== RS 编码辅助 ====================
+
+    /**
+     * RS128 编码：将明文数据按 128 字节块分割，逐块 RS 编码为 136 字节。
+     * 末块不满 128 字节时先 PKCS#7 填充再编码。
+     */
     static byte[] encodeWithRS(byte[] data, int len, RsCodecs rs) {
         boolean isFullBlock = len == CryptoConstants.MIB;
 
         if (isFullBlock) {
-            // 整 1 MiB 块：8192 个 128B 块，无 padding。
+            // 整 1 MiB 块：8192 个 128B 块，无填充
             int fullChunks = len / Padding.BLOCK_SIZE;
             byte[] result = new byte[fullChunks * 136];
             int pos = 0;
@@ -410,11 +440,10 @@ public final class Encryptor {
             return result;
         }
 
-        // 部分块（< 1 MiB）：编码全部 128B 块 + 恰好一个 padding 块（即使整除 128）。
-        // 与 Go encodeWithRS 一致：解密端对部分块的最后一块总是 unpad。
+        // 部分块：编码全部 128B 块 + 恰好一个填充块（即使整除 128）
         int fullChunks = len / Padding.BLOCK_SIZE;
         int remaining = len - fullChunks * Padding.BLOCK_SIZE;
-        int chunkCount = fullChunks + 1; // 总是补一个 padding 块
+        int chunkCount = fullChunks + 1;
 
         byte[] result = new byte[chunkCount * 136];
         int pos = 0;
@@ -435,6 +464,9 @@ public final class Encryptor {
         return result;
     }
 
+    /**
+     * 从输入流中尽量读满缓冲区，返回实际读取的字节数。
+     */
     private static int readFull(InputStream in, byte[] buf) throws IOException {
         int total = 0;
         while (total < buf.length) {

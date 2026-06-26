@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
  * @param idOffset      chunk ID 在文件中的偏移（即 chunk 头起点）
  * @param payloadOffset payload 在文件中的偏移（= idOffset + 8）
  * @param payloadSize   payload 字节数（来自 size 字段）
- *                      '
  * @author ErgouTree
  */
 public record WavChunk(String id, long idOffset, long payloadOffset, long payloadSize) {

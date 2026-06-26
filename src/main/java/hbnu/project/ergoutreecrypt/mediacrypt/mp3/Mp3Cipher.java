@@ -17,10 +17,8 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata;
 /**
  * MP3 格式保持加密。
  *
- * <p>默认 <b>M-BODY 档</b>（{@link MediaCryptProfile#M_BODY}）：对每帧"帧头之后的全部字节"
- * （CRC + SideInfo + MainData）连续 XChaCha20 XOR，帧头 4 字节原样保留 → 文件仍是合法 MP3、
- * 时长/采样率正常，但内容为噪声。按物理帧体处理，不解析 Huffman 语义，从而规避
- * {@code AV_ENCRYPTION.md} §4.2 所述的"压缩域 XOR 致 Huffman 同步错误"，且物理字节级可逆。
+ * <p>默认 <b>M-BODY 档</b>（{@link MediaCryptProfile#M_BODY}）：对每帧"帧头之后的全部字节"（CRC + SideInfo + MainData）连续 XChaCha20 XOR，帧头 4 字节原样保留 → 文件仍是合法 MP3、时长/采样率正常，但内容为噪声。
+ * 按物理帧体处理，不解析 Huffman 语义，从而规避 "压缩域 XOR 致 Huffman 同步错误"，且物理字节级可逆。
  *
  * <p>另支持 <b>M-SAFE 档</b>（{@link MediaCryptProfile#M_SAFE}）：仅加密 MainData、保留 Side Info，兼容性更好。
  *

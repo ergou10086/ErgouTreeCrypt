@@ -5,25 +5,31 @@ import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 /**
- * XChaCha20 流密码（24 字节 nonce）
+ * XChaCha20 流密码（24 字节 nonce，非认证）。
  *
- * <p>JDK 内置的 ChaCha20 仅支持 RFC 7539 的 12 字节 nonce，无法直接用于 24 字节 XNonce。因此本类按 XChaCha20 规范实现：
+ * <p>JDK 内置的 ChaCha20 仅支持 RFC 7539 的 12 字节 nonce，无法直接使用 24 字节 XNonce。
+ * 本类按 XChaCha20 规范实现：
  * <ol>
  *   <li>用 HChaCha20(key, nonce[0:16]) 派生 32 字节子密钥；</li>
- *   <li>用该子密钥 + 12 字节 nonce（4 字节 0 || nonce[16:24]）跑标准 ChaCha20（RFC 7539）。</li>
+ *   <li>用该子密钥 + 12 字节子 nonce（4 字节零 || nonce[16:24]）跑标准 ChaCha20（RFC 7539）。</li>
  * </ol>
  *
- * <p>底层使用 BouncyCastle 的 {@link ChaCha7539Engine}（即 RFC 7539 ChaCha20），
- * 这是一个无认证的流密码（认证由上层 MAC 负责）。
+ * <p>底层使用 BouncyCastle 的 {@link ChaCha7539Engine}，认证由上层 MAC 负责。
  *
  * @author ErgouTree
  */
 public final class XChaCha20 {
 
+    /**
+     * ChaCha20 常量 "expand 32-byte k"（16 字节 ASCII）。
+     */
     private static final byte[] SIGMA = {
             'e', 'x', 'p', 'a', 'n', 'd', ' ', '3', '2', '-', 'b', 'y', 't', 'e', ' ', 'k'
     };
 
+    /**
+     * 底层 ChaCha20（RFC 7539）引擎。
+     */
     private final ChaCha7539Engine engine;
 
     /**
@@ -31,6 +37,7 @@ public final class XChaCha20 {
      *
      * @param key   32 字节密钥
      * @param nonce 24 字节 nonce
+     * @throws IllegalArgumentException 若 key 或 nonce 长度不正确
      */
     public XChaCha20(byte[] key, byte[] nonce) {
         if (key.length != 32) {
@@ -40,29 +47,46 @@ public final class XChaCha20 {
             throw new IllegalArgumentException("XChaCha20 nonce must be 24 bytes, got " + nonce.length);
         }
 
+        // HChaCha20 派生子密钥
         byte[] subKey = hChaCha20(key, nonce);
 
-        // 子 nonce = 4 字节 0 || nonce 后 8 字节，构成 RFC 7539 的 12 字节 nonce。
+        // 子 nonce = 4 字节零 || nonce 后 8 字节，构成 RFC 7539 的 12 字节 nonce
         byte[] subNonce = new byte[12];
         System.arraycopy(nonce, 16, subNonce, 4, 8);
 
         engine = new ChaCha7539Engine();
         engine.init(true, new ParametersWithIV(new KeyParameter(subKey), subNonce));
+
+        // 立即清零派生的子密钥
         SecureZero.zero(subKey);
     }
 
     /**
-     * 流加解密（XOR keystream）。{@code in} 与 {@code out} 可指向不同数组，长度需相同。
-     * 由于是流密码，加密与解密为同一操作。
+     * 流加解密处理（XOR keystream）。输入与输出可指向不同数组，长度须相同。
+     * 流密码特性：加密与解密为同一操作。
+     *
+     * @param out 输出缓冲区
+     * @param in  输入数据
+     * @param len 处理字节数
      */
     public void process(byte[] out, byte[] in, int len) {
         engine.processBytes(in, 0, len, out, 0);
     }
 
-    // ---- HChaCha20：ChaCha20 块函数（20 轮），不做最终加法，取首尾 8 个 32-bit 字 ----
+    // ==================== HChaCha20 核心实现 ====================
 
+    /**
+     * HChaCha20：对 ChaCha20 块函数执行 20 轮（10 次双轮），不做最终加法，
+     * 取首尾各 4 个 32-bit 字作为 32 字节输出。
+     *
+     * @param key     32 字节密钥
+     * @param nonce16 16 字节 nonce（XNonce 的前 16 字节）
+     * @return 32 字节派生子密钥
+     */
     public static byte[] hChaCha20(byte[] key, byte[] nonce16) {
         int[] state = new int[16];
+
+        // 填充初始状态：常数 || key || nonce
         state[0] = le32(SIGMA, 0);
         state[1] = le32(SIGMA, 4);
         state[2] = le32(SIGMA, 8);
@@ -74,6 +98,7 @@ public final class XChaCha20 {
             state[12 + i] = le32(nonce16, i * 4);
         }
 
+        // 20 轮（10 次双轮）
         for (int i = 0; i < 10; i++) {
             quarterRound(state, 0, 4, 8, 12);
             quarterRound(state, 1, 5, 9, 13);
@@ -85,8 +110,8 @@ public final class XChaCha20 {
             quarterRound(state, 3, 4, 9, 14);
         }
 
+        // HChaCha20 输出 = state[0..3] || state[12..15]（不加初始状态）
         byte[] out = new byte[32];
-        // HChaCha20 输出 = state[0..3] || state[12..15]（不加初始状态）。
         for (int i = 0; i < 4; i++) {
             putLe32(out, i * 4, state[i]);
         }
@@ -96,6 +121,9 @@ public final class XChaCha20 {
         return out;
     }
 
+    /**
+     * ChaCha20 四分之一轮运算：对 s[a], s[b], s[c], s[d] 执行 ARX 操作。
+     */
     private static void quarterRound(int[] s, int a, int b, int c, int d) {
         s[a] += s[b];
         s[d] = Integer.rotateLeft(s[d] ^ s[a], 16);
@@ -107,6 +135,9 @@ public final class XChaCha20 {
         s[b] = Integer.rotateLeft(s[b] ^ s[c], 7);
     }
 
+    /**
+     * 从字节数组偏移处读取 4 字节小端序 32 位整数。
+     */
     private static int le32(byte[] b, int off) {
         return (b[off] & 0xff)
                 | ((b[off + 1] & 0xff) << 8)
@@ -114,6 +145,9 @@ public final class XChaCha20 {
                 | ((b[off + 3] & 0xff) << 24);
     }
 
+    /**
+     * 将 32 位整数以小端序写入字节数组偏移处。
+     */
     private static void putLe32(byte[] b, int off, int v) {
         b[off] = (byte) v;
         b[off + 1] = (byte) (v >>> 8);

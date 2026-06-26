@@ -10,26 +10,27 @@ import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
  * 文件完整性校验编排器。
  *
- * <p>对加密文件（.ergou / .pcv）执行只读的完整性校验：读取 volume header、
- * 验证 header 认证标签（v1 / v2）、扫描密文载荷并比对 MAC，全程不产生明文输出。
+ * <p>对加密文件执行只读的完整性校验：读取 volume header、验证 header 认证标签、
+ * 扫描密文载荷并比对 MAC，全程不产生明文输出。
  *
  * <p>校验流水线（5 阶段）：
  * <ol>
- *   <li>preprocess — 合成分卷 + 去 deniability（复用 {@link Decryptor#decryptPreprocess}）</li>
+ *   <li>preprocess — 合成分卷 + 去可否认加密层（复用 {@link Decryptor#decryptPreprocess}）</li>
  *   <li>readHeader — RS 解码 header（复用 {@link Decryptor#decryptReadHeader}）</li>
  *   <li>deriveProcessVerify — 派生密钥 + keyfile + header auth（复用 {@link Decryptor#decryptDeriveProcessVerify}）</li>
  *   <li>macScan — 仅计算密文 MAC（不解密），支持 RS fast/full decode</li>
  *   <li>compare — 常量时间比对 MAC，RS 模式下首次失败会 full-decode 重试一次</li>
  * </ol>
  *
- * <p>因为项目采用 encrypt-then-MAC，载荷 MAC 覆盖的是密文，因此校验阶段
- * 不需要执行 XChaCha20 / Serpent 解密，只需把密文原样（RS 解码后）喂给 MAC 累加器。
+ * <p>项目采用 encrypt-then-MAC，载荷 MAC 覆盖的是密文，因此校验阶段不需要执行 XChaCha20/Serpent 解密，
+ * 只需把密文原样（RS 解码后）喂给 MAC 累加器。
  *
  * @author ErgouTree
  */
@@ -61,15 +62,11 @@ public final class Verifier {
         }
     }
 
-    // ================================================================
-    // Phase 4: MAC-only scan (不解密，只累加密文 MAC)
-    // ================================================================
-
     /**
-     * 读取密文载荷并累加 MAC，不解密。
+     * 读取密文载荷并累加 MAC（不解密）。
      *
      * <p>与 {@link Decryptor#decryptPayload} 的关键区别：不创建 CipherSuite，
-     * 不执行 XChaCha20 / Serpent 解密。密文（经 RS 解码后）直接喂给 MAC。
+     * 不执行 XChaCha20/Serpent 解密。密文（经 RS 解码后）直接喂给 MAC。
      *
      * @param fastDecode true 为快速 RS 解码，false 为完全 RS 解码（重试时使用）
      */
@@ -79,16 +76,14 @@ public final class Verifier {
 
         byte[] macSubkey = ctx.subkeyReader.macSubkey();
         Mac mac = MacFactory.create(macSubkey, ctx.header.getFlags().isParanoid());
-        ctx.cipherSuite = null; // 不使用 CipherSuite，直接用 Mac
 
         boolean reedsolo = ctx.header.getFlags().isReedSolomon();
         boolean padded = ctx.header.getFlags().isPadded();
         int commentByteLen = ctx.header.getComments()
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                .getBytes(StandardCharsets.UTF_8).length;
         long headerSize = HeaderLayout.headerSize(commentByteLen);
 
         try (InputStream fin = Files.newInputStream(Path.of(ctx.inputFile))) {
-            // 跳过 header
             fin.skipNBytes(headerSize);
 
             int bufSize = reedsolo ? CryptoConstants.MIB / 128 * 136 : CryptoConstants.MIB;
@@ -105,6 +100,7 @@ public final class Verifier {
                     break;
                 }
 
+                // RS 解码（仅去冗余，不解密）
                 byte[] data;
                 if (reedsolo) {
                     boolean isLast = done + n >= ctx.total;
@@ -131,30 +127,22 @@ public final class Verifier {
             }
         }
 
-        // 暂存 MAC 结果到上下文中，供 compare 阶段使用
-        ctx.keyfileHash = mac.doFinal(); // 复用 keyfileHash 字段存储 computedMac
+        // 暂存 MAC 结果到上下文，供 compare 阶段使用
+        ctx.keyfileHash = mac.doFinal();
         mac.close();
         SecureZero.zero(macSubkey);
     }
 
-    // ================================================================
-    // Phase 5: MAC 比对 + RS 完全解码重试
-    // ================================================================
-
     /**
-     * 常量时间比对载荷 MAC。
-     *
-     * <p>若开启了 Reed-Solomon 且首次 fast-decode MAC 比对失败，则用
-     * {@code fastDecode=false} 重试一次（完全 RS 解码）。
+     * 常量时间比对载荷 MAC。若开启了 RS 且首次 fast-decode 失败，则用 full-decode 重试一次。
      */
     private static void verifyCompare(OperationContext ctx, VerifyRequest req) throws Exception {
         ctx.setStatus("Verifying MAC...");
 
-        byte[] computedMac = ctx.keyfileHash; // 由 verifyMacScan 暂存
+        byte[] computedMac = ctx.keyfileHash;
         boolean macOk = HeaderAuth.constantTimeEqual(computedMac, ctx.header.getAuthTag());
 
         if (!macOk && ctx.header.getFlags().isReedSolomon() && !ctx.triedFullRSDecode) {
-            // 用完全 RS 解码重试一次
             ctx.triedFullRSDecode = true;
             SecureZero.zero(computedMac);
             verifyMacScan(ctx, req, false);
@@ -172,12 +160,8 @@ public final class Verifier {
         SecureZero.zero(computedMac);
     }
 
-    // ================================================================
-    // 辅助方法
-    // ================================================================
-
     /**
-     * 从 VerifyRequest 构建临时 DecryptRequest，用于复用 Decryptor 的前三个阶段。
+     * 从 VerifyRequest 构建临时 DecryptRequest，用于复用 Decryptor 的前三阶段。
      */
     private static DecryptRequest toDecryptRequest(VerifyRequest req) {
         DecryptRequest dr = new DecryptRequest();

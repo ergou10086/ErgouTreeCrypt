@@ -6,13 +6,7 @@ import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.*;
-import hbnu.project.ergoutreecrypt.volume.DecryptRequest;
-import hbnu.project.ergoutreecrypt.volume.Decryptor;
-import hbnu.project.ergoutreecrypt.volume.EncryptRequest;
-import hbnu.project.ergoutreecrypt.volume.Encryptor;
-import hbnu.project.ergoutreecrypt.volume.FolderCrypt;
-import hbnu.project.ergoutreecrypt.volume.Verifier;
-import hbnu.project.ergoutreecrypt.volume.VerifyRequest;
+import hbnu.project.ergoutreecrypt.volume.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
@@ -61,6 +55,7 @@ public class MainController {
     private Button langButton;
     @FXML
     private Button themeButton;
+
     // ---- 菜单栏 ----
     @FXML
     private MenuBar menuBar;
@@ -70,6 +65,7 @@ public class MainController {
     private MenuItem settingsMenuItem;
     @FXML
     private MenuItem aboutMenuItem;
+
     // ---- 标签页 ----
     @FXML
     private TabPane mainTabs;
@@ -79,11 +75,13 @@ public class MainController {
     private Tab mediaTab;
     @FXML
     private MediaCryptController mediaViewController;
+
     // ---- 模式切换 ----
     @FXML
     private ToggleButton encryptTab;
     @FXML
     private ToggleButton decryptTab;
+
     // ---- 文件区 ----
     @FXML
     private VBox dropZone;
@@ -103,6 +101,7 @@ public class MainController {
     private Label fileMetaLabel;
     @FXML
     private Button clearFileBtn;
+
     // ---- 输出路径 ----
     @FXML
     private VBox outputCard;
@@ -113,6 +112,7 @@ public class MainController {
     @FXML
     private Button outputBrowseBtn;
     private boolean outputPathUserEdited = false;
+
     // ---- 密码区 ----
     @FXML
     private Label passwordCardTitle;
@@ -134,6 +134,7 @@ public class MainController {
     private PasswordField confirmField;
     @FXML
     private Label mismatchLabel;
+
     // ---- 高级选项 ----
     @FXML
     private HBox optionsHeader;
@@ -211,6 +212,7 @@ public class MainController {
     private VBox keyfileList;
     @FXML
     private Label keyfileEmptyLabel;
+
     // ---- 底部 ----
     @FXML
     private VBox progressBox;
@@ -226,6 +228,7 @@ public class MainController {
     private Button verifyBtn;
     @FXML
     private Button actionBtn;
+
     private Toast toast;
 
     private Mode mode = Mode.ENCRYPT;
@@ -261,6 +264,23 @@ public class MainController {
             paths.add(f.getAbsolutePath());
         }
         return paths;
+    }
+
+    /**
+     * 判断异常是否与加密/密码相关（ZIP 加密条目、AES 封装等）。
+     */
+    private static boolean isEncryptionRelated(Throwable t) {
+        if (t == null) {
+            return false;
+        }
+        String msg = t.getMessage();
+        if (msg == null) {
+            msg = "";
+        }
+        String lower = msg.toLowerCase();
+        return lower.contains("encrypt") || lower.contains("password")
+                || lower.contains("unsupported compression method")
+                || lower.contains("unsupported feature");
     }
 
     @FXML
@@ -451,7 +471,7 @@ public class MainController {
 
     @FXML
     private void onToggleTheme() {
-        // \u5FAA\u73AF\u5207\u6362\u6A21\u5F0F\uFF1A\u5F53\u524D \u2192 \u4E0B\u4E00\u4E2A
+        // 循环切换模式：当前 → 下一个
         ThemeManager.Mode next = switch (themeManager.getMode()) {
             case LIGHT -> ThemeManager.Mode.DARK;
             case DARK -> ThemeManager.Mode.SYSTEM;
@@ -461,12 +481,18 @@ public class MainController {
         updateThemeButton();
     }
 
-    /** \u6839\u636E\u5F53\u524D\u4E3B\u9898\u6A21\u5F0F\u548C\u89C6\u89C9\u4E3B\u9898\u66F4\u65B0\u6309\u94AE\u56FE\u6807\u3002 */
+    /**
+     * 根据当前主题模式和视觉主题更新按钮图标。
+     */
     private void updateThemeButton() {
         switch (themeManager.getMode()) {
-            case LIGHT -> themeButton.setText("\u2600");   // \u2600 \u592A\u9633 = \u6D45\u8272
-            case DARK  -> themeButton.setText("\u263D");   // \u263D \u6708\u4EAE = \u6DF1\u8272
-            case SYSTEM -> themeButton.setText("\u21C4");  // \u21C4 = \u8DDF\u968F\u7CFB\u7EDF
+            // ☀ 太阳 = 浅色
+            case LIGHT -> themeButton.setText("☀");
+            // ☽ 月亮 = 深色
+            case DARK -> themeButton.setText("☽");
+            // ⇄ = 跟随系统
+            case SYSTEM -> themeButton.setText("⇄");
+            default -> throw new IllegalStateException("Unexpected theme mode: " + themeManager.getMode());
         }
     }
 
@@ -584,7 +610,7 @@ public class MainController {
         Dragboard db = e.getDragboard();
         boolean ok = false;
         if (db.hasFiles() && !db.getFiles().isEmpty()) {
-            setSelectedFile(db.getFiles().get(0));
+            setSelectedFile(db.getFiles().getFirst());
             ok = true;
         }
         dropZone.getStyleClass().remove("drag-over");
@@ -622,7 +648,9 @@ public class MainController {
     }
 
     private String computeDefaultOutput() {
-        if (selectedFile == null) return "";
+        if (selectedFile == null) {
+            return "";
+        }
         String path = selectedFile.getAbsolutePath();
         if (mode == Mode.ENCRYPT) {
             // 文件夹：默认输出到其父目录（结果会是同名文件夹或同名压缩包）
@@ -728,7 +756,7 @@ public class MainController {
     private void toggleOptions() {
         optionsExpanded = !optionsExpanded;
         setVisible(optionsBody, optionsExpanded);
-        optionsChevron.setText(optionsExpanded ? "\u2303" : "\u2304");
+        optionsChevron.setText(optionsExpanded ? "⌃" : "⌄");
     }
 
     // ================================================================
@@ -756,7 +784,7 @@ public class MainController {
             Label name = new Label(f.getName());
             Region spacer = new Region();
             HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
-            Button remove = new Button("\u2715");
+            Button remove = new Button("✕");
             remove.getStyleClass().add("btn-ghost");
             remove.setOnAction(e -> {
                 keyfiles.remove(f);
@@ -1003,17 +1031,6 @@ public class MainController {
         });
     }
 
-    /** 判断异常是否与加密/密码相关（ZIP 加密条目、AES 封装等）。 */
-    private static boolean isEncryptionRelated(Throwable t) {
-        if (t == null) return false;
-        String msg = t.getMessage();
-        if (msg == null) msg = "";
-        String lower = msg.toLowerCase();
-        return lower.contains("encrypt") || lower.contains("password")
-                || lower.contains("unsupported compression method")
-                || lower.contains("unsupported feature");
-    }
-
     private String showArchivePasswordDialog() {
         javafx.scene.control.TextInputDialog dlg = new javafx.scene.control.TextInputDialog();
         dlg.initOwner(stage());
@@ -1093,8 +1110,9 @@ public class MainController {
     }
 
     // ================================================================
-    // 工具
+    // 工具类
     // ================================================================
+
     private void enableWindowDrag() {
         final double[] offset = new double[2];
         titleBar.setOnMousePressed(e -> {
@@ -1116,10 +1134,10 @@ public class MainController {
      */
     private void enableCornerResize() {
         final double gripSize = 8;
-        Region tl = cornerGrip(gripSize, Cursor.NW_RESIZE,  -1, -1);
-        Region tr = cornerGrip(gripSize, Cursor.NE_RESIZE,   1, -1);
-        Region bl = cornerGrip(gripSize, Cursor.SW_RESIZE,  -1,  1);
-        Region br = cornerGrip(gripSize, Cursor.SE_RESIZE,   1,  1);
+        Region tl = cornerGrip(gripSize, Cursor.NW_RESIZE, -1, -1);
+        Region tr = cornerGrip(gripSize, Cursor.NE_RESIZE, 1, -1);
+        Region bl = cornerGrip(gripSize, Cursor.SW_RESIZE, -1, 1);
+        Region br = cornerGrip(gripSize, Cursor.SE_RESIZE, 1, 1);
 
         StackPane.setAlignment(tl, Pos.TOP_LEFT);
         StackPane.setAlignment(tr, Pos.TOP_RIGHT);
@@ -1138,10 +1156,10 @@ public class MainController {
     /**
      * 创建一个透明的角部拖拽手柄。
      *
-     * @param size  手柄尺寸 (px)
+     * @param size   手柄尺寸 (px)
      * @param cursor 鼠标悬停光标
-     * @param signX 宽度变化方向：1=向右扩展，-1=向左扩展
-     * @param signY 高度变化方向：1=向下扩展，-1=向上扩展
+     * @param signX  宽度变化方向：1=向右扩展，-1=向左扩展
+     * @param signY  高度变化方向：1=向下扩展，-1=向上扩展
      */
     private Region cornerGrip(double size, Cursor cursor, int signX, int signY) {
         Region grip = new Region();

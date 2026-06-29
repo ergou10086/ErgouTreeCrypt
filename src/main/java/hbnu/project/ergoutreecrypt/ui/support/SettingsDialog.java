@@ -148,6 +148,18 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.autoClearPassword.tip")), 2, row);
         row++;
 
+        // 加密线程数
+        Spinner<Integer> threadCountSpinner = new Spinner<>(1, 16, 4);
+        threadCountSpinner.setPrefWidth(90);
+        threadCountSpinner.setEditable(true);
+        HBox threadBox = new HBox(6,
+                new Label(Messages.get("settings.threadCount")),
+                threadCountSpinner);
+        threadBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(threadBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.threadCount.tip")), 2, row);
+        row++;
+
         // ---- 加载当前值 ----
         // 主题模式
         ThemeManager.Mode savedMode = themeManager != null
@@ -167,6 +179,7 @@ public final class SettingsDialog {
         defaultSplitSize.getValueFactory().setValue(SettingsManager.getDefaultSplitSize());
         rememberOutputDir.setSelected(SettingsManager.isRememberOutputDir());
         autoClearPassword.setSelected(SettingsManager.isAutoClearPassword());
+        threadCountSpinner.getValueFactory().setValue(SettingsManager.getThreadCount());
 
         // ---- 监听即时写入 ----
         themeCombo.valueProperty().addListener((o, a, b) -> {
@@ -203,6 +216,8 @@ public final class SettingsDialog {
                 SettingsManager.setRememberOutputDir(b));
         autoClearPassword.selectedProperty().addListener((o, a, b) ->
                 SettingsManager.setAutoClearPassword(b));
+        threadCountSpinner.valueProperty().addListener((o, a, b) ->
+                SettingsManager.setThreadCount(b));
 
         pane.setContent(grid);
 

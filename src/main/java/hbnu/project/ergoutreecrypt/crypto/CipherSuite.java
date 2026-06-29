@@ -78,17 +78,9 @@ public final class CipherSuite implements AutoCloseable {
         this.chacha = new XChaCha20(this.key, nonce);
         if (paranoid) {
             this.serpent = new SerpentCtr(this.serpentKey, serpentIV);
+            // 预分配中转缓冲区，避免热路径上的延迟分配与长度检查
+            this.scratch = new byte[CryptoConstants.MIB];
         }
-    }
-
-    /**
-     * 获取或分配中转缓冲区（至少 len 字节）。
-     */
-    private byte[] scratch(int len) {
-        if (scratch == null || scratch.length < len) {
-            scratch = new byte[len];
-        }
-        return scratch;
     }
 
     /**
@@ -102,11 +94,10 @@ public final class CipherSuite implements AutoCloseable {
      */
     public void encrypt(byte[] dst, byte[] src, int len) {
         if (paranoid) {
-            // 先 Serpent-CTR 加密，结果经中转缓冲送入 XChaCha20
+            // 先 Serpent-CTR 加密到 dst，再经中转缓冲送入 XChaCha20
             serpent.process(dst, src, len);
-            byte[] mid = scratch(len);
-            System.arraycopy(dst, 0, mid, 0, len);
-            chacha.process(dst, mid, len);
+            System.arraycopy(dst, 0, scratch, 0, len);
+            chacha.process(dst, scratch, len);
         } else {
             chacha.process(dst, src, len);
         }
@@ -133,9 +124,8 @@ public final class CipherSuite implements AutoCloseable {
 
         if (paranoid) {
             // XChaCha20 输出经中转缓冲送入 Serpent-CTR 解密
-            byte[] mid = scratch(len);
-            System.arraycopy(dst, 0, mid, 0, len);
-            serpent.process(dst, mid, len);
+            System.arraycopy(dst, 0, scratch, 0, len);
+            serpent.process(dst, scratch, len);
         }
     }
 

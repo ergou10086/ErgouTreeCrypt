@@ -893,6 +893,7 @@ public class MainController {
                 opts.keyfiles = toPaths(keyfiles);
                 opts.keyfileOrdered = keyfileOrderedCheck.isSelected();
             }
+            opts.threadCount = SettingsManager.getThreadCount();
             FxProgressReporter reporter = newReporter();
             opts.reporter = reporter;
             runTask(() -> FolderCrypt.encryptFolder(
@@ -967,20 +968,15 @@ public class MainController {
         Path outDir;
         if (outText != null && !outText.isEmpty()) {
             Path p = Path.of(outText);
-            // 输出框可能是文件路径（单文件默认），取其所在目录作为输出目录
             outDir = (selectedFile.isDirectory() || ArchiveExtractor.isArchive(input))
                     ? p : (p.getParent() != null ? p.getParent() : p);
         } else {
             outDir = input.getParent() != null ? input.getParent() : Path.of(".");
         }
 
-        setRunning(true);
-        progressBar.setProgress(0);
-        statusLabel.setText(Messages.get("status.decrypting"));
-
         FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
         opts.password = pwd == null ? "" : pwd;
-        opts.archivePassword = null; // 先不假定密码，遇到加密再弹窗
+        opts.archivePassword = null;
         opts.forceDecrypt = forceDecryptCheck.isSelected();
         opts.recursiveExtract = recursiveExtractCheck.isSelected();
         opts.autoUnzip = autoUnzipCheck.isSelected();
@@ -988,6 +984,28 @@ public class MainController {
         if (!keyfiles.isEmpty()) {
             opts.keyfiles = toPaths(keyfiles);
         }
+        opts.threadCount = SettingsManager.getThreadCount();
+
+        // 快速预检：若归档包含加密条目，立即弹出密码对话框（不解压数据，极快）
+        boolean needPrecheck = ArchiveExtractor.isArchive(input);
+        if (needPrecheck) {
+            try {
+                if (ArchiveExtractor.hasEncryptedEntries(input)) {
+                    String archPwd = showArchivePasswordDialog();
+                    if (archPwd == null || archPwd.isEmpty()) {
+                        return; // 用户取消
+                    }
+                    opts.archivePassword = archPwd;
+                }
+            } catch (IOException ignored) {
+                // 预检失败（极少发生），回退到运行时检测
+            }
+        }
+
+        setRunning(true);
+        progressBar.setProgress(0);
+        statusLabel.setText(Messages.get("status.decrypting"));
+
         FxProgressReporter reporter = newReporter();
         opts.reporter = reporter;
 
@@ -996,13 +1014,12 @@ public class MainController {
             try {
                 FolderCrypt.decryptAuto(input, finalOutDir, opts);
             } catch (Exception firstErr) {
-                // 判断是否需要归档密码：PasswordNeededException 或 ZIP 加密错误
+                // 若预检遗漏了加密条目（如部分 TAR.GZ），运行时仍可弹窗重试
                 boolean needPassword = firstErr instanceof ArchiveExtractor.PasswordNeededException
                         || isEncryptionRelated(firstErr);
                 if (!needPassword) {
                     throw firstErr;
                 }
-                // 弹窗询问归档密码后重试
                 java.util.concurrent.CompletableFuture<String> future =
                         new java.util.concurrent.CompletableFuture<>();
                 Platform.runLater(() -> future.complete(showArchivePasswordDialog()));

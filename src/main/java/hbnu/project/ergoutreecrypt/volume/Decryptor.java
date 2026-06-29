@@ -305,21 +305,17 @@ public final class Decryptor {
                     break;
                 }
 
-                // RS 解码（若启用）
-                byte[] data;
+                // RS 解码（若启用） + XChaCha20(+Serpent) 解密
                 if (reedsolo) {
                     boolean isLast = done + n >= ctx.total;
-                    data = decodeWithRSFast(src, n, req.getRsCodecs(),
+                    byte[] data = decodeWithRSFast(src, n, req.getRsCodecs(),
                             isLast, padded, req.isForceDecrypt(), fastDecode);
+                    cs.decrypt(dst, data, data.length);
+                    fout.write(dst, 0, data.length);
                 } else {
-                    data = new byte[n];
-                    System.arraycopy(src, 0, data, 0, n);
+                    cs.decrypt(dst, src, n);
+                    fout.write(dst, 0, n);
                 }
-
-                // XChaCha20(+Serpent) 解密
-                byte[] decrypted = new byte[data.length];
-                cs.decrypt(decrypted, data, data.length);
-                fout.write(decrypted);
 
                 if (reedsolo) {
                     done += CryptoConstants.MIB / 128 * 136;
@@ -413,6 +409,8 @@ public final class Decryptor {
     /**
      * RS128 快速解码：将编码数据按 136 字节块分割，逐块 RS 解码为 128 字节。
      * 末块若有 PKCS#7 填充则去除。
+     *
+     * <p>复用 136 字节块缓冲区避免每次迭代分配，减少 GC 压力。
      */
     static byte[] decodeWithRSFast(byte[] data, int len, RsCodecs rs,
                                    boolean isLast, boolean padded,
@@ -423,8 +421,9 @@ public final class Decryptor {
             // 整块：8192 个 136 字节 RS 块
             int chunkCount = len / 136;
             byte[] result = new byte[chunkCount * Padding.BLOCK_SIZE];
+            // 复用缓冲区，避免每次迭代分配 new byte[136]
+            byte[] chunk = new byte[136];
             for (int i = 0; i < chunkCount; i++) {
-                byte[] chunk = new byte[136];
                 System.arraycopy(data, i * 136, chunk, 0, 136);
                 ReedSolomon.DecodeResult dr = ReedSolomon.decode(rs.rs128, chunk, fastDecode);
                 byte[] decoded = dr.data;
@@ -442,8 +441,8 @@ public final class Decryptor {
             // 部分块：逐块解码，末块总是 unpad
             int chunkCount = len / 136;
             byte[] result = new byte[chunkCount * Padding.BLOCK_SIZE];
+            byte[] chunk = new byte[136];
             for (int i = 0; i < chunkCount; i++) {
-                byte[] chunk = new byte[136];
                 System.arraycopy(data, i * 136, chunk, 0, 136);
                 ReedSolomon.DecodeResult dr = ReedSolomon.decode(rs.rs128, chunk, fastDecode);
                 byte[] decoded = dr.data;

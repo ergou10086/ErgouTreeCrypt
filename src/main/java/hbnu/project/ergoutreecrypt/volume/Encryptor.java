@@ -260,15 +260,12 @@ public final class Encryptor {
                 cs.encrypt(dst, src, n);
 
                 // 可选 RS 编码
-                byte[] writeData;
                 if (req.isReedSolomon()) {
-                    writeData = encodeWithRS(dst, n, req.getRsCodecs());
+                    byte[] writeData = encodeWithRS(dst, n, req.getRsCodecs());
+                    fout.write(writeData);
                 } else {
-                    writeData = new byte[n];
-                    System.arraycopy(dst, 0, writeData, 0, n);
+                    fout.write(dst, 0, n);
                 }
-
-                fout.write(writeData);
                 done += n;
                 counter += CryptoConstants.MIB;
 
@@ -422,6 +419,12 @@ public final class Encryptor {
      * RS128 编码：将明文数据按 128 字节块分割，逐块 RS 编码为 136 字节。
      * 末块不满 128 字节时先 PKCS#7 填充再编码。
      */
+    /**
+     * RS128 编码：将明文数据按 128 字节块分割，逐块 RS 编码为 136 字节。
+     * 末块不满 128 字节时先 PKCS#7 填充再编码。
+     *
+     * <p>复用临时缓冲区避免每次迭代分配，减少 GC 压力。
+     */
     static byte[] encodeWithRS(byte[] data, int len, RsCodecs rs) {
         boolean isFullBlock = len == CryptoConstants.MIB;
 
@@ -429,11 +432,13 @@ public final class Encryptor {
             // 整 1 MiB 块：8192 个 128B 块，无填充
             int fullChunks = len / Padding.BLOCK_SIZE;
             byte[] result = new byte[fullChunks * 136];
+            // 复用缓冲区，避免每次迭代分配 new byte[128] 和 new byte[136]
+            byte[] chunk = new byte[Padding.BLOCK_SIZE];
+            byte[] enc = new byte[136];
             int pos = 0;
             for (int i = 0; i < fullChunks; i++) {
-                byte[] chunk = new byte[Padding.BLOCK_SIZE];
                 System.arraycopy(data, i * Padding.BLOCK_SIZE, chunk, 0, Padding.BLOCK_SIZE);
-                byte[] enc = ReedSolomon.encode(rs.rs128, chunk);
+                ReedSolomon.encodeInto(enc, rs.rs128, chunk);
                 System.arraycopy(enc, 0, result, pos, 136);
                 pos += 136;
             }
@@ -446,11 +451,12 @@ public final class Encryptor {
         int chunkCount = fullChunks + 1;
 
         byte[] result = new byte[chunkCount * 136];
+        byte[] chunk = new byte[Padding.BLOCK_SIZE];
+        byte[] enc = new byte[136];
         int pos = 0;
         for (int i = 0; i < fullChunks; i++) {
-            byte[] chunk = new byte[Padding.BLOCK_SIZE];
             System.arraycopy(data, i * Padding.BLOCK_SIZE, chunk, 0, Padding.BLOCK_SIZE);
-            byte[] enc = ReedSolomon.encode(rs.rs128, chunk);
+            ReedSolomon.encodeInto(enc, rs.rs128, chunk);
             System.arraycopy(enc, 0, result, pos, 136);
             pos += 136;
         }
@@ -458,7 +464,7 @@ public final class Encryptor {
         byte[] last = new byte[remaining];
         System.arraycopy(data, fullChunks * Padding.BLOCK_SIZE, last, 0, remaining);
         byte[] padded = Padding.pad(last);
-        byte[] enc = ReedSolomon.encode(rs.rs128, padded);
+        ReedSolomon.encodeInto(enc, rs.rs128, padded);
         System.arraycopy(enc, 0, result, pos, 136);
 
         return result;

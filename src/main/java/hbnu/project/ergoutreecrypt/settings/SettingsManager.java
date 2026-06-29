@@ -24,6 +24,7 @@ public final class SettingsManager {
     private static final String KEY_AUTO_CLEAR_PASSWORD = "auto.clear.password";
     private static final String KEY_LAST_OUTPUT_DIR     = "last.output.dir";
     private static final String KEY_THEME_MODE          = "theme.mode";
+    private static final String KEY_THREAD_COUNT        = "thread.count";
 
     // ---- 默认值 ----
     private static final boolean DEF_AUTO_DECOMPRESS  = true;
@@ -35,7 +36,10 @@ public final class SettingsManager {
     private static final int     DEF_SPLIT_SIZE       = 100;
     private static final boolean DEF_REMEMBER_OUTDIR  = true;
     private static final boolean DEF_AUTO_CLEAR_PWD   = false;
-    private static final String  DEF_THEME_MODE        = "SYSTEM";
+    private static final String  DEF_THEME_MODE       = "SYSTEM";
+    private static final int     DEF_THREAD_COUNT     = 4;
+    private static final int     MIN_THREAD_COUNT     = 1;
+    private static final int     MAX_THREAD_COUNT     = 16;
 
     private SettingsManager() {}
 
@@ -82,4 +86,36 @@ public final class SettingsManager {
      * @param v "SYSTEM", "LIGHT", 或 "DARK"
      */
     public static void setThemeMode(String v)            { PREFS.put(KEY_THEME_MODE, v == null ? DEF_THEME_MODE : v); }
+
+    /**
+     * 获取加解密时使用的线程池大小。
+     *
+     * <p>返回值自动钳制在 [{@value #MIN_THREAD_COUNT}, {@value #MAX_THREAD_COUNT}] 范围内。
+     *
+     * @return 线程数，默认 {@value #DEF_THREAD_COUNT}
+     */
+    public static int getThreadCount() {
+        int v = PREFS.getInt(KEY_THREAD_COUNT, DEF_THREAD_COUNT);
+        if (v < MIN_THREAD_COUNT) {
+            return MIN_THREAD_COUNT;
+        }
+        if (v > MAX_THREAD_COUNT) {
+            return MAX_THREAD_COUNT;
+        }
+        return v;
+    }
+
+    /**
+     * 设置加解密时使用的线程池大小。
+     *
+     * @param v 线程数，超出 [{@value #MIN_THREAD_COUNT}, {@value #MAX_THREAD_COUNT}] 范围的值将被钳制
+     */
+    public static void setThreadCount(int v) {
+        if (v < MIN_THREAD_COUNT) {
+            v = MIN_THREAD_COUNT;
+        } else if (v > MAX_THREAD_COUNT) {
+            v = MAX_THREAD_COUNT;
+        }
+        PREFS.putInt(KEY_THREAD_COUNT, v);
+    }
 }

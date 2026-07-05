@@ -1,7 +1,11 @@
 package hbnu.project.ergoutreecrypt.fileops;
 
+import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.model.FileHeader;
 import org.apache.commons.compress.archivers.ArchiveEntry;
 import org.apache.commons.compress.archivers.ArchiveInputStream;
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
@@ -22,13 +26,21 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Enumeration;
 import java.util.List;
 
 /**
- * 归档解压工具，支持自动检测并解密内部 AES-256-CTR 加密的文件条目。
+ * 归档解压工具，支持自动检测并解密加密归档。
  *
- * <p>支持的归档格式：ZIP、GZ、TAR.GZ。加密文件以 12 字节魔数头 {@code EGTC_ARCHV1} 标识。
+ * <p>支持三种加密模式：
+ * <ul>
+ *   <li><b>原生加密（ZIP / 7Z）：</b>使用各容器自带 AES-256 加密，
+ *       外部工具（Bandizip / 7-Zip）可正确提示密码并解压。</li>
+ *   <li><b>整体包裹加密（GZ / TAR.GZ）：</b>文件以魔数头
+ *       {@code EGTC_ARCHV1} 开头，整体解密后得到明文归档再解压，
+ *       需本工具解密。</li>
+ *   <li><b>旧版逐条目加密：</b>归档内包含 {@code .enc} 后缀条目，
+ *       每个条目单独解密（向后兼容）。</li>
+ * </ul>
  *
  * @author ErgouTree
  */
@@ -38,11 +50,6 @@ public final class ArchiveExtractor {
      * 加密文件魔数标识（12 字节）。
      */
     private static final byte[] MAGIC = "EGTC_ARCHV1\0".getBytes();
-
-    /**
-     * 加密文件头总大小：魔数(12) + salt(16) + IV(16) = 44 字节。
-     */
-    private static final int HEADER_SIZE = 12 + 16 + 16;
 
     /**
      * AES 密钥长度（32 字节，AES-256）。
@@ -61,7 +68,7 @@ public final class ArchiveExtractor {
      * 判断文件是否为支持的归档格式（根据扩展名）。
      *
      * @param file 文件路径
-     * @return 若扩展名为 .zip / .gz / .tgz / .tar.gz / .rar / .7z 则返回 true
+     * @return 若扩展名匹配支持的归档格式则返回 true
      */
     public static boolean isArchive(Path file) {
         String name = file.getFileName().toString().toLowerCase();
@@ -73,7 +80,7 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 检测文件是否以 EGTC_ARCHV1 魔数开头，即是否为本工具 AES 加密的文件。
+     * 检测文件是否以 EGTC_ARCHV1 魔数开头，即是否为本工具整体包裹加密的文件。
      *
      * @param file 待检测的文件路径
      * @return 若文件头匹配魔数则返回 true
@@ -89,22 +96,35 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 快速检测归档是否包含需要密码的加密条目。
+     * 快速检测归档是否需要密码。
      *
-     * <p>对 ZIP 通过读取中央目录（不解压数据）快速判断；对 TAR.GZ 采用流式扫描，
-     * 找到第一个加密条目即返回 true。此方法用于在解压前提示用户输入归档密码，避免无密码解压失败。
+     * <p>检测顺序：
+     * <ol>
+     *   <li>若文件以 MAGIC 开头 → 整体包裹加密</li>
+     *   <li>ZIP：zip4j 原生加密检测 + .enc 条目检测</li>
+     *   <li>7z：尝试无密码打开 → 原生加密检测 + .enc 条目检测</li>
+     *   <li>TAR.GZ / GZ：扫描 .enc 条目</li>
+     * </ol>
      *
      * @param archive 归档文件路径
-     * @return 若归档内至少有一个 .enc 后缀条目则返回 true
+     * @return 若需要密码则返回 true
      * @throws IOException 读取错误
      */
     public static boolean hasEncryptedEntries(Path archive) throws IOException {
+        // 整体加密包裹检测
+        if (isEncryptedFile(archive)) {
+            return true;
+        }
+
         String name = archive.getFileName().toString().toLowerCase();
         if (name.endsWith(".zip")) {
             return hasEncryptedZipEntries(archive);
         }
         if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
             return hasEncryptedTarGzEntries(archive);
+        }
+        if (name.endsWith(".7z")) {
+            return hasEncrypted7zEntries(archive);
         }
         if (name.endsWith(".gz")) {
             String outName = name;
@@ -117,12 +137,23 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * ZIP 快速扫描：通过 {@link java.util.zip.ZipFile} 读取中央目录（不解析数据流），
-     * 检测是否有 .enc 后缀的条目。
+     * ZIP 加密检测：先通过 zip4j 检测原生加密，再检测旧版 .enc 条目。
      */
     private static boolean hasEncryptedZipEntries(Path archive) throws IOException {
+        // 新版：zip4j 原生加密
+        try {
+            try (ZipFile zf = new ZipFile(archive.toFile())) {
+                if (zf.isEncrypted()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            // 无法打开可能是损坏或加密，保守返回 true
+            return true;
+        }
+        // 旧版：.enc 条目（commons-compress 扫描）
         try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(archive.toFile())) {
-            Enumeration<? extends java.util.zip.ZipEntry> entries = zf.entries();
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zf.entries();
             while (entries.hasMoreElements()) {
                 if (entries.nextElement().getName().toLowerCase().endsWith(".enc")) {
                     return true;
@@ -133,7 +164,7 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * TAR.GZ 流式扫描：边解压边遍历条目，找到第一个 .enc 后缀条目即返回。
+     * TAR.GZ 流式扫描：边解压边遍历，找到第一个 .enc 后缀条目即返回。
      */
     private static boolean hasEncryptedTarGzEntries(Path archive) throws IOException {
         try (InputStream fin = Files.newInputStream(archive);
@@ -150,15 +181,32 @@ public final class ArchiveExtractor {
     }
 
     /**
+     * 7z 加密检测：尝试无密码打开，失败则为原生加密；成功则扫描 .enc 条目。
+     */
+    private static boolean hasEncrypted7zEntries(Path archive) throws IOException {
+        try {
+            try (SevenZFile szf = SevenZFile.builder().setFile(archive.toFile()).get()) {
+                for (SevenZArchiveEntry entry : szf.getEntries()) {
+                    if (entry.getName().toLowerCase().endsWith(".enc")) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (IOException e) {
+            return true;
+        }
+    }
+
+    // ==================== 公共解压入口 ====================
+
+    /**
      * 解压归档到目标目录，保留内部条目名与目录结构（无进度反馈）。
-     *
-     * <p>对内部 AES 加密条目（{@code .enc} 后缀）就地解密并去除后缀，不生成临时文件。
-     * 用于文件夹/分卷场景的二次解密。
      *
      * @param archive  归档文件路径
      * @param destDir  解压目标目录
      * @param password 解密密码（可为 null/空）
-     * @return 解压（并去 AES 层）后的文件路径列表
+     * @return 解压后的文件路径列表
      * @throws IOException               I/O 错误或密码错误
      * @throws PasswordNeededException   若遇到加密文件但未提供密码
      */
@@ -168,36 +216,310 @@ public final class ArchiveExtractor {
 
     /**
      * 解压归档到目标目录（带进度反馈）。
-     *
-     * <p>与 {@link #extractPreserving(Path, Path, String)} 相同，但通过 {@code reporter}
-     * 报告解压进度。若 {@code reporter} 为 null 则不报告。
-     *
-     * @param archive  归档文件路径
-     * @param destDir  解压目标目录
-     * @param password 解密密码（可为 null/空）
-     * @param reporter 进度回调（可为 null）
-     * @return 解压后的文件路径列表
-     * @throws IOException               I/O 错误或密码错误
-     * @throws PasswordNeededException   若遇到加密文件但未提供密码
      */
     public static List<Path> extractPreserving(Path archive, Path destDir, String password,
                                                ProgressReporter reporter) throws IOException {
         Files.createDirectories(destDir);
-        String name = archive.getFileName().toString().toLowerCase();
 
-        // 根据扩展名选择对应的解压方法
-        List<Path> rawFiles;
-        if (name.endsWith(".zip")) {
-            rawFiles = extractZip(archive, destDir, reporter);
-        } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
-            rawFiles = extractTarGz(archive, destDir, reporter);
-        } else if (name.endsWith(".gz")) {
-            rawFiles = extractGz(archive, destDir, reporter);
-        } else {
-            throw new IOException("Unsupported archive format: " + name);
+        // 检测整体加密包裹（GZ / TAR.GZ）
+        Path actualArchive = archive;
+        Path tempDecrypted = null;
+        if (isEncryptedFile(archive)) {
+            if (password == null || password.isEmpty()) {
+                throw PasswordNeededException.of(archive);
+            }
+            tempDecrypted = Files.createTempFile("ergou-outer-dec-", archiveExt(archive));
+            decryptFileTo(archive, tempDecrypted, password);
+            actualArchive = tempDecrypted;
         }
 
-        // 对加密条目去除 .enc 后缀并就地解密
+        try {
+            String name = actualArchive.getFileName().toString().toLowerCase();
+            List<Path> rawFiles;
+            if (name.endsWith(".zip")) {
+                rawFiles = extractZip(actualArchive, destDir, password, reporter);
+            } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
+                rawFiles = extractTarGz(actualArchive, destDir, reporter);
+            } else if (name.endsWith(".7z")) {
+                rawFiles = extract7z(actualArchive, destDir, password, reporter);
+            } else if (name.endsWith(".gz")) {
+                rawFiles = extractGz(actualArchive, destDir, reporter);
+            } else {
+                throw new IOException("Unsupported archive format: " + name);
+            }
+
+            // 对旧版 .enc 逐条目加密进行解密（向后兼容）
+            return decryptLegacyEntries(rawFiles, password, reporter);
+        } finally {
+            if (tempDecrypted != null) {
+                Files.deleteIfExists(tempDecrypted);
+            }
+        }
+    }
+
+    /**
+     * 解压归档到目标目录。
+     */
+    public static List<Path> extract(Path archive, Path destDir, String password) throws IOException {
+        Files.createDirectories(destDir);
+
+        // 检测整体加密包裹（GZ / TAR.GZ）
+        Path actualArchive = archive;
+        Path tempDecrypted = null;
+        if (isEncryptedFile(archive)) {
+            if (password == null || password.isEmpty()) {
+                throw PasswordNeededException.of(archive);
+            }
+            tempDecrypted = Files.createTempFile("ergou-outer-dec-", archiveExt(archive));
+            decryptFileTo(archive, tempDecrypted, password);
+            actualArchive = tempDecrypted;
+        }
+
+        try {
+            String name = actualArchive.getFileName().toString().toLowerCase();
+            List<Path> rawFiles;
+            if (name.endsWith(".zip")) {
+                rawFiles = extractZip(actualArchive, destDir, password);
+            } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
+                rawFiles = extractTarGz(actualArchive, destDir);
+            } else if (name.endsWith(".7z")) {
+                rawFiles = extract7z(actualArchive, destDir, password);
+            } else if (name.endsWith(".gz")) {
+                rawFiles = extractGz(actualArchive, destDir);
+            } else if (name.endsWith(".rar")) {
+                throw new IOException("RAR extraction requires additional setup.");
+            } else {
+                throw new IOException("Unsupported archive format: " + name);
+            }
+
+            // 旧版 .enc 解密
+            List<Path> result = new ArrayList<>();
+            for (Path f : rawFiles) {
+                if (isEncryptedFile(f)) {
+                    if (password == null || password.isEmpty()) {
+                        throw PasswordNeededException.of(f);
+                    }
+                    Path decrypted = decryptFile(f, password);
+                    Files.deleteIfExists(f);
+                    result.add(decrypted);
+                } else {
+                    result.add(f);
+                }
+            }
+            return result;
+        } finally {
+            if (tempDecrypted != null) {
+                Files.deleteIfExists(tempDecrypted);
+            }
+        }
+    }
+
+    // ==================== ZIP 解压 ====================
+
+    /**
+     * 解压 ZIP 归档（无进度）。
+     */
+    private static List<Path> extractZip(Path archive, Path destDir, String password) throws IOException {
+        return extractZip(archive, destDir, password, null);
+    }
+
+    /**
+     * 解压 ZIP 归档（带进度）。
+     *
+     * <p>有密码时优先使用 zip4j 解压（支持原生 AES-256 加密 ZIP）；
+     * 无密码时使用 commons-compress 流式解压。
+     */
+    private static List<Path> extractZip(Path archive, Path destDir, String password,
+                                         ProgressReporter reporter) throws IOException {
+        boolean hasPwd = password != null && !password.isEmpty();
+        if (hasPwd) {
+            try {
+                return extractZipWithZip4j(archive, destDir, password, reporter);
+            } catch (Exception e) {
+                // zip4j 失败（可能是旧版 .enc 格式或损坏），回退到 commons-compress
+                if (e instanceof IOException ioe) {
+                    throw ioe;
+                }
+            }
+        }
+        return extractZipWithCompress(archive, destDir, reporter);
+    }
+
+    /**
+     * 使用 zip4j 解压 ZIP（支持原生 AES-256 加密）。
+     */
+    private static List<Path> extractZipWithZip4j(Path archive, Path destDir, String password,
+                                                   ProgressReporter reporter) throws IOException {
+        List<Path> files = new ArrayList<>();
+        try (ZipFile zipFile = new ZipFile(archive.toFile(), password.toCharArray())) {
+            List<FileHeader> headers = zipFile.getFileHeaders();
+            int total = headers.size();
+            int extracted = 0;
+            for (FileHeader header : headers) {
+                if (header.isDirectory()) {
+                    Files.createDirectories(destDir.resolve(header.getFileName()));
+                    extracted++;
+                    continue;
+                }
+                Path outPath = destDir.resolve(header.getFileName()).normalize();
+                if (!outPath.startsWith(destDir)) {
+                    throw new IOException("Bad archive entry (zip-slip): " + header.getFileName());
+                }
+                Files.createDirectories(outPath.getParent());
+                try (InputStream in = zipFile.getInputStream(header);
+                     OutputStream fos = Files.newOutputStream(outPath)) {
+                    in.transferTo(fos);
+                }
+                files.add(outPath);
+                extracted++;
+                if (reporter != null && total > 0) {
+                    reporter.setStatus("Extracting " + extracted + "/" + total + "...");
+                    reporter.setProgress((float) extracted / (total * 2), "");
+                }
+            }
+        }
+        return files;
+    }
+
+    /**
+     * 使用 commons-compress 流式解压 ZIP（无加密）。
+     */
+    private static List<Path> extractZipWithCompress(Path archive, Path destDir,
+                                                      ProgressReporter reporter) throws IOException {
+        List<Path> files = new ArrayList<>();
+        int totalEntries = 0;
+        try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(archive.toFile())) {
+            totalEntries = zf.size();
+        }
+        int extracted = 0;
+        try (InputStream fin = Files.newInputStream(archive);
+             BufferedInputStream bis = new BufferedInputStream(fin);
+             ArchiveInputStream<?> ais = new ZipArchiveInputStream(bis, "UTF-8", false, true)) {
+            ArchiveEntry entry;
+            while ((entry = ais.getNextEntry()) != null) {
+                if (ais.canReadEntryData(entry)) {
+                    Path outPath = extractSingleEntry(ais, entry, destDir);
+                    if (outPath != null) {
+                        files.add(outPath);
+                    }
+                }
+                extracted++;
+                if (reporter != null && totalEntries > 0) {
+                    reporter.setStatus("Extracting " + extracted + "/" + totalEntries + "...");
+                    reporter.setProgress((float) extracted / (totalEntries * 2), "");
+                }
+            }
+        }
+        return files;
+    }
+
+    // ==================== TAR.GZ 解压 ====================
+
+    private static List<Path> extractTarGz(Path archive, Path destDir) throws IOException {
+        return extractTarGz(archive, destDir, null);
+    }
+
+    private static List<Path> extractTarGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
+        List<Path> files = new ArrayList<>();
+        try (InputStream fin = Files.newInputStream(archive);
+             GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
+             TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
+            ArchiveEntry entry;
+            int extracted = 0;
+            while ((entry = tais.getNextEntry()) != null) {
+                if (tais.canReadEntryData(entry)) {
+                    Path outPath = extractSingleEntry(tais, entry, destDir);
+                    if (outPath != null) {
+                        files.add(outPath);
+                    }
+                }
+                extracted++;
+                if (reporter != null && extracted % 5 == 0) {
+                    reporter.setStatus("Extracting (" + extracted + " entries)...");
+                }
+            }
+        }
+        return files;
+    }
+
+    // ==================== GZ 解压 ====================
+
+    private static List<Path> extractGz(Path archive, Path destDir) throws IOException {
+        return extractGz(archive, destDir, null);
+    }
+
+    private static List<Path> extractGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
+        List<Path> files = new ArrayList<>();
+        String outName = archive.getFileName().toString();
+        if (outName.endsWith(".gz")) {
+            outName = outName.substring(0, outName.length() - 3);
+        }
+        Path outFile = destDir.resolve(outName);
+        if (reporter != null) {
+            reporter.setStatus("Extracting...");
+        }
+        try (InputStream fin = Files.newInputStream(archive);
+             GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
+             OutputStream fos = Files.newOutputStream(outFile)) {
+            gzis.transferTo(fos);
+        }
+        files.add(outFile);
+        return files;
+    }
+
+    // ==================== 7Z 解压 ====================
+
+    private static List<Path> extract7z(Path archive, Path destDir, String password) throws IOException {
+        return extract7z(archive, destDir, password, null);
+    }
+
+    private static List<Path> extract7z(Path archive, Path destDir, String password,
+                                        ProgressReporter reporter) throws IOException {
+        List<Path> files = new ArrayList<>();
+        SevenZFile.Builder builder = SevenZFile.builder().setFile(archive.toFile());
+        if (password != null && !password.isEmpty()) {
+            builder = builder.setPassword(password.toCharArray());
+        }
+        try (SevenZFile szf = builder.get()) {
+            List<SevenZArchiveEntry> entries = new ArrayList<>();
+            for (SevenZArchiveEntry e : szf.getEntries()) {
+                entries.add(e);
+            }
+            int total = entries.size();
+            int extracted = 0;
+            for (SevenZArchiveEntry entry : entries) {
+                if (entry.isDirectory()) {
+                    Files.createDirectories(destDir.resolve(entry.getName()));
+                    extracted++;
+                    continue;
+                }
+                Path outPath = destDir.resolve(entry.getName()).normalize();
+                if (!outPath.startsWith(destDir)) {
+                    throw new IOException("Bad archive entry (zip-slip): " + entry.getName());
+                }
+                Files.createDirectories(outPath.getParent());
+                try (InputStream in = szf.getInputStream(entry);
+                     OutputStream fos = Files.newOutputStream(outPath)) {
+                    in.transferTo(fos);
+                }
+                files.add(outPath);
+                extracted++;
+                if (reporter != null && total > 0) {
+                    reporter.setStatus("Extracting " + extracted + "/" + total + "...");
+                    reporter.setProgress((float) extracted / (total * 2), "");
+                }
+            }
+        }
+        return files;
+    }
+
+    // ==================== 旧版逐条目加密解密 ====================
+
+    /**
+     * 对旧版 .enc 逐条目加密的文件进行解密。
+     */
+    private static List<Path> decryptLegacyEntries(List<Path> rawFiles, String password,
+                                                    ProgressReporter reporter) throws IOException {
         int totalEncrypted = countEncrypted(rawFiles);
         int decrypted = 0;
         List<Path> result = new ArrayList<>();
@@ -208,7 +530,7 @@ public final class ArchiveExtractor {
                 }
                 if (reporter != null) {
                     decrypted++;
-                    reporter.setStatus("Extracting (" + decrypted + "/" + totalEncrypted + ")...");
+                    reporter.setStatus("Decrypting (" + decrypted + "/" + totalEncrypted + ")...");
                     if (totalEncrypted > 0) {
                         reporter.setProgress((float) decrypted / (totalEncrypted + rawFiles.size()), "");
                     }
@@ -226,9 +548,6 @@ public final class ArchiveExtractor {
         return result;
     }
 
-    /**
-     * 统计列表中加密文件的数量。
-     */
     private static int countEncrypted(List<Path> files) {
         int count = 0;
         for (Path f : files) {
@@ -239,60 +558,8 @@ public final class ArchiveExtractor {
         return count;
     }
 
-    /**
-     * 解压归档到目标目录。
-     *
-     * <p>内部加密条目解密后输出为临时文件（非原地解密）。
-     *
-     * @param archive  归档文件路径
-     * @param destDir  解压目标目录
-     * @param password 解密密码（可为 null/空）
-     * @return 解压后的文件路径列表
-     * @throws IOException               I/O 错误或密码错误
-     * @throws PasswordNeededException   若遇到加密文件但未提供密码
-     */
-    public static List<Path> extract(Path archive, Path destDir, String password) throws IOException {
-        Files.createDirectories(destDir);
-        String name = archive.getFileName().toString().toLowerCase();
+    // ==================== AES-256-CTR 解密 ====================
 
-        List<Path> rawFiles;
-        if (name.endsWith(".zip")) {
-            rawFiles = extractZip(archive, destDir);
-        } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
-            rawFiles = extractTarGz(archive, destDir);
-        } else if (name.endsWith(".gz")) {
-            rawFiles = extractGz(archive, destDir);
-        } else if (name.endsWith(".rar") || name.endsWith(".7z")) {
-            throw new IOException("RAR/7z extraction requires additional setup.");
-        } else {
-            throw new IOException("Unsupported archive format: " + name);
-        }
-
-        // 对每个提取出的文件检测是否需要解密
-        List<Path> result = new ArrayList<>();
-        for (Path f : rawFiles) {
-            if (isEncryptedFile(f)) {
-                if (password == null || password.isEmpty()) {
-                    throw PasswordNeededException.of(f);
-                }
-                Path decrypted = decryptFile(f, password);
-                Files.deleteIfExists(f);
-                result.add(decrypted);
-            } else {
-                result.add(f);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 解密单个 AES-256-CTR 加密文件到临时文件。
-     *
-     * @param file     加密文件路径
-     * @param password 解密密码
-     * @return 解密后的临时文件路径
-     * @throws IOException 密码错误或文件损坏
-     */
     private static Path decryptFile(Path file, String password) throws IOException {
         try (InputStream fin = Files.newInputStream(file)) {
             byte[] magic = new byte[MAGIC.length];
@@ -305,12 +572,10 @@ public final class ArchiveExtractor {
             fin.readNBytes(salt, 0, 16);
             fin.readNBytes(iv, 0, 16);
 
-            // PBKDF2-HMAC-SHA256 派生 AES 密钥
             SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
             PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_SIZE * 8);
             SecretKeySpec key = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), "AES");
 
-            // AES-256-CTR 解密
             Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
 
@@ -325,14 +590,6 @@ public final class ArchiveExtractor {
         }
     }
 
-    /**
-     * 将 AES 加密文件解密到指定的输出路径。
-     *
-     * @param file     加密文件路径
-     * @param output   解密输出路径
-     * @param password 解密密码
-     * @throws IOException 密码错误或文件损坏
-     */
     private static void decryptFileTo(Path file, Path output, String password) throws IOException {
         try (InputStream fin = Files.newInputStream(file)) {
             byte[] magic = new byte[MAGIC.length];
@@ -363,116 +620,10 @@ public final class ArchiveExtractor {
         }
     }
 
-    // ==================== ZIP 解压 ====================
-
-    /**
-     * 解压 ZIP 归档，返回所有提取文件路径。
-     */
-    private static List<Path> extractZip(Path archive, Path destDir) throws IOException {
-        return extractZip(archive, destDir, null);
-    }
-
-    /**
-     * 解压 ZIP 归档（带进度）。通过 {@link java.util.zip.ZipFile} 预读条目数以计算进度。
-     */
-    private static List<Path> extractZip(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
-        List<Path> files = new ArrayList<>();
-
-        // 通过中央目录预取条目总数（快速，不解压数据）
-        int totalEntries = 0;
-        try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(archive.toFile())) {
-            totalEntries = zf.size();
-        }
-
-        int extracted = 0;
-        try (InputStream fin = Files.newInputStream(archive);
-             BufferedInputStream bis = new BufferedInputStream(fin);
-             ArchiveInputStream<?> ais = new ZipArchiveInputStream(bis, "UTF-8", false, true)) {
-            ArchiveEntry entry;
-            while ((entry = ais.getNextEntry()) != null) {
-                if (ais.canReadEntryData(entry)) {
-                    Path outPath = extractSingleEntry(ais, entry, destDir);
-                    if (outPath != null) {
-                        files.add(outPath);
-                    }
-                }
-                extracted++;
-                if (reporter != null && totalEntries > 0) {
-                    reporter.setStatus(
-                            "Extracting " + extracted + "/" + totalEntries + "...");
-                    reporter.setProgress((float) extracted / (totalEntries * 2), "");
-                }
-            }
-        }
-        return files;
-    }
-
-    /**
-     * 解压 TAR.GZ（或 TGZ）归档，返回所有提取文件路径。
-     */
-    private static List<Path> extractTarGz(Path archive, Path destDir) throws IOException {
-        return extractTarGz(archive, destDir, null);
-    }
-
-    /**
-     * 解压 TAR.GZ（或 TGZ）归档（带进度）。
-     */
-    private static List<Path> extractTarGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
-        List<Path> files = new ArrayList<>();
-        try (InputStream fin = Files.newInputStream(archive);
-             GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
-             TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
-            ArchiveEntry entry;
-            int extracted = 0;
-            while ((entry = tais.getNextEntry()) != null) {
-                if (tais.canReadEntryData(entry)) {
-                    Path outPath = extractSingleEntry(tais, entry, destDir);
-                    if (outPath != null) {
-                        files.add(outPath);
-                    }
-                }
-                extracted++;
-                if (reporter != null && extracted % 5 == 0) {
-                    reporter.setStatus("Extracting (" + extracted + " entries)...");
-                }
-            }
-        }
-        return files;
-    }
-
-    /**
-     * 解压单文件 GZ 压缩包，返回提取的文件路径。
-     */
-    private static List<Path> extractGz(Path archive, Path destDir) throws IOException {
-        return extractGz(archive, destDir, null);
-    }
-
-    /**
-     * 解压单文件 GZ 压缩包（带进度）。
-     */
-    private static List<Path> extractGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
-        List<Path> files = new ArrayList<>();
-        String outName = archive.getFileName().toString();
-        if (outName.endsWith(".gz")) {
-            outName = outName.substring(0, outName.length() - 3);
-        }
-        Path outFile = destDir.resolve(outName);
-        if (reporter != null) {
-            reporter.setStatus("Extracting...");
-        }
-        try (InputStream fin = Files.newInputStream(archive);
-             GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
-             OutputStream fos = Files.newOutputStream(outFile)) {
-            gzis.transferTo(fos);
-        }
-        files.add(outFile);
-        return files;
-    }
+    // ==================== 工具方法 ====================
 
     /**
      * 提取单个归档条目到目标目录，防护 Zip-Slip 路径穿越。
-     *
-     * @return 提取的文件路径，若为目录则返回 null
      */
     private static Path extractSingleEntry(ArchiveInputStream<?> ais, ArchiveEntry entry,
                                            Path destDir) throws IOException {
@@ -492,6 +643,23 @@ public final class ArchiveExtractor {
         return outPath;
     }
 
+    /**
+     * 从归档文件名中提取扩展名（用于保持临时解密文件的扩展名以正确检测格式）。
+     */
+    private static String archiveExt(Path archive) {
+        String name = archive.getFileName().toString().toLowerCase();
+        if (name.endsWith(".tar.gz")) {
+            return ".tar.gz";
+        } else if (name.endsWith(".gz")) {
+            return ".gz";
+        } else if (name.endsWith(".zip")) {
+            return ".zip";
+        } else if (name.endsWith(".7z")) {
+            return ".7z";
+        }
+        return ".tmp";
+    }
+
     // ==================== 密码需求异常 ====================
 
     /**
@@ -499,32 +667,17 @@ public final class ArchiveExtractor {
      */
     public static final class PasswordNeededException extends IOException {
 
-        /**
-         * 需要密码才能解密的文件路径。
-         */
         private final Path encryptedFile;
 
-        /**
-         * @param f 加密文件路径
-         */
         PasswordNeededException(Path f) {
             super("Archive password required");
             this.encryptedFile = f;
         }
 
-        /**
-         * 创建密码缺失异常。
-         *
-         * @param f 加密文件路径
-         * @return 异常实例
-         */
         public static PasswordNeededException of(Path f) {
             return new PasswordNeededException(f);
         }
 
-        /**
-         * 返回需要密码的加密文件路径。
-         */
         public Path getEncryptedFile() {
             return encryptedFile;
         }

@@ -207,7 +207,7 @@ public class MediaCryptController {
         avConfirmField.textProperty().addListener((o, a, b) -> updatePasswordFeedback());
 
         // 加密后压缩：格式下拉绑定
-        avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ");
+        avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         avCompressFormatCombo.managedProperty().bind(avCompressAfterCheck.selectedProperty());
         avCompressFormatCombo.visibleProperty().bind(avCompressAfterCheck.selectedProperty());
         avArchivePasswordField.managedProperty().bind(avCompressAfterCheck.selectedProperty());
@@ -586,6 +586,7 @@ public class MediaCryptController {
                 case ZIP -> ".zip";
                 case GZ -> ".gz";
                 case TAR_GZ -> ".tar.gz";
+                case _7Z -> ".7z";
             };
             finalOutput = Path.of(output.toString() + ext);
         }

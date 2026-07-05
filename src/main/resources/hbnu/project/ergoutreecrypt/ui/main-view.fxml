@@ -171,6 +171,14 @@
                                                          disable="true"/>
                                                 <Label fx:id="splitUnitLabel" styleClass="field-hint" text="MiB"/>
                                             </HBox>
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label fx:id="encryptDepthLabel" styleClass="field-label"
+                                                       text="加密深度"/>
+                                                <Spinner fx:id="encryptDepthSpinner" styleClass="spinner"
+                                                         prefWidth="80"/>
+                                                <Label fx:id="encryptDepthInfo" styleClass="info-icon"
+                                                       text="i"/>
+                                            </HBox>
                                         </VBox>
                                         <!-- 解密专属选项 -->
                                         <VBox fx:id="decryptOptions" spacing="10" managed="false" visible="false">

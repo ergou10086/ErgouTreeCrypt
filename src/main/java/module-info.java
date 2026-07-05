@@ -9,6 +9,7 @@ module hbnu.project.ergoutreecrypt {
     requires org.bouncycastle.provider;
 
     requires org.apache.commons.compress;
+    requires zip4j;
     requires java.prefs;
 
     opens hbnu.project.ergoutreecrypt to javafx.fxml;

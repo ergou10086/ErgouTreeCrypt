@@ -59,7 +59,9 @@ public final class FolderCrypt {
     // ================================================================
 
     /**
-     * 加密整个文件夹。
+     * 加密整个文件夹，按 {@link EncryptOptions#encryptDepth} 控制迭代深度。
+     *
+     * <p>深度内的文件逐一加密为 .ergou；超出深度的目录先打成 ZIP 压缩包再加密为单个 .ergou。
      *
      * @param inputDir  输入文件夹
      * @param outputDir 输出位置（最终结果文件夹/压缩包将放在此目录下）
@@ -67,26 +69,46 @@ public final class FolderCrypt {
      */
     public static void encryptFolder(Path inputDir, Path outputDir, EncryptOptions opts) throws Exception {
         String folderName = inputDir.getFileName().toString();
+        int maxDepth = opts.encryptDepth;
 
-        List<Path> files;
-        try (Stream<Path> walk = Files.walk(inputDir)) {
-            files = walk.filter(Files::isRegularFile).sorted().toList();
-        }
-        if (files.isEmpty()) {
+        // Step 1: 按深度收集待加密文件与"深目录"
+        List<Path> filesToEncrypt = new ArrayList<>();
+        List<Path> deepDirs = new ArrayList<>();
+        collectByDepth(inputDir, inputDir, 0, maxDepth, filesToEncrypt, deepDirs);
+
+        // 过滤掉空的深目录
+        deepDirs = deepDirs.stream()
+                .filter(d -> hasFiles(d))
+                .toList();
+
+        if (filesToEncrypt.isEmpty() && deepDirs.isEmpty()) {
             throw new IOException("input folder is empty: " + inputDir);
         }
 
-        // 加密结果先落到一个工作目录（与输入同名），再视情况打包。
+        // 加密结果先落到一个工作目录（与输入同名），再视情况打包
         Path workDir = outputDir.resolve(folderName);
         Files.createDirectories(workDir);
 
         ProgressReporter reporter = opts.reporter;
-        int total = files.size();
+        int total = filesToEncrypt.size() + deepDirs.size();
 
         // 预创建所有目标目录（单线程，避免竞态）
-        for (Path src : files) {
+        for (Path src : filesToEncrypt) {
             Path rel = inputDir.relativize(src);
             Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
+            Files.createDirectories(destEnc.getParent());
+            if (opts.split) {
+                Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
+                Files.createDirectories(chunkDir);
+            }
+        }
+        for (Path deepDir : deepDirs) {
+            Path rel = inputDir.relativize(deepDir);
+            // 深目录的加密输出放在其父目录镜像位置下：例如 sub1/deep/ → sub1/deep.zip.ergou
+            Path parentInWork = rel.getParent() != null
+                    ? workDir.resolve(rel.getParent().toString())
+                    : workDir;
+            Path destEnc = parentInWork.resolve(rel.getFileName().toString() + ".zip.ergou");
             Files.createDirectories(destEnc.getParent());
             if (opts.split) {
                 Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
@@ -102,11 +124,11 @@ public final class FolderCrypt {
 
         try {
             List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
-            for (int i = 0; i < files.size(); i++) {
-                final int idx = i;
-                final Path src = files.get(i);
+
+            // 处理深度内的普通文件：逐一加密
+            for (int i = 0; i < filesToEncrypt.size(); i++) {
+                final Path src = filesToEncrypt.get(i);
                 futures.add(executor.submit(() -> {
-                    // 检查是否已被取消或已有错误
                     if (reporter != null && reporter.isCancelled()) {
                         return;
                     }
@@ -140,6 +162,63 @@ public final class FolderCrypt {
                         }
                     } catch (Exception e) {
                         firstError.compareAndSet(null, e);
+                    }
+                }));
+            }
+
+            // 处理深目录：先打包成 ZIP，再加密该 ZIP
+            for (int i = 0; i < deepDirs.size(); i++) {
+                final Path deepDir = deepDirs.get(i);
+                futures.add(executor.submit(() -> {
+                    if (reporter != null && reporter.isCancelled()) {
+                        return;
+                    }
+                    if (firstError.get() != null) {
+                        return;
+                    }
+                    Path tempArchive = null;
+                    try {
+                        Path rel = inputDir.relativize(deepDir);
+                        String dirName = deepDir.getFileName().toString();
+                        Path parentInWork = rel.getParent() != null
+                                ? workDir.resolve(rel.getParent().toString())
+                                : workDir;
+                        Path destEnc = parentInWork.resolve(dirName + ".zip.ergou");
+
+                        // 将深目录打包为临时 ZIP
+                        tempArchive = archiveDirectory(deepDir);
+
+                        if (opts.split) {
+                            Path chunkDir = destEnc.getParent().resolve(
+                                    stripExt(destEnc.getFileName().toString()));
+                            Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
+                            EncryptRequest req = buildRequest(tempArchive, chunkBase, opts);
+                            req.setSplit(true);
+                            req.setArchiveFormat(null);
+                            Encryptor.encrypt(req);
+                        } else {
+                            EncryptRequest req = buildRequest(tempArchive, destEnc, opts);
+                            req.setSplit(false);
+                            req.setArchiveFormat(null);
+                            Encryptor.encrypt(req);
+                        }
+
+                        int done = completed.incrementAndGet();
+                        if (reporter != null) {
+                            reporter.setStatus(
+                                    String.format("Encrypting %d/%d: %s", done, total,
+                                            rel.getFileName() + " (archived)"));
+                            reporter.setProgress((float) done / total, "");
+                        }
+                    } catch (Exception e) {
+                        firstError.compareAndSet(null, e);
+                    } finally {
+                        if (tempArchive != null) {
+                            try {
+                                Files.deleteIfExists(tempArchive);
+                            } catch (IOException ignored) {
+                            }
+                        }
                     }
                 }));
             }
@@ -430,8 +509,55 @@ public final class FolderCrypt {
             throw new InterruptedException("cancelled");
         }
 
+        // 后处理：解密 .zip.ergou 后新出现的归档文件（来自迭代加密深目录），
+        // 当 autoUnzip 开启时自动解压并递归解密其中的加密内容。
+        if (opts.autoUnzip) {
+            postExtractNewArchives(mirrorRoot, opts, stats, depth, reporter);
+        }
+
         if (reporter != null) {
             reporter.setProgress(1f, "");
+        }
+    }
+
+    /**
+     * 扫描并解压 .zip.ergou 解密后新出现的归档文件（来自迭代加密深目录）。
+     *
+     * <p>深目录归档内是原始明文文件（非加密文件），因此仅需普通解压，
+     * 无需再调用解密流程。解压后删除中间归档文件以保持输出整洁。
+     */
+    private static void postExtractNewArchives(Path mirrorRoot, DecryptOptions opts,
+                                                DecryptStats stats, int depth,
+                                                ProgressReporter reporter) throws Exception {
+        List<Path> newArchives = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(mirrorRoot, 5)) {
+            for (Path f : walk.toList()) {
+                if (Files.isRegularFile(f) && ArchiveExtractor.isArchive(f)) {
+                    newArchives.add(f);
+                }
+            }
+        }
+
+        for (Path archive : newArchives) {
+            if (reporter != null && reporter.isCancelled()) {
+                throw new InterruptedException("cancelled");
+            }
+            try {
+                if (reporter != null) {
+                    reporter.setStatus("Extracting " + archive.getFileName() + "...");
+                }
+                // 深目录归档内是明文文件，直接解压即可（无需解密）
+                Path extractDest = archive.getParent();
+                ArchiveExtractor.extract(archive, extractDest, null);
+                stats.decrypted.incrementAndGet();
+                // 删除中间归档文件
+                Files.deleteIfExists(archive);
+            } catch (Exception e) {
+                // 归档解压失败不中断整体流程，仅跳过该归档
+                if (reporter != null) {
+                    reporter.setStatus("Skipped " + archive.getFileName() + ": " + e.getMessage());
+                }
+            }
         }
     }
 
@@ -590,6 +716,85 @@ public final class FolderCrypt {
     }
 
     // ================================================================
+    // 迭代加密深度辅助
+    // ================================================================
+
+    /**
+     * 按深度递归收集待加密的文件与超出深度的"深目录"。
+     *
+     * <p>深度从 {@code parentDepth} 开始计算：根目录为 0，其直接子项为 1，以此类推。
+     * 文件仅在其深度 ≤ {@code maxDepth} 时加入 {@code files} 列表；
+     * 目录在其深度 ≥ {@code maxDepth} 时加入 {@code deepDirs} 列表（不再递归进入），
+     * 否则继续递归。
+     *
+     * @param dir         当前目录
+     * @param inputRoot   加密根目录（用于保持引用，此处传参与递归无关）
+     * @param parentDepth 当前目录的深度（根 = 0）
+     * @param maxDepth    最大加密深度
+     * @param files       输出：深度内的文件列表
+     * @param deepDirs    输出：超出深度的目录列表
+     * @throws IOException 列出目录内容失败时抛出
+     */
+    private static void collectByDepth(Path dir, Path inputRoot, int parentDepth, int maxDepth,
+                                        List<Path> files, List<Path> deepDirs) throws IOException {
+        try (Stream<Path> children = Files.list(dir)) {
+            for (Path child : children.sorted().toList()) {
+                int depth = parentDepth + 1;
+                if (Files.isDirectory(child)) {
+                    if (depth >= maxDepth) {
+                        // 达到或超过最大深度：整个目录作为整体打包加密
+                        deepDirs.add(child);
+                    } else {
+                        // 深度内：继续递归
+                        collectByDepth(child, inputRoot, depth, maxDepth, files, deepDirs);
+                    }
+                } else {
+                    if (depth <= maxDepth) {
+                        files.add(child);
+                    }
+                    // 超出深度的零散文件不单独出现（正常都在深目录内），忽略
+                }
+            }
+        }
+    }
+
+    /**
+     * 判断目录下是否存在常规文件（非空目录）。
+     *
+     * @param dir 目录路径
+     * @return 若目录包含至少一个常规文件则返回 true
+     */
+    private static boolean hasFiles(Path dir) {
+        try (Stream<Path> walk = Files.walk(dir)) {
+            return walk.anyMatch(Files::isRegularFile);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 将目录内所有文件打包为临时 ZIP 归档，保留内部目录结构。
+     *
+     * <p>若目录为空则返回 null。调用方负责在使用后删除临时文件。
+     *
+     * @param dir 待打包的目录
+     * @return 临时 ZIP 文件路径，若目录为空则返回 null
+     * @throws IOException 打包失败时抛出
+     */
+    private static Path archiveDirectory(Path dir) throws IOException {
+        List<Path> dirFiles;
+        try (Stream<Path> walk = Files.walk(dir)) {
+            dirFiles = walk.filter(Files::isRegularFile).sorted().toList();
+        }
+        if (dirFiles.isEmpty()) {
+            return null;
+        }
+        Path tmp = Files.createTempFile("ergou-deep-", ".zip");
+        ArchivePacker.packEntries(tmp, dir, dirFiles, ArchivePacker.Format.ZIP, null);
+        return tmp;
+    }
+
+    // ================================================================
     // 请求构建
     // ================================================================
 
@@ -737,6 +942,14 @@ public final class FolderCrypt {
          * 仅当输入为文件夹时生效，单文件加密忽略此值。
          */
         public int threadCount = 1;
+        /**
+         * 迭代加密深度，默认 2。
+         *
+         * <p>深度 1 表示仅加密根目录下的直接文件，子目录整体打包后加密；
+         * 深度 2 表示加密根目录及一级子目录内的文件，二级子目录整体打包后加密，以此类推。
+         * 超出深度的目录会先被打成 ZIP 压缩包，再对该压缩包进行加密（内部文件不再逐一加密）。
+         */
+        public int encryptDepth = 2;
     }
 
     /**

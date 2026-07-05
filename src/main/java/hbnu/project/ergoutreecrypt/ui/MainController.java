@@ -185,6 +185,12 @@ public class MainController {
     @FXML
     private Label splitUnitLabel;
     @FXML
+    private Label encryptDepthLabel;
+    @FXML
+    private Spinner<Integer> encryptDepthSpinner;
+    @FXML
+    private Label encryptDepthInfo;
+    @FXML
     private CheckBox forceDecryptCheck;
     @FXML
     private Label forceDecryptInfo;
@@ -293,8 +299,13 @@ public class MainController {
         splitSizeSpinner.setEditable(true);
         splitSizeSpinner.disableProperty().bind(splitCheck.selectedProperty().not());
 
+        // 迭代加密深度 Spinner：1..10 层，默认 2，允许手动输入
+        encryptDepthSpinner.setValueFactory(
+                new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 10, 2));
+        encryptDepthSpinner.setEditable(true);
+
         // 加密后压缩：格式下拉绑定
-        compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ");
+        compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         compressFormatCombo.managedProperty().bind(compressAfterCheck.selectedProperty());
         compressFormatCombo.visibleProperty().bind(compressAfterCheck.selectedProperty());
         archivePasswordField.managedProperty().bind(compressAfterCheck.selectedProperty());
@@ -422,6 +433,7 @@ public class MainController {
         aboutMenuItem.setText(Messages.get("menu.about"));
         splitCheck.setText(Messages.get("options.split"));
         splitUnitLabel.setText(Messages.get("options.split.size"));
+        encryptDepthLabel.setText(Messages.get("options.encryptDepth"));
         forceDecryptCheck.setText(Messages.get("options.forceDecrypt"));
         autoUnzipCheck.setText(Messages.get("options.autoUnzip"));
         verifyFirstCheck.setText(Messages.get("options.verifyFirst"));
@@ -456,6 +468,7 @@ public class MainController {
         setTip(compressInfo, Messages.get("options.compress.tip"));
         setTip(compressAfterInfo, Messages.get("options.compressAfter.tip"));
         setTip(splitInfo, Messages.get("options.split.tip"));
+        setTip(encryptDepthInfo, Messages.get("options.encryptDepth.tip"));
         setTip(forceDecryptInfo, Messages.get("options.forceDecrypt.tip"));
         setTip(autoUnzipInfo, Messages.get("options.autoUnzip.tip"));
         setTip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
@@ -540,6 +553,12 @@ public class MainController {
         setVisible(confirmBox, encrypting);
         setVisible(verifyBtn, !encrypting && selectedFile != null);
 
+        // 切换模式时，若用户未手动编辑输出路径，则根据当前模式重新计算默认输出路径。
+        // 例如从 DECRYPT 切回 ENCRYPT 时，输出应从“父目录”更新为“文件名.ergou”。
+        if (selectedFile != null && !outputPathUserEdited) {
+            outputFileField.setText(computeDefaultOutput());
+        }
+
         updateActionButtonText();
         updatePasswordFeedback();
     }
@@ -621,11 +640,11 @@ public class MainController {
     private void setSelectedFile(File f) {
         this.selectedFile = f;
         this.outputPathUserEdited = false;
-        // 依据扩展名/类型智能切换模式
+        // 依据扩展名智能切换模式：仅 .ergou/.pcv 加密卷和分卷碎片自动切到解密模式。
+        // 普通压缩包（.zip/.7z/.rar 等）不再自动切换，因为用户可能想加密压缩包本身。
         String name = f.getName().toLowerCase();
         if (name.endsWith(".pcv") || name.endsWith(".ergou")
-                || Splitter.isSplitChunkPath(f.getAbsolutePath())
-                || ArchiveExtractor.isArchive(f.toPath())) {
+                || Splitter.isSplitChunkPath(f.getAbsolutePath())) {
             switchMode(Mode.DECRYPT);
         }
         showFileInfo();
@@ -894,6 +913,7 @@ public class MainController {
                 opts.keyfileOrdered = keyfileOrderedCheck.isSelected();
             }
             opts.threadCount = SettingsManager.getThreadCount();
+            opts.encryptDepth = encryptDepthSpinner.getValue();
             FxProgressReporter reporter = newReporter();
             opts.reporter = reporter;
             runTask(() -> FolderCrypt.encryptFolder(

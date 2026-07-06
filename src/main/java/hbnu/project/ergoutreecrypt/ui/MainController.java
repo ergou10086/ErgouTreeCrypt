@@ -75,6 +75,10 @@ public class MainController {
     private Tab mediaTab;
     @FXML
     private MediaCryptController mediaViewController;
+    @FXML
+    private Tab classicalTab;
+    @FXML
+    private ClassicalCryptController classicalViewController;
 
     // ---- 模式切换 ----
     @FXML
@@ -400,6 +404,12 @@ public class MainController {
         if (mediaViewController != null) {
             mediaViewController.applyTexts();
         }
+        if (classicalTab != null) {
+            classicalTab.setText(Messages.get("tab.classical"));
+        }
+        if (classicalViewController != null) {
+            classicalViewController.applyTexts();
+        }
 
         dropHintLabel.setText(Messages.get("file.drop.hint"));
         dropSubLabel.setText(Messages.get("file.drop.sub"));
@@ -520,6 +530,9 @@ public class MainController {
         taskRunner.shutdown();
         if (mediaViewController != null) {
             mediaViewController.shutdown();
+        }
+        if (classicalViewController != null) {
+            classicalViewController.shutdown();
         }
         Platform.exit();
     }

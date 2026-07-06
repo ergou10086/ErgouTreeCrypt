@@ -249,6 +249,9 @@
             <Tab fx:id="mediaTab">
                 <fx:include fx:id="mediaView" source="av-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>
+            <Tab fx:id="classicalTab">
+                <fx:include fx:id="classicalView" source="classical-view.fxml" VBox.vgrow="ALWAYS"/>
+            </Tab>
         </TabPane>
     </VBox>
 </StackPane>

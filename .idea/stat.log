@@ -751,3 +751,9 @@
 {"ts":1783152982476,"action":"IDE_DEACTIVATED"}
 {"ts":1783153358046,"action":"IDE_ACTIVATED"}
 {"ts":1783153360629,"action":"PROJECT_CLOSED","tags":{"PROJECT_NAME":"ErgouTreeCrypt"}}
+{"ts":1783300012642,"action":"FILE_OPENED","file":"/src/main/java/hbnu/project/ergoutreecrypt/volume/FolderCrypt.java","tags":{"FILE_LINE_OF_CODE":"982"}}
+{"ts":1783300016823,"action":"PROJECT_OPENED","tags":{"PROJECT_NAME":"ErgouTreeCrypt"}}
+{"ts":1783300085746,"action":"IDE_ACTIVATED"}
+{"ts":1783300087118,"action":"IDE_DEACTIVATED"}
+{"ts":1783300089059,"action":"IDE_ACTIVATED"}
+{"ts":1783300097839,"action":"IDE_DEACTIVATED"}

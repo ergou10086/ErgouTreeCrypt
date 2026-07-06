@@ -97,6 +97,55 @@ class MediaCryptRoundtripTest {
         assertArrayEquals(original, Files.readAllBytes(dec), "MP4 解密应逐字节还原");
     }
 
+    // ---- M4A（纯音频 MP4 容器）----
+
+    @Test
+    void m4aRoundtripByteExact(@TempDir Path dir) throws Exception {
+        byte[] original = MediaTestFixtures.buildM4a(MediaTestFixtures.pseudoData(4096));
+        Path in = MediaTestFixtures.write(dir, "in.m4a", original);
+        Path enc = dir.resolve("enc.m4a");
+        Path dec = dir.resolve("dec.m4a");
+
+        codec.encrypt(in, enc, PASSWORD, MediaCryptOptions.defaults());
+
+        // 加密后应能被识别为本工具加密
+        assertTrue(codec.isEncrypted(enc), "加密后应被识别为本工具加密");
+        // 加密后的 M4A 仍是合法 ISO-BMFF 容器（BoxParser 可成功解析）
+        assertContentChanged(original, Files.readAllBytes(enc));
+
+        codec.decrypt(enc, dec, PASSWORD);
+        assertArrayEquals(original, Files.readAllBytes(dec), "M4A 解密应逐字节还原");
+    }
+
+    @Test
+    void m4aBoxParserCanReparse(@TempDir Path dir) throws Exception {
+        // 验证合成的 M4A 文件是合法的 ISO-BMFF 容器
+        byte[] original = MediaTestFixtures.buildM4a(MediaTestFixtures.pseudoData(2048));
+        Path in = MediaTestFixtures.write(dir, "test.m4a", original);
+
+        hbnu.project.ergoutreecrypt.mediacrypt.mp4.BoxParser parser =
+                hbnu.project.ergoutreecrypt.mediacrypt.mp4.BoxParser.parse(in);
+        // 应能定位到 mdat box
+        hbnu.project.ergoutreecrypt.mediacrypt.mp4.Mp4Box mdat = parser.requireMdat();
+        assertTrue(mdat.payloadSize() > 0, "M4A 应包含 mdat box");
+        // 应能定位到 moov box
+        hbnu.project.ergoutreecrypt.mediacrypt.mp4.Mp4Box moov = parser.findBox("moov");
+        assertTrue(moov != null && moov.payloadSize() > 0, "M4A 应包含 moov box");
+    }
+
+    @Test
+    void m4aWrongPasswordDetected(@TempDir Path dir) throws Exception {
+        byte[] original = MediaTestFixtures.buildM4a(MediaTestFixtures.pseudoData(2048));
+        Path in = MediaTestFixtures.write(dir, "in.m4a", original);
+        Path enc = dir.resolve("enc.m4a");
+        Path dec = dir.resolve("dec.m4a");
+
+        codec.encrypt(in, enc, PASSWORD, MediaCryptOptions.defaults());
+        byte[] wrong = "wrong-password".getBytes(StandardCharsets.UTF_8);
+        assertThrows(MediaCryptException.class, () -> codec.decrypt(enc, dec, wrong));
+        assertFalse(Files.exists(dec), "错误密码解密不应残留输出文件");
+    }
+
     // ---- 错误密码检测（复用一次加密产物，避免重复 KDF）----
 
     @Test

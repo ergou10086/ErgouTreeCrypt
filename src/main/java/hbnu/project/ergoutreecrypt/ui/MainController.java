@@ -79,6 +79,10 @@ public class MainController {
     private Tab classicalTab;
     @FXML
     private ClassicalCryptController classicalViewController;
+    @FXML
+    private Tab stegoTab;
+    @FXML
+    private ImageStegoController stegoViewController;
 
     // ---- 模式切换 ----
     @FXML
@@ -410,6 +414,12 @@ public class MainController {
         if (classicalViewController != null) {
             classicalViewController.applyTexts();
         }
+        if (stegoTab != null) {
+            stegoTab.setText(Messages.get("tab.stego"));
+        }
+        if (stegoViewController != null) {
+            stegoViewController.applyTexts();
+        }
 
         dropHintLabel.setText(Messages.get("file.drop.hint"));
         dropSubLabel.setText(Messages.get("file.drop.sub"));
@@ -533,6 +543,9 @@ public class MainController {
         }
         if (classicalViewController != null) {
             classicalViewController.shutdown();
+        }
+        if (stegoViewController != null) {
+            stegoViewController.shutdown();
         }
         Platform.exit();
     }

@@ -252,6 +252,9 @@
             <Tab fx:id="classicalTab">
                 <fx:include fx:id="classicalView" source="classical-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>
+            <Tab fx:id="stegoTab">
+                <fx:include fx:id="stegoView" source="stego-view.fxml" VBox.vgrow="ALWAYS"/>
+            </Tab>
         </TabPane>
     </VBox>
 </StackPane>

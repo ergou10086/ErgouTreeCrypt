@@ -108,6 +108,31 @@ class MediaParserTest {
         assertThrows(MediaCryptException.class, () -> BoxParser.parse(f));
     }
 
+    // ---- M4A ----
+
+    @Test
+    void m4aParserLocatesMdatAndMoov(@TempDir Path dir) throws Exception {
+        byte[] audioData = MediaTestFixtures.pseudoData(3000);
+        Path f = MediaTestFixtures.write(dir, "a.m4a", MediaTestFixtures.buildM4a(audioData));
+
+        BoxParser parser = BoxParser.parse(f);
+        // M4A 应有 ftyp（brand = "M4A "）
+        assertNotNull(parser.findBox("ftyp"), "M4A 应包含 ftyp box");
+        // M4A 应有 moov（含完整音频轨道结构）
+        assertNotNull(parser.findBox("moov"), "M4A 应包含 moov box");
+        // M4A 应有 mdat
+        Mp4Box mdat = parser.requireMdat();
+        assertEquals(3000, mdat.payloadSize(), "M4A mdat payload 大小应正确");
+    }
+
+    @Test
+    void m4aFormatRecognizedByExtension() {
+        // 验证 .m4a 扩展名能被 MediaFormat 识别为 MP4
+        Path p = Path.of("song.m4a");
+        MediaFormat fmt = MediaFormat.fromExtension(p);
+        assertTrue(fmt == MediaFormat.MP4, ".m4a 应映射到 MediaFormat.MP4");
+    }
+
     @Test
     void byteRangeBasics() {
         ByteRange r = new ByteRange(10, 5);

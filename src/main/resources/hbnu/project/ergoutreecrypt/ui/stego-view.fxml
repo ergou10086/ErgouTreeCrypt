@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane fx:id="stegoRoot" xmlns:fx="http://javafx.com/fxml"
+           fx:controller="hbnu.project.ergoutreecrypt.ui.ImageStegoController">
+    <VBox styleClass="tab-body">
+
+        <ScrollPane styleClass="content-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
+            <HBox alignment="TOP_CENTER">
+                <VBox styleClass="content" spacing="16" maxWidth="720" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
+
+                    <!-- 隐写方案选择：LSB像素 / Chunk结构 -->
+                    <HBox styleClass="segmented" alignment="CENTER">
+                        <ToggleButton fx:id="stegoPixelTab" styleClass="seg-btn" selected="true">
+                            <toggleGroup><ToggleGroup fx:id="stegoSubGroup"/></toggleGroup>
+                        </ToggleButton>
+                        <ToggleButton fx:id="stegoChunkTab" styleClass="seg-btn"
+                                      toggleGroup="$stegoSubGroup"/>
+                    </HBox>
+
+                    <!-- ===== LSB像素 内容区 ===== -->
+                    <VBox fx:id="stegoPixelContent" spacing="16">
+
+                        <!-- 隐藏/提取分段切换 -->
+                        <HBox styleClass="segmented" alignment="CENTER">
+                            <ToggleButton fx:id="stegoHideTab" styleClass="seg-btn" selected="true">
+                                <toggleGroup><ToggleGroup fx:id="stegoModeGroup"/></toggleGroup>
+                            </ToggleButton>
+                            <ToggleButton fx:id="stegoExtractTab" styleClass="seg-btn"
+                                          toggleGroup="$stegoModeGroup"/>
+                        </HBox>
+
+                        <!-- 图片选择卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoImageLabel" styleClass="card-title"/>
+                            <StackPane fx:id="stegoImageStack"
+                                       style="-fx-background-color: #e8e8e8; -fx-background-radius: 6;"
+                                       minHeight="140" maxHeight="200" alignment="CENTER">
+                                <ImageView fx:id="stegoImageView" preserveRatio="true"
+                                           fitWidth="440" fitHeight="180" smooth="true"/>
+                                <Label fx:id="stegoImagePlaceholder" styleClass="drop-hint"
+                                       text="⛶" StackPane.alignment="CENTER"/>
+                            </StackPane>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label fx:id="stegoImageInfo" styleClass="field-hint"
+                                       HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="stegoImageBtn" styleClass="btn-ghost"
+                                        onAction="#onChooseImage"/>
+                                <Button fx:id="stegoClearImageBtn" styleClass="btn-ghost"
+                                        onAction="#onClearImage" managed="false" visible="false"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 待隐藏文件卡片（仅隐藏模式） -->
+                        <VBox fx:id="stegoFileCard" styleClass="card" spacing="8">
+                            <Label fx:id="stegoFileLabel" styleClass="card-title"/>
+                            <HBox alignment="CENTER_LEFT" spacing="12">
+                                <Label styleClass="file-icon" text="▤"/>
+                                <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                    <Label fx:id="stegoFileName" styleClass="file-name"/>
+                                    <Label fx:id="stegoFileSize" styleClass="file-meta"/>
+                                </VBox>
+                                <Button fx:id="stegoFileBtn" styleClass="btn-ghost"
+                                        onAction="#onChooseFile"/>
+                                <Button fx:id="stegoClearFileBtn" styleClass="btn-ghost"
+                                        onAction="#onClearFile" managed="false" visible="false"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 密码卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoPasswordLabel" styleClass="card-title"/>
+                            <StackPane>
+                                <PasswordField fx:id="stegoPasswordField" styleClass="text-input"
+                                               promptText="Enter a password (optional)"/>
+                                <TextField fx:id="stegoPasswordVisibleField" styleClass="text-input"
+                                           managed="false" visible="false"/>
+                            </StackPane>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <CheckBox fx:id="stegoShowPasswordCheck" styleClass="check"
+                                          onAction="#onToggleShowPassword"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 选项卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoOptionsLabel" styleClass="card-title"/>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <Label fx:id="stegoLsbDepthLabel" styleClass="field-hint"/>
+                                <ComboBox fx:id="stegoLsbDepthCombo" prefWidth="80" maxWidth="80"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoParanoidCheck" styleClass="check"/>
+                                <Label fx:id="stegoParanoidLabel"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoIntegrityCheck" styleClass="check" selected="true"/>
+                                <Label fx:id="stegoIntegrityLabel"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 容量指示器（仅隐藏模式） -->
+                        <VBox fx:id="stegoCapacityCard" styleClass="card" spacing="8">
+                            <Label fx:id="stegoCapacityLabel" styleClass="card-title"/>
+                            <ProgressBar fx:id="stegoCapacityBar" styleClass="progress"
+                                         progress="0" maxWidth="Infinity"/>
+                            <Label fx:id="stegoCapacityText" styleClass="field-hint"/>
+                        </VBox>
+                    </VBox>
+
+                    <!-- ===== Chunk结构 内容区 ===== -->
+                    <VBox fx:id="stegoChunkContent" spacing="16" managed="false" visible="false">
+
+                        <!-- 隐藏/提取分段切换 -->
+                        <HBox styleClass="segmented" alignment="CENTER">
+                            <ToggleButton fx:id="stegoChunkHideTab" styleClass="seg-btn" selected="true">
+                                <toggleGroup><ToggleGroup fx:id="stegoChunkModeGroup"/></toggleGroup>
+                            </ToggleButton>
+                            <ToggleButton fx:id="stegoChunkExtractTab" styleClass="seg-btn"
+                                          toggleGroup="$stegoChunkModeGroup"/>
+                        </HBox>
+
+                        <!-- 图片选择卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoChunkImageLabel" styleClass="card-title"/>
+                            <StackPane fx:id="stegoChunkImageStack"
+                                       style="-fx-background-color: #e8e8e8; -fx-background-radius: 6;"
+                                       minHeight="140" maxHeight="200" alignment="CENTER">
+                                <ImageView fx:id="stegoChunkImageView" preserveRatio="true"
+                                           fitWidth="440" fitHeight="180" smooth="true"/>
+                                <Label fx:id="stegoChunkImagePlaceholder" styleClass="drop-hint"
+                                       text="⛶" StackPane.alignment="CENTER"/>
+                            </StackPane>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label fx:id="stegoChunkImageInfo" styleClass="field-hint"
+                                       HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="stegoChunkImageBtn" styleClass="btn-ghost"
+                                        onAction="#onChooseChunkImage"/>
+                                <Button fx:id="stegoChunkClearImageBtn" styleClass="btn-ghost"
+                                        onAction="#onClearChunkImage" managed="false" visible="false"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 待隐藏文件卡片（仅隐藏模式） -->
+                        <VBox fx:id="stegoChunkFileCard" styleClass="card" spacing="8">
+                            <Label fx:id="stegoChunkFileLabel" styleClass="card-title"/>
+                            <HBox alignment="CENTER_LEFT" spacing="12">
+                                <Label styleClass="file-icon" text="▤"/>
+                                <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                    <Label fx:id="stegoChunkFileName" styleClass="file-name"/>
+                                    <Label fx:id="stegoChunkFileSize" styleClass="file-meta"/>
+                                </VBox>
+                                <Button fx:id="stegoChunkFileBtn" styleClass="btn-ghost"
+                                        onAction="#onChooseChunkFile"/>
+                                <Button fx:id="stegoChunkClearFileBtn" styleClass="btn-ghost"
+                                        onAction="#onClearChunkFile" managed="false" visible="false"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 密码卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoChunkPasswordLabel" styleClass="card-title"/>
+                            <StackPane>
+                                <PasswordField fx:id="stegoChunkPasswordField" styleClass="text-input"/>
+                                <TextField fx:id="stegoChunkPasswordVisibleField" styleClass="text-input"
+                                           managed="false" visible="false"/>
+                            </StackPane>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <CheckBox fx:id="stegoChunkShowPasswordCheck" styleClass="check"
+                                          onAction="#onToggleChunkShowPassword"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- 选项卡片 -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label fx:id="stegoChunkOptionsLabel" styleClass="card-title"/>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoChunkParanoidCheck" styleClass="check"/>
+                                <Label fx:id="stegoChunkParanoidLabel"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoChunkIntegrityCheck" styleClass="check" selected="true"/>
+                                <Label fx:id="stegoChunkIntegrityLabel"/>
+                            </HBox>
+                        </VBox>
+                    </VBox>
+
+                </VBox>
+            </HBox>
+        </ScrollPane>
+
+        <!-- 底部操作栏 -->
+        <VBox styleClass="footer" spacing="10">
+            <padding><Insets top="14" right="24" bottom="18" left="24"/></padding>
+            <VBox fx:id="stegoProgressBox" spacing="6" managed="false" visible="false">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <Label fx:id="stegoStatusLabel" styleClass="status-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="stegoProgressInfo" styleClass="status-info"/>
+                </HBox>
+                <ProgressBar fx:id="stegoProgressBar" styleClass="progress"
+                             progress="0" maxWidth="Infinity"/>
+            </VBox>
+            <HBox spacing="12" alignment="CENTER_RIGHT">
+                <Button fx:id="stegoCancelBtn" styleClass="btn-secondary"
+                        managed="false" visible="false" onAction="#onCancel"/>
+                <Button fx:id="stegoActionBtn" styleClass="btn-accent" onAction="#onAction"/>
+            </HBox>
+        </VBox>
+    </VBox>
+</StackPane>

@@ -11,6 +11,7 @@ module hbnu.project.ergoutreecrypt {
     requires org.apache.commons.compress;
     requires zip4j;
     requires java.prefs;
+    requires java.desktop;
 
     opens hbnu.project.ergoutreecrypt to javafx.fxml;
     opens hbnu.project.ergoutreecrypt.ui to javafx.fxml;
@@ -31,4 +32,5 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.mediacrypt.wav;
     exports hbnu.project.ergoutreecrypt.mediacrypt.mp3;
     exports hbnu.project.ergoutreecrypt.mediacrypt.mp4;
+    exports hbnu.project.ergoutreecrypt.stego;
 }

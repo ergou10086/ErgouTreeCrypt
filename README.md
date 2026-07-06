@@ -21,7 +21,7 @@
 
 ## 📖 项目简介
 
-**ErgouTreeCrypt** 是一款基于 Java 21 + JavaFX 的桌面端文件加密工具，是 [Picocrypt-NG](https://github.com/Picocrypt/Picocrypt-NG)] (Go 语言) 的 Java 增强移植版。它在完全兼容原有 `.pcv` 加密文件解密的基础上，对音视频内容的加密做出了特殊的专用处理，而且新增了 **音视频格式保持加密**（MP3/MP4/WAV）子系统，并对 UI、选项和可用性做了大量增强。
+**ErgouTreeCrypt** 是一款基于 Java 21 + JavaFX 的桌面端文件加密工具，是 [Picocrypt-NG](https://github.com/Picocrypt/Picocrypt-NG) (Go 语言) 的 Java 增强移植版。它在完全兼容原有 `.pcv` 加密文件解密的基础上，对音视频内容的加密做出了特殊的专用处理，而且新增了 **音视频格式保持加密**（MP3/MP4/WAV）子系统，并对 UI、选项和可用性做了大量增强。
 
 ### 核心能力一览
 

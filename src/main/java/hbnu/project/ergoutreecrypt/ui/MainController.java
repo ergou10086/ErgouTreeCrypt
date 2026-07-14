@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.ui;
 
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
@@ -173,6 +174,26 @@ public class MainController {
     @FXML
     private Label deniabilityInfo;
     @FXML
+    private HBox decoyFileRow;
+    @FXML
+    private TextField decoyFilePathField;
+    @FXML
+    private Button decoyFileDefaultBtn;
+    @FXML
+    private Button decoyFileBrowseBtn;
+    @FXML
+    private HBox fakePasswordRow;
+    @FXML
+    private PasswordField fakePasswordField;
+    @FXML
+    private PasswordField fakePasswordVisibleField;
+    @FXML
+    private HBox fakePasswordConfirmRow;
+    @FXML
+    private PasswordField fakeConfirmField;
+    @FXML
+    private Button fakeShowToggle;
+    @FXML
     private CheckBox compressCheck;
     @FXML
     private Label compressInfo;
@@ -235,7 +256,15 @@ public class MainController {
     @FXML
     private Label progressInfoLabel;
     @FXML
+    private Label cryptoProgressCaption;
+    @FXML
     private ProgressBar progressBar;
+    @FXML
+    private VBox archiveProgressBox;
+    @FXML
+    private Label archiveProgressCaption;
+    @FXML
+    private ProgressBar archiveProgressBar;
     @FXML
     private Button cancelBtn;
     @FXML
@@ -316,8 +345,10 @@ public class MainController {
         compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         compressFormatCombo.managedProperty().bind(compressAfterCheck.selectedProperty());
         compressFormatCombo.visibleProperty().bind(compressAfterCheck.selectedProperty());
-        archivePasswordField.managedProperty().bind(compressAfterCheck.selectedProperty());
-        archivePasswordField.visibleProperty().bind(compressAfterCheck.selectedProperty());
+        // 归档密码框：ZIP 始终可填；GZ/TAR.GZ/7Z 仅在开启「工具特有加密」时才显示
+        compressAfterCheck.selectedProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
+        compressFormatCombo.valueProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
+        updateArchivePasswordVisibility();
 
         // 应用默认设置到 UI
         paranoidCheck.setSelected(SettingsManager.isDefaultParanoid());
@@ -358,6 +389,54 @@ public class MainController {
             }
         });
 
+        // 双卷可否认加密：勾选时显示钓鱼文件/伪密码输入栏
+        deniabilityCheck.selectedProperty().addListener((o, a, checked) -> {
+            boolean show = checked != null && checked;
+            decoyFileRow.setManaged(show);
+            decoyFileRow.setVisible(show);
+            fakePasswordRow.setManaged(show);
+            fakePasswordRow.setVisible(show);
+            fakePasswordConfirmRow.setManaged(show);
+            fakePasswordConfirmRow.setVisible(show);
+            if (show && (decoyFilePathField.getText() == null
+                    || decoyFilePathField.getText().isEmpty())) {
+                setDefaultDecoyFile();
+            }
+        });
+
+        // 伪密码显示/隐藏切换
+        fakeShowToggle.setOnAction(e -> {
+            boolean showing = fakePasswordVisibleField.isVisible();
+            if (showing) {
+                fakePasswordVisibleField.setVisible(false);
+                fakePasswordVisibleField.setManaged(false);
+                fakePasswordField.setVisible(true);
+                fakePasswordField.setManaged(true);
+                fakePasswordField.setText(fakePasswordVisibleField.getText());
+                fakeShowToggle.setText("👁");
+            } else {
+                fakePasswordField.setVisible(false);
+                fakePasswordField.setManaged(false);
+                fakePasswordVisibleField.setVisible(true);
+                fakePasswordVisibleField.setManaged(true);
+                fakePasswordVisibleField.setText(fakePasswordField.getText());
+                fakeShowToggle.setText("🙈");
+            }
+        });
+
+        // 钓鱼文件浏览按钮
+        decoyFileBrowseBtn.setOnAction(e -> {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle(Messages.get("options.deniability.decoyFile.choose"));
+            File f = chooser.showOpenDialog(stage());
+            if (f != null) {
+                decoyFilePathField.setText(f.getAbsolutePath());
+            }
+        });
+
+        // 默认钓鱼文件按钮
+        decoyFileDefaultBtn.setOnAction(e -> setDefaultDecoyFile());
+
         setupInfoTooltips();
         applyTexts();
         switchMode(Mode.ENCRYPT);
@@ -388,6 +467,35 @@ public class MainController {
         updateThemeButton();
         enableWindowDrag();
         enableCornerResize();
+    }
+
+    /**
+     * 根据当前「加密后压缩」勾选状态、所选归档格式与「工具特有加密」设置，
+     * 更新归档密码框的显隐与提示文案。
+     *
+     * <p>ZIP 始终可填密码；GZ / TAR.GZ / 7Z 仅在开启工具特有加密时才显示密码框。
+     */
+    private void updateArchivePasswordVisibility() {
+        boolean compressOn = compressAfterCheck.isSelected();
+        String fmt = compressFormatCombo.getValue();
+        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt);
+        boolean customEnc = SettingsManager.isArchiveCustomEncryption();
+        boolean canPassword = isZip || customEnc;
+        boolean show = compressOn && canPassword;
+        archivePasswordField.setManaged(show);
+        archivePasswordField.setVisible(show);
+
+        String key;
+        if (isZip) {
+            key = SettingsManager.isArchivePasswordFallback()
+                    ? "options.archivePassword.placeholder"
+                    : "options.archivePassword.placeholder.nofallback";
+        } else {
+            key = SettingsManager.isArchivePasswordFallback()
+                    ? "options.archivePassword.placeholder.custom"
+                    : "options.archivePassword.placeholder.custom.nofallback";
+        }
+        archivePasswordField.setPromptText(Messages.get(key));
     }
 
     // ================================================================
@@ -444,9 +552,16 @@ public class MainController {
         paranoidCheck.setText(Messages.get("options.paranoid"));
         reedSolomonCheck.setText(Messages.get("options.reedSolomon"));
         deniabilityCheck.setText(Messages.get("options.deniability"));
+        decoyFilePathField.setPromptText(Messages.get("options.deniability.decoyFile.choose"));
+        decoyFileDefaultBtn.setText(Messages.get("options.deniability.decoyFile.default"));
+        decoyFileBrowseBtn.setText("...");
+        fakePasswordField.setPromptText(Messages.get("options.deniability.fakePassword.placeholder"));
+        fakePasswordVisibleField.setPromptText(Messages.get("options.deniability.fakePassword.placeholder"));
+        fakeConfirmField.setPromptText(Messages.get("options.deniability.fakePassword.confirm.placeholder"));
         compressCheck.setText(Messages.get("options.compress"));
         compressAfterCheck.setText(Messages.get("options.compressAfter"));
         compressFormatCombo.setValue(SettingsManager.getDefaultCompressFormat());
+        updateArchivePasswordVisibility();
         // 菜单
         settingsMenu.setText(Messages.get("menu.settings"));
         settingsMenuItem.setText(Messages.get("menu.settings.open"));
@@ -469,6 +584,8 @@ public class MainController {
         if (!running) {
             statusLabel.setText(Messages.get("status.ready"));
         }
+        cryptoProgressCaption.setText(Messages.get("progress.crypto"));
+        archiveProgressCaption.setText(Messages.get("progress.archive"));
         setupInfoTooltips();
         updateActionButtonText();
         updatePasswordFeedback();
@@ -486,7 +603,10 @@ public class MainController {
         setTip(reedSolomonInfo, Messages.get("options.reedSolomon.tip"));
         setTip(deniabilityInfo, Messages.get("options.deniability.tip"));
         setTip(compressInfo, Messages.get("options.compress.tip"));
-        setTip(compressAfterInfo, Messages.get("options.compressAfter.tip"));
+        setTip(compressAfterInfo, Messages.get(
+                SettingsManager.isArchiveCustomEncryption()
+                        ? "options.compressAfter.tip"
+                        : "options.compressAfter.tip.nocustom"));
         setTip(splitInfo, Messages.get("options.split.tip"));
         setTip(encryptDepthInfo, Messages.get("options.encryptDepth.tip"));
         setTip(forceDecryptInfo, Messages.get("options.forceDecrypt.tip"));
@@ -494,6 +614,25 @@ public class MainController {
         setTip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
         setTip(recursiveExtractInfo, Messages.get("options.recursiveExtract.tip"));
         setTip(keyfileOrderedInfo, Messages.get("options.keyfiles.ordered.tip"));
+    }
+
+    /**
+     * 将内置的高考真题 ZIP 解包到用户临时目录，设为默认钓鱼文件。
+     */
+    private void setDefaultDecoyFile() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempFile("ergou_decoy_", ".zip");
+            try (java.io.InputStream in = getClass().getResourceAsStream(
+                    "/other/2025年高考全国一卷语文高考真题文档版（含答案）.zip")) {
+                if (in == null) {
+                    return;
+                }
+                java.nio.file.Files.copy(in, tmp,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            decoyFilePathField.setText(tmp.toAbsolutePath().toString());
+        } catch (java.io.IOException ignored) {
+        }
     }
 
     @FXML
@@ -553,6 +692,8 @@ public class MainController {
     @FXML
     private void onOpenSettings() {
         SettingsDialog.show(stage(), themeManager);
+        // 设置变更后刷新占位符与 tip（如归档密码回退开关）
+        applyTexts();
     }
 
     @FXML
@@ -859,6 +1000,29 @@ public class MainController {
             toast.error(Messages.get("toast.no.password.confirm"));
             return;
         }
+        // 双卷可否认加密：验证钓鱼文件已选择且伪密码确认匹配
+        if (mode == Mode.ENCRYPT && deniabilityCheck.isSelected()) {
+            String decoyPath = decoyFilePathField.getText();
+            if (decoyPath == null || decoyPath.isEmpty()
+                    || !java.nio.file.Files.exists(java.nio.file.Path.of(decoyPath))) {
+                toast.error(Messages.get("toast.no.file"));
+                return;
+            }
+            String fakePwd = fakePasswordField.getText();
+            if (fakePwd != null && !fakePwd.isEmpty()
+                    && !fakePwd.equals(fakeConfirmField.getText())) {
+                toast.error(Messages.get("toast.no.password.confirm"));
+                return;
+            }
+            // 真密码和伪密码不能相同（否则无法区分两个卷）
+            String realPwd = pwd != null ? pwd : "";
+            String actualFakePwd = fakePwd != null ? fakePwd : "";
+            if (!realPwd.isEmpty() && !actualFakePwd.isEmpty()
+                    && realPwd.equals(actualFakePwd)) {
+                toast.error(Messages.get("toast.deniability.samePassword"));
+                return;
+            }
+        }
         if (mode == Mode.ENCRYPT) {
             startEncrypt(pwd);
         } else {
@@ -959,7 +1123,17 @@ public class MainController {
         req.setComments(commentsArea.getText() == null ? "" : commentsArea.getText());
         req.setParanoid(paranoidCheck.isSelected());
         req.setReedSolomon(reedSolomonCheck.isSelected());
-        req.setDeniability(deniabilityCheck.isSelected());
+        // 双卷可否认加密
+        boolean deniability = deniabilityCheck.isSelected();
+        if (deniability) {
+            req.setDualDeniability(true);
+            req.setDecoyFilePath(decoyFilePathField.getText());
+            req.setFakePassword(fakePasswordField.getText());
+            // 旧版 deniability 不再同时启用
+            req.setDeniability(false);
+        } else {
+            req.setDeniability(false);
+        }
         req.setCompress(compressCheck.isSelected());
         req.setArchiveFormat(archiveFormat);
         req.setArchivePassword(archivePwd);
@@ -1032,16 +1206,23 @@ public class MainController {
         }
         opts.threadCount = SettingsManager.getThreadCount();
 
-        // 快速预检：若归档包含加密条目，立即弹出密码对话框（不解压数据，极快）
+        // 快速预检：若归档受密码保护，优先用解密密码作为归档密码（加密后压缩回退场景）；
+        // 二者皆空时再弹窗询问。
         boolean needPrecheck = ArchiveExtractor.isArchive(input);
         if (needPrecheck) {
             try {
                 if (ArchiveExtractor.hasEncryptedEntries(input)) {
-                    String archPwd = showArchivePasswordDialog();
-                    if (archPwd == null || archPwd.isEmpty()) {
-                        return; // 用户取消
+                    String effectiveArch = ArchivePacker.resolveArchivePassword(
+                            opts.archivePassword, opts.password);
+                    if (effectiveArch == null || effectiveArch.isEmpty()) {
+                        String archPwd = showArchivePasswordDialog();
+                        if (archPwd == null || archPwd.isEmpty()) {
+                            return;
+                        }
+                        opts.archivePassword = archPwd;
+                    } else {
+                        opts.archivePassword = effectiveArch;
                     }
-                    opts.archivePassword = archPwd;
                 }
             } catch (IOException ignored) {
                 // 预检失败（极少发生），回退到运行时检测
@@ -1050,6 +1231,8 @@ public class MainController {
 
         setRunning(true);
         progressBar.setProgress(0);
+        archiveProgressBar.setProgress(0);
+        setVisible(archiveProgressBox, false);
         statusLabel.setText(Messages.get("status.decrypting"));
 
         FxProgressReporter reporter = newReporter();
@@ -1121,6 +1304,13 @@ public class MainController {
                     progressBar.setProgress(fraction);
                     progressInfoLabel.setText(info == null ? "" : info);
                 },
+                (fraction, info) -> {
+                    archiveProgressBar.setProgress(fraction);
+                    if (info != null && !info.isEmpty()) {
+                        progressInfoLabel.setText(info);
+                    }
+                },
+                visible -> setVisible(archiveProgressBox, visible),
                 cancelBtn::setVisible);
         activeReporter = reporter;
         return reporter;
@@ -1129,6 +1319,8 @@ public class MainController {
     private void runTask(TaskRunner.CheckedRunnable work, String successMsg) {
         setRunning(true);
         progressBar.setProgress(0);
+        archiveProgressBar.setProgress(0);
+        setVisible(archiveProgressBox, false);
         statusLabel.setText(Messages.get("action.processing"));
         taskRunner.submit(work,
                 () -> {

@@ -17,6 +17,7 @@ import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
 import hbnu.project.ergoutreecrypt.header.ReadResult;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.keyfile.KeyfileProcessor;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 import hbnu.project.ergoutreecrypt.password.Passwordless;
@@ -59,34 +60,63 @@ public final class Decryptor {
      * @throws Exception 密码错误、MAC 验证失败或 I/O 错误
      */
     public static void decrypt(DecryptRequest req) throws Exception {
+        // 暴力破解防护：检查是否超过失败阈值
+        String inputPath = req.getInputFile();
+        if (!req.isForceDecrypt()
+                && !hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
+                .allowAttempt(inputPath)) {
+            int max = hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
+                    .getMaxAttempts();
+            throw new IOException(String.format(
+                    "too many failed attempts (%d), file temporarily locked", max));
+        }
+
         OperationContext ctx = new OperationContext();
         ctx.outputFile = req.getOutputFile();
         ctx.reporter = req.getReporter();
         try {
             decryptPreprocess(ctx, req);
+            // 双卷可否认解密已在预处理阶段完成，跳过后续流水线
+            if (ctx.dualDeniabilityDone) {
+                return;
+            }
             decryptReadHeader(ctx, req);
             decryptDeriveProcessVerify(ctx, req);
             decryptPayload(ctx, req, true);
             decryptFinalize(ctx, req);
         } catch (Exception e) {
             cleanupDecrypt(ctx, req);
+            // 记录失败尝试（暴力破解防护）
+            boolean isPasswordError = hbnu.project.ergoutreecrypt.header.HeaderAuth.AuthException
+                    .isPasswordError(e)
+                    || (e instanceof IOException
+                    && e.getMessage() != null
+                    && (e.getMessage().contains("password")
+                    || e.getMessage().contains("MAC")));
+            if (isPasswordError) {
+                hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
+                        .recordFailure(inputPath);
+            }
             throw e;
         } finally {
             ctx.close();
         }
+        // 解密成功，重置计数器
+        hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
+                .recordSuccess(inputPath);
     }
 
     // ==================== Phase 1: Preprocess ====================
 
     /**
-     * 解密预处理：合并分卷碎片、检测并剥离可否认加密外层。
+     * 解密预处理：合并分卷碎片、检测双卷可否认加密、检测并剥离旧版可否认加密外层。
      */
     static void decryptPreprocess(OperationContext ctx, DecryptRequest req) throws Exception {
         String inputFile = req.getInputFile();
 
         // 合并分卷碎片
         if (req.isRecombine()) {
-            ctx.setStatus("Recombining chunks...");
+            ctx.setStatus(Messages.get("status.recombining"));
             String base = Splitter.splitChunkBase(inputFile);
             if (base == null) {
                 base = inputFile;
@@ -95,9 +125,18 @@ public final class Decryptor {
             Splitter.recombine(outputPath, base);
             ctx.tempFile = outputPath.toString();
             inputFile = outputPath.toString();
+            req.setInputFile(inputFile);
         }
 
-        // 可否认加密自动检测：未显式指定时通过探测文件头判断
+        // 双卷可否认加密（EGTD）自动检测
+        if (DualDeniability.isDualDeniable(inputFile)) {
+            ctx.dualDeniabilityDone = true;
+            req.setDualDeniability(true);
+            DualDeniability.decrypt(req);
+            return;
+        }
+
+        // 旧版可否认加密自动检测：未显式指定时通过探测文件头判断
         boolean deniability = req.isDeniability();
         if (!deniability) {
             deniability = Deniability.isDeniable(inputFile, req.getRsCodecs());
@@ -121,7 +160,7 @@ public final class Decryptor {
      * 读取并 RS 解码卷头各字段。
      */
     static void decryptReadHeader(OperationContext ctx, DecryptRequest req) throws IOException {
-        ctx.setStatus("Reading header...");
+        ctx.setStatus(Messages.get("status.readingHeader"));
 
         try (InputStream in = Files.newInputStream(Path.of(ctx.inputFile))) {
             HeaderReader reader = new HeaderReader(in, req.getRsCodecs());
@@ -175,7 +214,7 @@ public final class Decryptor {
      * Argon2id 密钥派生。
      */
     private static void decryptDeriveKeys(OperationContext ctx, DecryptRequest req) {
-        ctx.setStatus("Deriving key...");
+        ctx.setStatus(Messages.get("status.deriving"));
         boolean paranoid = ctx.header.getFlags().isParanoid();
         byte[] key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(), paranoid);
         ctx.setKey(key);
@@ -193,7 +232,7 @@ public final class Decryptor {
         if (kfPaths == null || kfPaths.isEmpty()) {
             throw new IOException("keyfiles required but none provided");
         }
-        ctx.setStatus("Processing keyfiles...");
+        ctx.setStatus(Messages.get("status.keyfiles"));
         List<Path> paths = kfPaths.stream().map(Path::of).toList();
         KeyfileProcessor kf = KeyfileProcessor.process(paths,
                 ctx.header.getFlags().isKeyfileOrdered(), null);
@@ -211,7 +250,7 @@ public final class Decryptor {
      * Header 认证验证（v1 SHA3-512 / v2 HMAC-SHA3-512）。
      */
     private static void decryptVerifyAuth(OperationContext ctx, DecryptRequest req) {
-        ctx.setStatus("Verifying authentication...");
+        ctx.setStatus(Messages.get("status.verifyingAuth"));
 
         if (ctx.isLegacyV1) {
             // v1: SHA3-512(key) 验证，keyfile XOR 在 HKDF 之前
@@ -294,6 +333,7 @@ public final class Decryptor {
             byte[] dst = new byte[CryptoConstants.MIB];
             long done = 0;
             long counter = 0;
+            long startMs = System.currentTimeMillis();
 
             while (true) {
                 if (ctx.isCancelled()) {
@@ -326,7 +366,11 @@ public final class Decryptor {
 
                 if (ctx.total > 0) {
                     float progress = (float) done / ctx.total;
-                    ctx.updateProgress(progress, "");
+                    long elapsed = System.currentTimeMillis() - startMs;
+                    String speed = elapsed > 0
+                            ? Messages.format("status.speed", done / 1048576.0 / (elapsed / 1000.0))
+                            : "";
+                    ctx.updateProgress(progress, speed);
                 }
 
                 // 每 60 GiB rekey 一次
@@ -347,7 +391,7 @@ public final class Decryptor {
      * 最终化：MAC 校验，必要时全 RS 重试，原子重命名为最终输出。
      */
     private static void decryptFinalize(OperationContext ctx, DecryptRequest req) throws Exception {
-        ctx.setStatus("Verifying MAC...");
+        ctx.setStatus(Messages.get("status.verifyingMac"));
 
         byte[] computedMac = ctx.cipherSuite.sum();
         boolean macOk = HeaderAuth.constantTimeEqual(computedMac, ctx.header.getAuthTag());

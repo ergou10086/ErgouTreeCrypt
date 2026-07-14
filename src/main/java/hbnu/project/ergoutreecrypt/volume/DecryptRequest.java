@@ -57,9 +57,14 @@ public final class DecryptRequest {
     private boolean recombine;
 
     /**
-     * 是否需要先剥离可否认加密外层。
+     * 是否需要先剥离可否认加密外层（旧版）。
      */
     private boolean deniability;
+
+    /**
+     * 是否为双卷可否认加密（EGTD 格式，自动检测设置）。
+     */
+    private boolean dualDeniability;
 
     /**
      * 进度与取消回调。
@@ -149,6 +154,14 @@ public final class DecryptRequest {
 
     public void setDeniability(boolean d) {
         this.deniability = d;
+    }
+
+    public boolean isDualDeniability() {
+        return dualDeniability;
+    }
+
+    public void setDualDeniability(boolean d) {
+        this.dualDeniability = d;
     }
 
     public ProgressReporter getReporter() {

@@ -15,6 +15,7 @@ import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.header.Flags;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderWriter;
@@ -63,6 +64,12 @@ public final class Encryptor {
      * @throws Exception 密码学或 I/O 错误
      */
     public static void encrypt(EncryptRequest req) throws Exception {
+        // 双卷可否认加密：完全独立的路径
+        if (req.isDualDeniability()) {
+            DualDeniability.encrypt(req);
+            return;
+        }
+
         OperationContext ctx = new OperationContext();
         ctx.outputFile = req.getOutputFile();
         ctx.reporter = req.getReporter();
@@ -92,7 +99,7 @@ public final class Encryptor {
         List<String> files = req.getInputFiles();
         if (files != null && !files.isEmpty()) {
             if (files.size() > 1 || req.isCompress()) {
-                ctx.setStatus("Compressing...");
+                ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
                 Path tmp = Files.createTempFile("ergou", ".tmp");
                 ctx.tempFile = tmp.toString();
                 try (OutputStream out = Files.newOutputStream(tmp)) {
@@ -100,6 +107,7 @@ public final class Encryptor {
                         Files.copy(Path.of(f), out);
                     }
                 }
+                ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
                 ctx.inputFile = ctx.tempFile;
                 return;
             }
@@ -115,7 +123,7 @@ public final class Encryptor {
      * 生成随机密码学材料并构建 VolumeHeader。
      */
     private static void encryptGenerateValues(OperationContext ctx, EncryptRequest req) throws IOException {
-        ctx.setStatus("Generating values...");
+        ctx.setStatus(Messages.get("status.generating"));
 
         byte[] salt = RandomBytes.generate(VolumeHeader.SALT_SIZE);
         byte[] hkdfSalt = RandomBytes.generate(VolumeHeader.HKDF_SALT_SIZE);
@@ -159,7 +167,7 @@ public final class Encryptor {
      * Argon2id 密码派生。无密码时使用公开默认密码。
      */
     private static void encryptDeriveKeys(OperationContext ctx, EncryptRequest req) {
-        ctx.setStatus("Deriving key...");
+        ctx.setStatus(Messages.get("status.deriving"));
         String effectivePw = Passwordless.effectivePassword(req.getPassword());
         byte[] pwBytes = PasswordNormalizer.encodeForKdf(effectivePw);
         byte[] key = Argon2Kdf.deriveKey(pwBytes, ctx.header.getSalt(), req.isParanoid());
@@ -179,7 +187,7 @@ public final class Encryptor {
             ctx.useKeyfiles = false;
             return;
         }
-        ctx.setStatus("Processing keyfiles...");
+        ctx.setStatus(Messages.get("status.keyfiles"));
         ctx.useKeyfiles = true;
 
         List<Path> paths = kfPaths.stream().map(Path::of).toList();
@@ -203,7 +211,7 @@ public final class Encryptor {
      * 计算 v2 header HMAC-SHA3-512 认证码。
      */
     private static void encryptComputeAuth(OperationContext ctx, EncryptRequest req) {
-        ctx.setStatus("Computing auth...");
+        ctx.setStatus(Messages.get("status.computingAuth"));
         HkdfStream hkdf = new HkdfStream(ctx.key, ctx.header.getHkdfSalt());
         ctx.subkeyReader = new SubkeyReader(hkdf);
 
@@ -273,7 +281,7 @@ public final class Encryptor {
                     float progress = (float) done / ctx.total;
                     long elapsed = System.currentTimeMillis() - startMs;
                     String speed = elapsed > 0
-                            ? String.format("%.1f MiB/s", done / 1048576.0 / (elapsed / 1000.0))
+                            ? Messages.format("status.speed", done / 1048576.0 / (elapsed / 1000.0))
                             : "";
                     ctx.updateProgress(progress, speed);
                 }
@@ -296,7 +304,7 @@ public final class Encryptor {
      * 最终化：回填 auth 值、原子重命名，按序执行分卷→压缩→可否认加密。
      */
     private static void encryptFinalize(OperationContext ctx, EncryptRequest req) throws Exception {
-        ctx.setStatus("Finalizing...");
+        ctx.setStatus(Messages.get("status.finalizing"));
 
         // 回填 auth 值（keyHash / keyfileHash / authTag）
         byte[] authTag = ctx.cipherSuite.sum();
@@ -325,7 +333,7 @@ public final class Encryptor {
         // 顺序约定：先分卷，再（若启用）压缩。压缩永远是最后一步
         Path chunkDir = null;
         if (split) {
-            ctx.setStatus("Splitting...");
+            ctx.setStatus(Messages.get("status.splitting"));
             long chunkBytes = (long) req.getChunkSize() * CryptoConstants.MIB;
             Path outPath = Path.of(req.getOutputFile());
             String outName = outPath.getFileName().toString();
@@ -363,18 +371,23 @@ public final class Encryptor {
         }
 
         if (archive) {
-            ctx.setStatus("Archiving...");
+            ctx.setStatus(Messages.get("status.archiving"), ProgressPhase.ARCHIVE);
+            ctx.updateProgress(0f, "", ProgressPhase.ARCHIVE);
             ArchivePacker.Format fmt = ArchivePacker.parseFormat(req.getArchiveFormat());
             Path outPath = Path.of(req.getOutputFile());
             Path parent = outPath.getParent() != null ? outPath.getParent() : Path.of(".");
 
             if (split) {
+                // GZ 多条目时 packEntries 会自动提升为 TAR.GZ，扩展名也需同步调整
+                ArchivePacker.Format extFmt = (fmt == ArchivePacker.Format.GZ)
+                        ? ArchivePacker.Format.TAR_GZ : fmt;
                 List<Path> chunks = Splitter.listChunks(outPath);
                 Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
-                String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(fmt);
+                String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);
                 Path archivePath = archiveParent.resolve(archiveName);
                 ArchivePacker.packEntries(archivePath, parent, chunks, fmt,
-                        req.getArchivePassword());
+                        ArchivePacker.resolveArchivePassword(
+                                req.getArchivePassword(), req.getPassword(), fmt), ctx.reporter);
                 for (Path c : chunks) {
                     Files.deleteIfExists(c);
                 }
@@ -385,10 +398,13 @@ public final class Encryptor {
                 req.setOutputFile(archivePath.toString());
             } else {
                 Path archivePath = Path.of(req.getOutputFile() + ArchivePacker.extOf(fmt));
-                ArchivePacker.pack(archivePath, outPath, fmt, req.getArchivePassword());
+                ArchivePacker.pack(archivePath, outPath, fmt,
+                        ArchivePacker.resolveArchivePassword(
+                                req.getArchivePassword(), req.getPassword(), fmt), ctx.reporter);
                 Files.deleteIfExists(outPath);
                 req.setOutputFile(archivePath.toString());
             }
+            ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
         }
 
         // 清理临时文件

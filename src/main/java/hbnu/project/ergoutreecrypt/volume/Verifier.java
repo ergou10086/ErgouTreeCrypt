@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.encoding.Padding;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -72,7 +73,7 @@ public final class Verifier {
      */
     private static void verifyMacScan(OperationContext ctx, VerifyRequest req,
                                        boolean fastDecode) throws Exception {
-        ctx.setStatus("Scanning file for MAC verification...");
+        ctx.setStatus(Messages.get("status.scanning"));
 
         byte[] macSubkey = ctx.subkeyReader.macSubkey();
         Mac mac = MacFactory.create(macSubkey, ctx.header.getFlags().isParanoid());
@@ -137,7 +138,7 @@ public final class Verifier {
      * 常量时间比对载荷 MAC。若开启了 RS 且首次 fast-decode 失败，则用 full-decode 重试一次。
      */
     private static void verifyCompare(OperationContext ctx, VerifyRequest req) throws Exception {
-        ctx.setStatus("Verifying MAC...");
+        ctx.setStatus(Messages.get("status.verifyingMac"));
 
         byte[] computedMac = ctx.keyfileHash;
         boolean macOk = HeaderAuth.constantTimeEqual(computedMac, ctx.header.getAuthTag());

@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.fileops;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.model.enums.AesKeyStrength;
+import net.lingala.zip4j.model.enums.CompressionMethod;
 import net.lingala.zip4j.model.enums.EncryptionMethod;
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZMethod;
@@ -10,6 +11,11 @@ import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+
+import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
+import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherOutputStream;
@@ -23,7 +29,6 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,11 +37,16 @@ import java.util.List;
  * <p>支持 ZIP / GZ / TAR.GZ / 7Z 四种格式。密码保护策略：
  * <ul>
  *   <li><b>ZIP：</b>使用 zip4j 原生 AES-256 加密，外部工具（Bandizip / 7-Zip）
- *       可正确提示密码。</li>
- *   <li><b>7Z：</b>使用 7z 原生 AES-256 容器加密，外部工具可正确提示密码。</li>
- *   <li><b>GZ / TAR.GZ：</b>无原生密码支持，采用整体 AES-256-CTR 加密包裹
- *       （MAGIC + salt + IV + ciphertext），需用本工具解密。</li>
+ *       可正确提示密码；不受工具特有加密开关影响。</li>
+ *   <li><b>GZ / TAR.GZ / 7Z：</b>无（或放弃）原生密码，采用本工具特有的整体
+ *       AES-256-CTR 加密包裹（MAGIC + salt + IV + ciphertext），仅能用本工具解密。
+ *       是否允许对这三种格式加密，由
+ *       {@link SettingsManager#isArchiveCustomEncryption()} 控制（默认关闭）。</li>
  * </ul>
+ *
+ * <p>归档密码解析见 {@link #resolveArchivePassword(String, String, Format)}，
+ * 是否在归档密码为空时回退加密密码由
+ * {@link SettingsManager#isArchivePasswordFallback()} 控制（默认关闭）。
  *
  * @author ErgouTree
  */
@@ -67,6 +77,90 @@ public final class ArchivePacker {
      */
     private static final int PBKDF2_ITERATIONS = 100_000;
 
+    /**
+     * 解析实际用于归档保护的密码（不区分格式，兼容旧调用）。
+     *
+     * <p>等价于 {@link #resolveArchivePassword(String, String, Format)} 传入 {@code null} 格式，
+     * 即不做「非 ZIP 格式工具特有加密」开关校验，仅按显式密码 + 回退开关解析。
+     *
+     * @param archivePassword    归档密码（可为 null/空）
+     * @param encryptionPassword 文件加密密码（可为 null/空）
+     * @return 非空密码，或 null 表示不保护归档
+     */
+    public static String resolveArchivePassword(String archivePassword, String encryptionPassword) {
+        return resolveArchivePassword(archivePassword, encryptionPassword, null);
+    }
+
+    /**
+     * 解析实际用于归档保护的密码。
+     *
+     * <p>规则：
+     * <ul>
+     *   <li>对 GZ / TAR.GZ / 7Z：仅当
+     *       {@link SettingsManager#isArchiveCustomEncryption()} 开启时才允许加密，
+     *       否则一律返回 null（明文归档）。</li>
+     *   <li>显式归档密码非空时直接采用。</li>
+     *   <li>归档密码为空时，仅当
+     *       {@link SettingsManager#isArchivePasswordFallback()} 开启才回退到加密密码。</li>
+     * </ul>
+     * ZIP 始终可加密，不受工具特有加密开关影响。
+     *
+     * @param archivePassword    归档密码（可为 null/空）
+     * @param encryptionPassword 文件加密密码（可为 null/空）
+     * @param format             归档格式；null 表示不做格式校验
+     * @return 非空密码，或 null 表示不保护归档
+     */
+    public static String resolveArchivePassword(String archivePassword, String encryptionPassword,
+                                                Format format) {
+        // 非 ZIP 格式未开启工具特有加密时，不允许任何密码
+        if (isCustomEncryptionFormat(format) && !SettingsManager.isArchiveCustomEncryption()) {
+            return null;
+        }
+        if (archivePassword != null && !archivePassword.isEmpty()) {
+            return archivePassword;
+        }
+        if (SettingsManager.isArchivePasswordFallback()
+                && encryptionPassword != null
+                && !encryptionPassword.isEmpty()) {
+            return encryptionPassword;
+        }
+        return null;
+    }
+
+    /**
+     * 判断格式是否属于「工具特有加密」范畴（GZ / TAR.GZ / 7Z）。
+     *
+     * @param format 归档格式，可为 null
+     * @return true 表示该格式加密受工具特有加密开关控制
+     */
+    public static boolean isCustomEncryptionFormat(Format format) {
+        return format == Format.GZ || format == Format.TAR_GZ || format == Format._7Z;
+    }
+
+    /**
+     * 判断路径是否为受原生密码保护的 ZIP（zip4j AES）。
+     *
+     * <p>7Z 已不再使用原生加密（改为本工具 MAGIC 整体包裹），故此方法仅检测 ZIP。
+     *
+     * @param archive 归档路径
+     * @return true 表示 ZIP 内容受原生密码保护
+     * @throws IOException 检测失败
+     */
+    public static boolean isNativelyPasswordProtected(Path archive) throws IOException {
+        if (archive == null || !Files.isRegularFile(archive)) {
+            return false;
+        }
+        String name = archive.getFileName().toString().toLowerCase();
+        if (name.endsWith(".zip")) {
+            try (ZipFile zf = new ZipFile(archive.toFile())) {
+                return zf.isEncrypted();
+            } catch (Exception e) {
+                throw new IOException("Failed to inspect ZIP encryption: " + e.getMessage(), e);
+            }
+        }
+        return false;
+    }
+
     private ArchivePacker() {
     }
 
@@ -80,25 +174,44 @@ public final class ArchivePacker {
      * @throws IOException 打包或加密失败
      */
     public static void pack(Path output, Path input, Format format, String password) throws IOException {
+        pack(output, input, format, password, null);
+    }
+
+    /**
+     * 将单个文件或目录打包为指定格式的归档，并回调进度。
+     *
+     * @param output   输出归档路径
+     * @param input    输入文件或目录
+     * @param format   归档格式
+     * @param password 加密密码（可为 null/空）
+     * @param reporter 进度回调（可为 null）
+     * @throws IOException 打包或加密失败
+     */
+    public static void pack(Path output, Path input, Format format, String password,
+                            ProgressReporter reporter) throws IOException {
+        reportArchive(reporter, 0f, Messages.get("status.archiving"));
         boolean hasPwd = password != null && !password.isEmpty();
-        if (hasPwd) {
-            switch (format) {
-                case ZIP -> { packZipNative(output, input, password); return; }
-                case _7Z -> { pack7z(output, input, password); return; }
-            }
+        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
+        if (hasPwd && format == Format.ZIP) {
+            packZipNative(output, input, password);
+            reportArchive(reporter, 1f, Messages.get("status.archiving"));
+            return;
         }
-        // 无密码或需要整体包裹的格式（GZ / TAR.GZ）
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
         try {
             switch (format) {
                 case ZIP -> packZipPlain(workOutput, input);
                 case GZ -> packGz(workOutput, input);
                 case TAR_GZ -> packTarGz(workOutput, input);
+                case _7Z -> pack7z(workOutput, input);
                 default -> throw new IllegalArgumentException("Unsupported format: " + format);
             }
+            reportArchive(reporter, hasPwd ? 0.7f : 0.95f, Messages.get("status.archiving"));
             if (hasPwd) {
                 wrapEncrypted(workOutput, output, password);
             }
+            reportArchive(reporter, 1f, Messages.get("status.archiving"));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -124,30 +237,54 @@ public final class ArchivePacker {
      */
     public static void packEntries(Path output, Path baseDir, List<Path> entries,
                                    Format format, String password) throws IOException {
+        packEntries(output, baseDir, entries, format, password, null);
+    }
+
+    /**
+     * 将多个文件打包为单个归档，并按条目回调进度。
+     *
+     * @param output   输出归档路径
+     * @param baseDir  计算条目相对名的基准目录
+     * @param entries  要打入归档的文件路径列表
+     * @param format   归档格式
+     * @param password 加密密码（可为 null/空）
+     * @param reporter 进度回调（可为 null）
+     * @throws IOException 打包或加密失败
+     */
+    public static void packEntries(Path output, Path baseDir, List<Path> entries,
+                                   Format format, String password,
+                                   ProgressReporter reporter) throws IOException {
         if (entries == null || entries.isEmpty()) {
             throw new IOException("no entries to archive");
         }
 
         Format effective = (format == Format.GZ && entries.size() > 1) ? Format.TAR_GZ : format;
         boolean hasPwd = password != null && !password.isEmpty();
-        if (hasPwd) {
-            switch (effective) {
-                case ZIP -> { packZipEntriesNative(output, baseDir, entries, password); return; }
-                case _7Z -> { pack7zEntries(output, baseDir, entries, password); return; }
-            }
+        reportArchive(reporter, 0f,
+                Messages.format("status.archiving.progress", 0, entries.size()));
+
+        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
+        if (hasPwd && effective == Format.ZIP) {
+            packZipEntriesNative(output, baseDir, entries, password, reporter);
+            return;
         }
-        // 无密码或需要整体包裹的格式（GZ / TAR.GZ）
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
         try {
             switch (effective) {
-                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries);
-                case GZ -> packGz(workOutput, entries.getFirst());
-                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries);
+                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries, reporter);
+                case GZ -> {
+                    packGz(workOutput, entries.getFirst());
+                    reportArchive(reporter, hasPwd ? 0.7f : 1f, Messages.get("status.archiving"));
+                }
+                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, reporter);
+                case _7Z -> pack7zEntries(workOutput, baseDir, entries, reporter);
                 default -> throw new IllegalArgumentException("Unsupported format: " + effective);
             }
             if (hasPwd) {
                 wrapEncrypted(workOutput, output, password);
             }
+            reportArchive(reporter, 1f, Messages.get("status.archiving"));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -157,6 +294,21 @@ public final class ArchivePacker {
                 Files.deleteIfExists(workOutput);
             }
         }
+    }
+
+    /**
+     * 上报归档阶段进度。
+     *
+     * @param reporter 进度回调，可为 null
+     * @param fraction 完成比例
+     * @param status   状态文案
+     */
+    private static void reportArchive(ProgressReporter reporter, float fraction, String status) {
+        if (reporter == null) {
+            return;
+        }
+        reporter.setStatus(status, ProgressPhase.ARCHIVE);
+        reporter.setProgress(fraction, "", ProgressPhase.ARCHIVE);
     }
 
     // ==================== 条目名生成 ====================
@@ -208,10 +360,7 @@ public final class ArchivePacker {
      * 使用 zip4j 创建 AES-256 原生加密 ZIP（单文件）。
      */
     private static void packZipNative(Path output, Path input, String password) throws IOException {
-        ZipParameters params = new ZipParameters();
-        params.setEncryptFiles(true);
-        params.setEncryptionMethod(EncryptionMethod.AES);
-        params.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
+        ZipParameters params = newZipAesParameters();
         try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
             if (Files.isDirectory(input)) {
                 zipFile.addFolder(input.toFile(), params);
@@ -219,26 +368,70 @@ public final class ArchivePacker {
                 zipFile.addFile(input.toFile(), params);
             }
         }
+        assertZipNativelyEncrypted(output);
     }
 
     /**
-     * 使用 zip4j 创建 AES-256 原生加密 ZIP（多文件，保留目录结构）。
+     * 使用 zip4j 创建 AES-256 原生加密 ZIP（多文件），并上报进度。
+     *
+     * @param output   输出路径
+     * @param baseDir  相对路径基准
+     * @param entries  条目列表
+     * @param password 密码
+     * @param reporter 进度回调，可为 null
+     * @throws IOException 打包失败
      */
     private static void packZipEntriesNative(Path output, Path baseDir, List<Path> entries,
-                                             String password) throws IOException {
+                                             String password, ProgressReporter reporter)
+            throws IOException {
+        int total = entries.size();
+        int done = 0;
         try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
             for (Path file : entries) {
-                ZipParameters params = new ZipParameters();
-                params.setEncryptFiles(true);
-                params.setEncryptionMethod(EncryptionMethod.AES);
-                params.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
+                ZipParameters params = newZipAesParameters();
                 params.setFileNameInZip(entryName(baseDir, file));
                 if (Files.isDirectory(file)) {
                     zipFile.addFolder(file.toFile(), params);
                 } else {
                     zipFile.addFile(file.toFile(), params);
                 }
+                done++;
+                reportArchive(reporter, (float) done / total,
+                        Messages.format("status.archiving.progress", done, total));
             }
+        }
+        assertZipNativelyEncrypted(output);
+    }
+
+    /**
+     * 构造 WinZip-AES-256 加密参数（DEFLATE，兼容 7-Zip / Bandizip）。
+     *
+     * @return zip4j 参数
+     */
+    private static ZipParameters newZipAesParameters() {
+        ZipParameters params = new ZipParameters();
+        params.setCompressionMethod(CompressionMethod.DEFLATE);
+        params.setEncryptFiles(true);
+        params.setEncryptionMethod(EncryptionMethod.AES);
+        params.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
+        return params;
+    }
+
+    /**
+     * 打包后自检：确认 ZIP 确实带有原生加密标志，防止静默生成明文包。
+     *
+     * @param zip ZIP 路径
+     * @throws IOException 未加密或无法检测
+     */
+    private static void assertZipNativelyEncrypted(Path zip) throws IOException {
+        try (ZipFile zf = new ZipFile(zip.toFile())) {
+            if (!zf.isEncrypted()) {
+                throw new IOException("ZIP native encryption failed: archive is not encrypted");
+            }
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("ZIP native encryption verification failed: " + e.getMessage(), e);
         }
     }
 
@@ -266,9 +459,18 @@ public final class ArchivePacker {
     }
 
     /**
-     * 使用 commons-compress 创建明文 ZIP（多文件，STORED 模式，无加密）。
+     * 使用 commons-compress 创建明文 ZIP（多文件），并上报进度。
+     *
+     * @param output   输出路径
+     * @param baseDir  相对路径基准
+     * @param entries  条目列表
+     * @param reporter 进度回调，可为 null
+     * @throws Exception 打包失败
      */
-    private static void packZipEntriesPlain(Path output, Path baseDir, List<Path> entries) throws Exception {
+    private static void packZipEntriesPlain(Path output, Path baseDir, List<Path> entries,
+                                            ProgressReporter reporter) throws Exception {
+        int total = entries.size();
+        int done = 0;
         try (OutputStream fos = Files.newOutputStream(output);
              org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zos =
                      new org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream(fos)) {
@@ -283,6 +485,9 @@ public final class ArchivePacker {
                 zos.putArchiveEntry(entry);
                 Files.copy(file, zos);
                 zos.closeArchiveEntry();
+                done++;
+                reportArchive(reporter, (float) done / total,
+                        Messages.format("status.archiving.progress", done, total));
             }
         }
     }
@@ -320,9 +525,18 @@ public final class ArchivePacker {
     }
 
     /**
-     * 将多个文件条目写入 TAR.GZ 归档（明文）。
+     * 将多个文件条目写入 TAR.GZ 归档，并上报进度。
+     *
+     * @param output   输出路径
+     * @param baseDir  相对路径基准
+     * @param entries  条目列表
+     * @param reporter 进度回调，可为 null
+     * @throws Exception 打包失败
      */
-    private static void packTarGzEntries(Path output, Path baseDir, List<Path> entries) throws Exception {
+    private static void packTarGzEntries(Path output, Path baseDir, List<Path> entries,
+                                         ProgressReporter reporter) throws Exception {
+        int total = entries.size();
+        int done = 0;
         try (OutputStream fos = Files.newOutputStream(output);
              GzipCompressorOutputStream gzos = new GzipCompressorOutputStream(fos);
              TarArchiveOutputStream tos = new TarArchiveOutputStream(gzos)) {
@@ -333,21 +547,28 @@ public final class ArchivePacker {
                 tos.putArchiveEntry(entry);
                 Files.copy(file, tos);
                 tos.closeArchiveEntry();
+                done++;
+                reportArchive(reporter, (float) done / total,
+                        Messages.format("status.archiving.progress", done, total));
             }
             tos.finish();
         }
     }
 
-    // ==================== 7Z 原生加密 ====================
+    // ==================== 7Z 明文打包 ====================
 
     /**
-     * 打包单文件为 7z 归档（支持原生密码）。
+     * 打包单文件为 7z 归档（明文，不含原生密码）。
+     *
+     * <p>7Z 已放弃原生 AES：若需要密码，由外层 {@link #wrapEncrypted} 整体包裹。
+     * 内容方法用 COPY，避免对已加密载荷再做 LZMA2 造成极慢/膨胀。
+     *
+     * @param output 输出路径
+     * @param input  输入文件
+     * @throws IOException 打包失败
      */
-    private static void pack7z(Path output, Path input, String password) throws IOException {
-        boolean hasPwd = password != null && !password.isEmpty();
-        try (SevenZOutputFile szos = hasPwd
-                ? new SevenZOutputFile(output.toFile(), password.toCharArray())
-                : new SevenZOutputFile(output.toFile())) {
+    private static void pack7z(Path output, Path input) throws IOException {
+        try (SevenZOutputFile szos = new SevenZOutputFile(output.toFile())) {
             szos.setContentCompression(SevenZMethod.COPY);
             SevenZArchiveEntry entry = new SevenZArchiveEntry();
             entry.setName(input.getFileName().toString());
@@ -366,14 +587,19 @@ public final class ArchivePacker {
     }
 
     /**
-     * 将多个文件条目写入 7z 归档（支持原生密码）。
+     * 将多个文件条目写入 7z 归档（明文），并上报进度。
+     *
+     * @param output   输出路径
+     * @param baseDir  相对路径基准
+     * @param entries  条目列表
+     * @param reporter 进度回调，可为 null
+     * @throws IOException 打包失败
      */
     private static void pack7zEntries(Path output, Path baseDir, List<Path> entries,
-                                      String password) throws IOException {
-        boolean hasPwd = password != null && !password.isEmpty();
-        try (SevenZOutputFile szos = hasPwd
-                ? new SevenZOutputFile(output.toFile(), password.toCharArray())
-                : new SevenZOutputFile(output.toFile())) {
+                                      ProgressReporter reporter) throws IOException {
+        int total = entries.size();
+        int done = 0;
+        try (SevenZOutputFile szos = new SevenZOutputFile(output.toFile())) {
             szos.setContentCompression(SevenZMethod.COPY);
             for (Path file : entries) {
                 SevenZArchiveEntry entry = new SevenZArchiveEntry();
@@ -388,6 +614,9 @@ public final class ArchivePacker {
                     }
                 }
                 szos.closeArchiveEntry();
+                done++;
+                reportArchive(reporter, (float) done / total,
+                        Messages.format("status.archiving.progress", done, total));
             }
             szos.finish();
         }
@@ -417,7 +646,12 @@ public final class ArchivePacker {
      * @return 对应的 Format 枚举值
      */
     public static Format parseFormat(String raw) {
-        return Format.valueOf(raw.toUpperCase().replace('.', '_'));
+        String name = raw.toUpperCase().replace('.', '_');
+        // "7Z" maps to _7Z 枚举常量（Java 标识符不能以数字开头）
+        if ("7Z".equals(name)) {
+            return Format._7Z;
+        }
+        return Format.valueOf(name);
     }
 
     /**

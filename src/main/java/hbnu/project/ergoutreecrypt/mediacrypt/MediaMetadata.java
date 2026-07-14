@@ -72,6 +72,10 @@ public final class MediaMetadata {
 
     private static final int FLAG_PARANOID = 0x01;
     private static final int FLAG_HAS_INTEGRITY = 0x02;
+    private static final int FLAG_HAS_CANARY = 0x04;
+
+    /** 金丝雀令牌长度（16 字节）。 */
+    public static final int CANARY_LEN = 16;
 
     private final MediaFormat format;
     private final MediaCryptProfile profile;
@@ -83,14 +87,30 @@ public final class MediaMetadata {
      * 原文 payload MAC；null 表示未存储完整性校验。
      */
     private final byte[] plainMac;
+    /**
+     * 金丝雀令牌（16 字节）；null 表示未存储。
+     */
+    private final byte[] canary;
 
     /**
      * 构造元数据。除 {@code plainMac} 外参数不得为空，长度必须匹配常量。
      *
      * @param plainMac 原文 MAC（64 字节）或 {@code null}（不存完整性校验）
      */
+    /**
+     * 构造元数据（无金丝雀，向后兼容）。
+     */
     public MediaMetadata(MediaFormat format, MediaCryptProfile profile, boolean paranoid,
                          byte[] salt, byte[] hkdfSalt, byte[] nonce, byte[] plainMac) {
+        this(format, profile, paranoid, salt, hkdfSalt, nonce, plainMac, null);
+    }
+
+    /**
+     * 构造元数据（含金丝雀）。
+     */
+    public MediaMetadata(MediaFormat format, MediaCryptProfile profile, boolean paranoid,
+                         byte[] salt, byte[] hkdfSalt, byte[] nonce, byte[] plainMac,
+                         byte[] canary) {
         if (format == null || profile == null) {
             throw new IllegalArgumentException("format / profile 不能为空");
         }
@@ -103,6 +123,9 @@ public final class MediaMetadata {
         if (plainMac != null && plainMac.length != MAC_LEN) {
             throw new IllegalArgumentException("plainMac 长度必须为 " + MAC_LEN);
         }
+        if (canary != null && canary.length != CANARY_LEN) {
+            throw new IllegalArgumentException("canary 长度必须为 " + CANARY_LEN);
+        }
         this.format = format;
         this.profile = profile;
         this.paranoid = paranoid;
@@ -110,6 +133,7 @@ public final class MediaMetadata {
         this.hkdfSalt = hkdfSalt.clone();
         this.nonce = nonce.clone();
         this.plainMac = plainMac == null ? null : plainMac.clone();
+        this.canary = canary == null ? null : canary.clone();
     }
 
     private static void requireLen(String name, byte[] v, int len) {

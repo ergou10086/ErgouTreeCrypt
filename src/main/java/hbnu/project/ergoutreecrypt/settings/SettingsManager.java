@@ -25,6 +25,8 @@ public final class SettingsManager {
     private static final String KEY_LAST_OUTPUT_DIR     = "last.output.dir";
     private static final String KEY_THEME_MODE          = "theme.mode";
     private static final String KEY_THREAD_COUNT        = "thread.count";
+    private static final String KEY_ARCHIVE_PWD_FALLBACK = "archive.password.fallback";
+    private static final String KEY_ARCHIVE_CUSTOM_ENC  = "archive.custom.encryption";
 
     // ---- 默认值 ----
     private static final boolean DEF_AUTO_DECOMPRESS  = true;
@@ -38,6 +40,8 @@ public final class SettingsManager {
     private static final boolean DEF_AUTO_CLEAR_PWD   = false;
     private static final String  DEF_THEME_MODE       = "SYSTEM";
     private static final int     DEF_THREAD_COUNT     = 4;
+    private static final boolean DEF_ARCHIVE_PWD_FALLBACK = false;
+    private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
     private static final int     MIN_THREAD_COUNT     = 1;
     private static final int     MAX_THREAD_COUNT     = 16;
 
@@ -117,5 +121,48 @@ public final class SettingsManager {
             v = MAX_THREAD_COUNT;
         }
         PREFS.putInt(KEY_THREAD_COUNT, v);
+    }
+
+    /**
+     * 归档密码为空时，是否回退使用文件加密密码保护压缩包。
+     *
+     * <p>关闭（默认）时：归档密码留空 = 生成无密码明文归档。
+     * 开启时：归档密码留空则使用加密密码做 ZIP/7Z 原生保护或 GZ 包裹。
+     *
+     * @return true 表示启用回退
+     */
+    public static boolean isArchivePasswordFallback() {
+        return PREFS.getBoolean(KEY_ARCHIVE_PWD_FALLBACK, DEF_ARCHIVE_PWD_FALLBACK);
+    }
+
+    /**
+     * 设置归档密码回退到加密密码的开关。
+     *
+     * @param v true 启用回退
+     */
+    public static void setArchivePasswordFallback(boolean v) {
+        PREFS.putBoolean(KEY_ARCHIVE_PWD_FALLBACK, v);
+    }
+
+    /**
+     * 是否为非 ZIP 格式（GZ / TAR.GZ / 7Z）启用本工具特有的压缩包加密方式。
+     *
+     * <p>本工具特有加密采用整体 AES-256-CTR 包裹（MAGIC 头），仅能由本工具解密。
+     * 关闭（默认）时：GZ / TAR.GZ / 7Z 不支持密码，始终生成明文归档。
+     * 开启时：这三种格式可使用密码进行 MAGIC 包裹加密。ZIP 始终走原生 AES，不受此开关影响。
+     *
+     * @return true 表示启用非 ZIP 格式的工具特有加密
+     */
+    public static boolean isArchiveCustomEncryption() {
+        return PREFS.getBoolean(KEY_ARCHIVE_CUSTOM_ENC, DEF_ARCHIVE_CUSTOM_ENC);
+    }
+
+    /**
+     * 设置非 ZIP 格式工具特有加密开关。
+     *
+     * @param v true 启用
+     */
+    public static void setArchiveCustomEncryption(boolean v) {
+        PREFS.putBoolean(KEY_ARCHIVE_CUSTOM_ENC, v);
     }
 }

@@ -9,6 +9,7 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 
 import org.bouncycastle.crypto.digests.SHA3Digest;
@@ -75,7 +76,7 @@ public final class Deniability {
     public static void addDeniability(String volumePath, String password,
                                       ProgressReporter reporter) throws Exception {
         if (reporter != null) {
-            reporter.setStatus("Adding deniability...");
+            reporter.setStatus(Messages.get("status.deniability.add"));
         }
 
         long total = Files.size(Path.of(volumePath));
@@ -154,7 +155,7 @@ public final class Deniability {
     public static String removeDeniability(String volumePath, String password,
                                             ProgressReporter reporter, RsCodecs rs) throws Exception {
         if (reporter != null) {
-            reporter.setStatus("Removing deniability...");
+            reporter.setStatus(Messages.get("status.deniability.remove"));
         }
 
         long total = Files.size(Path.of(volumePath));

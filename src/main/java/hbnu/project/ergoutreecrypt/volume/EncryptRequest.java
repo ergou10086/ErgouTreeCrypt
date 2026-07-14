@@ -57,9 +57,24 @@ public final class EncryptRequest {
     private boolean reedSolomon;
 
     /**
-     * 是否添加可否认加密外层。
+     * 是否添加可否认加密外层（旧版简单包装）。
      */
     private boolean deniability;
+
+    /**
+     * 是否启用双卷可否认加密（新：真/伪双密码，一个容器两份内容）。
+     */
+    private boolean dualDeniability;
+
+    /**
+     * 双卷可否认加密的钓鱼文件路径。
+     */
+    private String decoyFilePath;
+
+    /**
+     * 双卷可否认加密的钓鱼密码（伪密码，胁迫时可安全交出）。
+     */
+    private String fakePassword;
 
     /**
      * 是否先压缩再加密（单文件内部压缩）。
@@ -174,6 +189,30 @@ public final class EncryptRequest {
 
     public void setDeniability(boolean d) {
         this.deniability = d;
+    }
+
+    public boolean isDualDeniability() {
+        return dualDeniability;
+    }
+
+    public void setDualDeniability(boolean d) {
+        this.dualDeniability = d;
+    }
+
+    public String getDecoyFilePath() {
+        return decoyFilePath;
+    }
+
+    public void setDecoyFilePath(String f) {
+        this.decoyFilePath = f;
+    }
+
+    public String getFakePassword() {
+        return fakePassword;
+    }
+
+    public void setFakePassword(String p) {
+        this.fakePassword = p;
     }
 
     public boolean isCompress() {

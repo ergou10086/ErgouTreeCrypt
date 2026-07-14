@@ -22,6 +22,8 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaProgress;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
+import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
@@ -167,7 +169,15 @@ public class MediaCryptController {
     @FXML
     private Label avProgressInfo;
     @FXML
+    private Label avCryptoProgressCaption;
+    @FXML
     private ProgressBar avProgressBar;
+    @FXML
+    private VBox avArchiveProgressBox;
+    @FXML
+    private Label avArchiveProgressCaption;
+    @FXML
+    private ProgressBar avArchiveProgressBar;
     @FXML
     private Button avCancelBtn;
     @FXML
@@ -210,8 +220,10 @@ public class MediaCryptController {
         avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         avCompressFormatCombo.managedProperty().bind(avCompressAfterCheck.selectedProperty());
         avCompressFormatCombo.visibleProperty().bind(avCompressAfterCheck.selectedProperty());
-        avArchivePasswordField.managedProperty().bind(avCompressAfterCheck.selectedProperty());
-        avArchivePasswordField.visibleProperty().bind(avCompressAfterCheck.selectedProperty());
+        // 归档密码框：ZIP 始终可填；GZ/TAR.GZ/7Z 仅在开启「工具特有加密」时才显示
+        avCompressAfterCheck.selectedProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
+        avCompressFormatCombo.valueProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
+        updateArchivePasswordVisibility();
 
         // 解密时解压后解密：密码字段绑定
         avDecompressPasswordField.managedProperty().bind(avDecompressAfterCheck.selectedProperty());
@@ -260,6 +272,7 @@ public class MediaCryptController {
 
         avCompressAfterCheck.setText(Messages.get("options.compressAfter"));
         avCompressFormatCombo.setValue(SettingsManager.getDefaultCompressFormat());
+        updateArchivePasswordVisibility();
 
         setupInfoTooltips();
 
@@ -270,6 +283,8 @@ public class MediaCryptController {
         if (!running) {
             avStatusLabel.setText(Messages.get("status.ready"));
         }
+        avCryptoProgressCaption.setText(Messages.get("progress.crypto"));
+        avArchiveProgressCaption.setText(Messages.get("progress.archive"));
         if (selectedFile != null) {
             showFileInfo();
         }
@@ -594,14 +609,71 @@ public class MediaCryptController {
         runTask(progress -> {
             codec.encrypt(input, output, pwdBytes, options, progress);
             if (doArchive) {
-                Platform.runLater(() -> avStatusLabel.setText(Messages.get("status.archiving")));
-                String archPwd = avArchivePasswordField.getText();
+                ProgressReporter archiveReporter = newArchiveReporter();
                 ArchivePacker.pack(archivePath, output, ArchivePacker.Format.valueOf(
                         avCompressFormatCombo.getValue().replace(".", "_")),
-                        archPwd == null || archPwd.isEmpty() ? null : archPwd);
+                        ArchivePacker.resolveArchivePassword(archPwdOrNull(), pwd),
+                        archiveReporter);
                 java.nio.file.Files.deleteIfExists(output);
             }
         }, Messages.format("av.status.success.encrypt", finalOutput.getFileName()));
+    }
+
+    /**
+     * 返回归档密码字段内容；空则返回 null。
+     *
+     * @return 归档密码或 null
+     */
+    private String archPwdOrNull() {
+        String archPwd = avArchivePasswordField.getText();
+        return archPwd == null || archPwd.isEmpty() ? null : archPwd;
+    }
+
+    /**
+     * 构建归档阶段进度回调，驱动独立的压缩/解压进度条。
+     *
+     * @return 进度回调实现
+     */
+    private ProgressReporter newArchiveReporter() {
+        return new ProgressReporter() {
+            @Override
+            public void setStatus(String text) {
+                setStatus(text, ProgressPhase.ARCHIVE);
+            }
+
+            @Override
+            public void setStatus(String text, ProgressPhase phase) {
+                Platform.runLater(() -> {
+                    setVisible(avArchiveProgressBox, true);
+                    avStatusLabel.setText(text);
+                });
+            }
+
+            @Override
+            public void setProgress(float fraction, String info) {
+                setProgress(fraction, info, ProgressPhase.ARCHIVE);
+            }
+
+            @Override
+            public void setProgress(float fraction, String info, ProgressPhase phase) {
+                Platform.runLater(() -> {
+                    setVisible(avArchiveProgressBox, true);
+                    avArchiveProgressBar.setProgress(fraction);
+                    if (info != null && !info.isEmpty()) {
+                        avProgressInfo.setText(info);
+                    }
+                });
+            }
+
+            @Override
+            public void setCanCancel(boolean can) {
+            }
+
+            @Override
+            public boolean isCancelled() {
+                return cancelRequested;
+            }
+        };
     }
 
     private void startDecrypt(String pwd) {
@@ -631,10 +703,11 @@ public class MediaCryptController {
             try {
                 // 解压后解密：先将压缩包解压到临时目录，找出其中的加密媒体文件
                 if (decompressFirst && isArchive) {
-                    // 阶段 1：解压（进度条置为轻微进度表示正在工作）
+                    ProgressReporter archiveReporter = newArchiveReporter();
                     Platform.runLater(() -> {
+                        setVisible(avArchiveProgressBox, true);
+                        avArchiveProgressBar.setProgress(0);
                         avStatusLabel.setText(Messages.get("status.extracting"));
-                        avProgressBar.setProgress(0.02);
                         avProgressInfo.setText("");
                     });
                     tempDir = Files.createTempDirectory("ergou-av-extract-");
@@ -643,7 +716,7 @@ public class MediaCryptController {
                             ? null : archPwd;
                     try {
                         ArchiveExtractor.extractPreserving(input, tempDir,
-                                effectiveArchPwd);
+                                effectiveArchPwd, archiveReporter);
                     } catch (ArchiveExtractor.PasswordNeededException pne) {
                         // 需要归档密码：弹窗询问后重试
                         java.util.concurrent.CompletableFuture<String> future =
@@ -665,12 +738,13 @@ public class MediaCryptController {
                                     + ": " + Messages.get("av.toast.needPassword"),
                                     pne);
                         }
-                        // 告知用户正在用新密码重试解压
                         Platform.runLater(() ->
                                 avStatusLabel.setText(Messages.get("status.extracting")));
                         ArchiveExtractor.extractPreserving(input, tempDir,
-                                retryPwd);
+                                retryPwd, archiveReporter);
                     }
+
+                    Platform.runLater(() -> avArchiveProgressBar.setProgress(1));
 
                     // 在解压结果中寻找第一个支持的媒体文件
                     try (Stream<Path> walk = Files.walk(tempDir)) {
@@ -742,6 +816,8 @@ public class MediaCryptController {
         setRunning(true);
         cancelRequested = false;
         avProgressBar.setProgress(0);
+        avArchiveProgressBar.setProgress(0);
+        setVisible(avArchiveProgressBox, false);
         avStatusLabel.setText(Messages.get("action.processing"));
 
         MediaProgress progress = new MediaProgress() {
@@ -826,13 +902,44 @@ public class MediaCryptController {
         label.setTooltip(tip);
     }
 
+    /**
+     * 根据「加密后压缩」勾选、所选归档格式与「工具特有加密」设置，
+     * 更新音视频页归档密码框的显隐与提示文案。
+     *
+     * <p>ZIP 始终可填密码；GZ / TAR.GZ / 7Z 仅在开启工具特有加密时才显示密码框。
+     */
+    private void updateArchivePasswordVisibility() {
+        boolean compressOn = avCompressAfterCheck.isSelected();
+        String fmt = avCompressFormatCombo.getValue();
+        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt);
+        boolean customEnc = SettingsManager.isArchiveCustomEncryption();
+        boolean show = compressOn && (isZip || customEnc);
+        avArchivePasswordField.setManaged(show);
+        avArchivePasswordField.setVisible(show);
+
+        String key;
+        if (isZip) {
+            key = SettingsManager.isArchivePasswordFallback()
+                    ? "options.archivePassword.placeholder"
+                    : "options.archivePassword.placeholder.nofallback";
+        } else {
+            key = SettingsManager.isArchivePasswordFallback()
+                    ? "options.archivePassword.placeholder.custom"
+                    : "options.archivePassword.placeholder.custom.nofallback";
+        }
+        avArchivePasswordField.setPromptText(Messages.get(key));
+    }
+
     private void setupInfoTooltips() {
         setTip(avProfileInfo, Messages.get("av.profile.tip"));
         setTip(avParanoidInfo, Messages.get("options.paranoid.tip"));
         setTip(avIntegrityInfo, Messages.get("av.option.integrity.tip"));
         setTip(avNoiseDecryptInfo, Messages.get("av.option.noiseDecrypt.tip"));
         setTip(avDecompressAfterInfo, Messages.get("av.option.decompressAfter.tip"));
-        setTip(avCompressAfterInfo, Messages.get("options.compressAfter.tip"));
+        setTip(avCompressAfterInfo, Messages.get(
+                SettingsManager.isArchiveCustomEncryption()
+                        ? "options.compressAfter.tip"
+                        : "options.compressAfter.tip.nocustom"));
     }
 
     private enum Mode {ENCRYPT, DECRYPT}

@@ -36,6 +36,11 @@ public final class Flags {
     private boolean padded;
 
     /**
+     * 是否为双卷可否认加密（EGTD）容器。
+     */
+    private boolean dualDeniable;
+
+    /**
      * 创建全 false 的默认标志位。
      */
     public Flags() {
@@ -74,9 +79,12 @@ public final class Flags {
     public boolean isPadded() { return padded; }
     public void setPadded(boolean padded) { this.padded = padded; }
 
+    public boolean isDualDeniable() { return dualDeniable; }
+    public void setDualDeniable(boolean dualDeniable) { this.dualDeniable = dualDeniable; }
+
     /**
      * 转换为 5 字节数组，按位置顺序：paranoid, useKeyfiles, keyfileOrdered, reedSolomon, padded。
-     * true → 1, false → 0。
+     * true → 1, false → 0。供标准卷头序列化使用。
      *
      * @return 5 字节标志位数组
      */
@@ -101,22 +109,56 @@ public final class Flags {
     }
 
     /**
-     * 从 5 字节数组解析标志位。若输入不足 5 字节则返回全 false 的默认值。
+     * 转换为 6 字节数组（含 dualDeniable），供双卷可否认加密 MetaBlock 使用。
+     * 格式同 {@link #toBytes()}，末尾追加 dualDeniable。
      *
-     * @param b 5 字节标志位数组
+     * @return 6 字节标志位数组
+     */
+    public byte[] toBytesExtended() {
+        byte[] b = new byte[6];
+        if (paranoid) {
+            b[0] = 1;
+        }
+        if (useKeyfiles) {
+            b[1] = 1;
+        }
+        if (keyfileOrdered) {
+            b[2] = 1;
+        }
+        if (reedSolomon) {
+            b[3] = 1;
+        }
+        if (padded) {
+            b[4] = 1;
+        }
+        if (dualDeniable) {
+            b[5] = 1;
+        }
+        return b;
+    }
+
+    /**
+     * 从字节数组解析标志位。兼容 5 字节（旧格式，dualDeniable 默认 false）和 6 字节（新格式）。
+     * 若输入为 null 或不足 5 字节则返回全 false 的默认值。
+     *
+     * @param b 字节数组（至少 5 字节）
      * @return 解析后的 Flags 实例
      */
     public static Flags fromBytes(byte[] b) {
         if (b == null || b.length < 5) {
             return new Flags();
         }
-        return new Flags(
+        Flags f = new Flags(
                 b[0] == 1,
                 b[1] == 1,
                 b[2] == 1,
                 b[3] == 1,
                 b[4] == 1
         );
+        if (b.length >= 6) {
+            f.dualDeniable = b[5] == 1;
+        }
+        return f;
     }
 
     @Override
@@ -131,7 +173,8 @@ public final class Flags {
                 && useKeyfiles == f.useKeyfiles
                 && keyfileOrdered == f.keyfileOrdered
                 && reedSolomon == f.reedSolomon
-                && padded == f.padded;
+                && padded == f.padded
+                && dualDeniable == f.dualDeniable;
     }
 
     @Override
@@ -141,6 +184,7 @@ public final class Flags {
         result = 31 * result + (keyfileOrdered ? 1 : 0);
         result = 31 * result + (reedSolomon ? 1 : 0);
         result = 31 * result + (padded ? 1 : 0);
+        result = 31 * result + (dualDeniable ? 1 : 0);
         return result;
     }
 
@@ -150,6 +194,7 @@ public final class Flags {
                 + ", useKeyfiles=" + useKeyfiles
                 + ", keyfileOrdered=" + keyfileOrdered
                 + ", reedSolomon=" + reedSolomon
-                + ", padded=" + padded + '}';
+                + ", padded=" + padded
+                + ", dualDeniable=" + dualDeniable + '}';
     }
 }

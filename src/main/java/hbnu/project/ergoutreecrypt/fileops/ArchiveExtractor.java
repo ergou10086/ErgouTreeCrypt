@@ -10,6 +10,8 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
+import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 
 import javax.crypto.Cipher;
@@ -31,15 +33,16 @@ import java.util.List;
 /**
  * 归档解压工具，支持自动检测并解密加密归档。
  *
- * <p>支持三种加密模式：
+ * <p>支持多种加密模式：
  * <ul>
- *   <li><b>原生加密（ZIP / 7Z）：</b>使用各容器自带 AES-256 加密，
+ *   <li><b>原生加密（ZIP）：</b>使用 zip4j 自带 AES-256 加密，
  *       外部工具（Bandizip / 7-Zip）可正确提示密码并解压。</li>
- *   <li><b>整体包裹加密（GZ / TAR.GZ）：</b>文件以魔数头
+ *   <li><b>整体包裹加密（GZ / TAR.GZ / 7Z）：</b>文件以魔数头
  *       {@code EGTC_ARCHV1} 开头，整体解密后得到明文归档再解压，
- *       需本工具解密。</li>
+ *       需本工具解密。7Z 已不再使用原生 AES。</li>
  *   <li><b>旧版逐条目加密：</b>归档内包含 {@code .enc} 后缀条目，
  *       每个条目单独解密（向后兼容）。</li>
+ *   <li><b>旧版 7Z 原生加密：</b>仍向后兼容，解压时可传入密码尝试打开。</li>
  * </ul>
  *
  * @author ErgouTree
@@ -181,21 +184,67 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 7z 加密检测：尝试无密码打开，失败则为原生加密；成功则扫描 .enc 条目。
+     * 7z 加密检测。
+     *
+     * <p>新版加密的 7Z 以 MAGIC 头整体包裹，已在 {@link #hasEncryptedEntries} 前置命中。
+     * 此处针对明文 7Z：检测旧版原生 AES（向后兼容）与旧版 {@code .enc} 条目。
+     *
+     * @param archive 7z 路径
+     * @return 是否需要密码
+     * @throws IOException 读取错误
      */
     private static boolean hasEncrypted7zEntries(Path archive) throws IOException {
         try {
-            try (SevenZFile szf = SevenZFile.builder().setFile(archive.toFile()).get()) {
-                for (SevenZArchiveEntry entry : szf.getEntries()) {
-                    if (entry.getName().toLowerCase().endsWith(".enc")) {
-                        return true;
-                    }
+            return isLegacyNative7zEncrypted(archive)
+                    || scan7zLegacyEncEntries(archive);
+        } catch (IOException e) {
+            // 无法判定时按需密码处理，避免静默失败
+            return true;
+        }
+    }
+
+    /**
+     * 检测旧版原生 AES 加密的 7Z（向后兼容）：原生 AES 下可无密码列出条目，
+     * 需尝试读取内容流；读取抛异常则视为加密。
+     *
+     * @param archive 7z 路径
+     * @return 是否为旧版原生加密 7Z
+     */
+    private static boolean isLegacyNative7zEncrypted(Path archive) {
+        try (SevenZFile szf = SevenZFile.builder().setFile(archive.toFile()).get()) {
+            for (SevenZArchiveEntry entry : szf.getEntries()) {
+                if (entry.isDirectory() || !entry.hasStream()) {
+                    continue;
                 }
-                return false;
+                try (InputStream in = szf.getInputStream(entry)) {
+                    in.readAllBytes();
+                    return false;
+                } catch (IOException e) {
+                    return true;
+                }
             }
+            return false;
         } catch (IOException e) {
             return true;
         }
+    }
+
+    /**
+     * 扫描 7z 内是否存在旧版 .enc 条目名。
+     *
+     * @param archive 7z 路径
+     * @return 是否含 .enc 后缀条目
+     * @throws IOException 打开失败
+     */
+    private static boolean scan7zLegacyEncEntries(Path archive) throws IOException {
+        try (SevenZFile szf = SevenZFile.builder().setFile(archive.toFile()).get()) {
+            for (SevenZArchiveEntry entry : szf.getEntries()) {
+                if (entry.getName().toLowerCase().endsWith(".enc")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ==================== 公共解压入口 ====================
@@ -373,8 +422,9 @@ public final class ArchiveExtractor {
                 files.add(outPath);
                 extracted++;
                 if (reporter != null && total > 0) {
-                    reporter.setStatus("Extracting " + extracted + "/" + total + "...");
-                    reporter.setProgress((float) extracted / (total * 2), "");
+                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, total),
+                            ProgressPhase.ARCHIVE);
+                    reporter.setProgress((float) extracted / total, "", ProgressPhase.ARCHIVE);
                 }
             }
         }
@@ -405,8 +455,9 @@ public final class ArchiveExtractor {
                 }
                 extracted++;
                 if (reporter != null && totalEntries > 0) {
-                    reporter.setStatus("Extracting " + extracted + "/" + totalEntries + "...");
-                    reporter.setProgress((float) extracted / (totalEntries * 2), "");
+                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, totalEntries),
+                            ProgressPhase.ARCHIVE);
+                    reporter.setProgress((float) extracted / totalEntries, "", ProgressPhase.ARCHIVE);
                 }
             }
         }
@@ -435,7 +486,8 @@ public final class ArchiveExtractor {
                 }
                 extracted++;
                 if (reporter != null && extracted % 5 == 0) {
-                    reporter.setStatus("Extracting (" + extracted + " entries)...");
+                    reporter.setStatus(Messages.format("status.extracting.count", extracted),
+                            ProgressPhase.ARCHIVE);
                 }
             }
         }
@@ -456,7 +508,8 @@ public final class ArchiveExtractor {
         }
         Path outFile = destDir.resolve(outName);
         if (reporter != null) {
-            reporter.setStatus("Extracting...");
+            reporter.setStatus(Messages.get("status.extracting"), ProgressPhase.ARCHIVE);
+            reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
         }
         try (InputStream fin = Files.newInputStream(archive);
              GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
@@ -505,8 +558,9 @@ public final class ArchiveExtractor {
                 files.add(outPath);
                 extracted++;
                 if (reporter != null && total > 0) {
-                    reporter.setStatus("Extracting " + extracted + "/" + total + "...");
-                    reporter.setProgress((float) extracted / (total * 2), "");
+                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, total),
+                            ProgressPhase.ARCHIVE);
+                    reporter.setProgress((float) extracted / total, "", ProgressPhase.ARCHIVE);
                 }
             }
         }
@@ -530,7 +584,8 @@ public final class ArchiveExtractor {
                 }
                 if (reporter != null) {
                     decrypted++;
-                    reporter.setStatus("Decrypting (" + decrypted + "/" + totalEncrypted + ")...");
+                    reporter.setStatus(Messages.format("status.decrypting.progress",
+                            decrypted, totalEncrypted));
                     if (totalEncrypted > 0) {
                         reporter.setProgress((float) decrypted / (totalEncrypted + rawFiles.size()), "");
                     }

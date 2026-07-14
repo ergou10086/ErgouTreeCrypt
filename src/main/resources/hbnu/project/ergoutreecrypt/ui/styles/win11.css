@@ -1430,6 +1430,23 @@
     -fx-padding: 3;
 }
 
+/* 压缩/解压独立进度条：使用 warning 色，与加解密 accent 色区分 */
+.progress-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -text-secondary;
+}
+
+.progress-archive > .bar {
+    -fx-background-color: -warning;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+.progress-archive:indeterminate > .bar {
+    -fx-background-color: linear-gradient(to right, transparent, -warning, transparent);
+}
+
 /* ==========================================================================
  * SECTION 19 — 提示框 (Tooltip)
  *    对应 FXML 中的 .tooltip, .info-tooltip

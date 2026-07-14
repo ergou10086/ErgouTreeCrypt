@@ -86,6 +86,11 @@ public final class OperationContext implements AutoCloseable {
     boolean triedFullRSDecode;
 
     /**
+     * 双卷可否认解密是否已在预处理阶段完成（后续流水线应跳过）。
+     */
+    boolean dualDeniabilityDone;
+
+    /**
      * 待处理的总字节数。
      */
     long total;
@@ -129,21 +134,47 @@ public final class OperationContext implements AutoCloseable {
     }
 
     /**
-     * 更新状态文本（通过进度回调）。
+     * 更新状态文本（通过进度回调，默认 {@link ProgressPhase#CRYPTO}）。
+     *
+     * @param s 状态文案
      */
     void setStatus(String s) {
+        setStatus(s, ProgressPhase.CRYPTO);
+    }
+
+    /**
+     * 更新状态文本并指定进度阶段。
+     *
+     * @param s     状态文案
+     * @param phase 进度阶段
+     */
+    void setStatus(String s, ProgressPhase phase) {
         if (reporter != null) {
-            reporter.setStatus(s);
+            reporter.setStatus(s, phase);
             reporter.update();
         }
     }
 
     /**
-     * 更新进度（通过进度回调）。
+     * 更新进度（默认 {@link ProgressPhase#CRYPTO}）。
+     *
+     * @param fraction 完成比例
+     * @param info     附加信息
      */
     void updateProgress(float fraction, String info) {
+        updateProgress(fraction, info, ProgressPhase.CRYPTO);
+    }
+
+    /**
+     * 更新进度并指定阶段。
+     *
+     * @param fraction 完成比例
+     * @param info     附加信息
+     * @param phase    进度阶段
+     */
+    void updateProgress(float fraction, String info, ProgressPhase phase) {
         if (reporter != null) {
-            reporter.setProgress(fraction, info);
+            reporter.setProgress(fraction, info, phase);
         }
     }
 

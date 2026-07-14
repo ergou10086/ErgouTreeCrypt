@@ -148,6 +148,33 @@
                                                 <CheckBox fx:id="deniabilityCheck" styleClass="check"/>
                                                 <Label fx:id="deniabilityInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
+                                            <!-- 双卷可否认加密：钓鱼文件选择 -->
+                                            <HBox fx:id="decoyFileRow" alignment="CENTER_LEFT" spacing="4"
+                                                  managed="false" visible="false">
+                                                <TextField fx:id="decoyFilePathField" styleClass="text-input"
+                                                           HBox.hgrow="ALWAYS" editable="true"/>
+                                                <Button fx:id="decoyFileDefaultBtn" styleClass="btn-ghost"
+                                                        text="默认"/>
+                                                <Button fx:id="decoyFileBrowseBtn" text="..."
+                                                        styleClass="btn-ghost"/>
+                                            </HBox>
+                                            <!-- 双卷可否认加密：伪密码 -->
+                                            <HBox fx:id="fakePasswordRow" alignment="CENTER_LEFT" spacing="4"
+                                                  managed="false" visible="false">
+                                                <PasswordField fx:id="fakePasswordField"
+                                                               styleClass="text-input" HBox.hgrow="ALWAYS"/>
+                                                <PasswordField fx:id="fakePasswordVisibleField"
+                                                               styleClass="text-input" HBox.hgrow="ALWAYS"
+                                                               managed="false" visible="false"/>
+                                                <Button fx:id="fakeShowToggle" text="👁"
+                                                        styleClass="btn-ghost"/>
+                                            </HBox>
+                                            <!-- 双卷可否认加密：确认伪密码 -->
+                                            <HBox fx:id="fakePasswordConfirmRow" alignment="CENTER_LEFT"
+                                                  managed="false" visible="false">
+                                                <PasswordField fx:id="fakeConfirmField"
+                                                               styleClass="text-input" HBox.hgrow="ALWAYS"/>
+                                            </HBox>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="compressCheck" styleClass="check"/>
                                                 <Label fx:id="compressInfo" styleClass="info-icon" text="i"/>
@@ -232,7 +259,13 @@
                                 <Region HBox.hgrow="ALWAYS"/>
                                 <Label fx:id="progressInfoLabel" styleClass="status-info"/>
                             </HBox>
+                            <Label fx:id="cryptoProgressCaption" styleClass="progress-caption"/>
                             <ProgressBar fx:id="progressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
+                            <VBox fx:id="archiveProgressBox" spacing="4" managed="false" visible="false">
+                                <Label fx:id="archiveProgressCaption" styleClass="progress-caption"/>
+                                <ProgressBar fx:id="archiveProgressBar" styleClass="progress, progress-archive"
+                                             progress="0" maxWidth="Infinity"/>
+                            </VBox>
                         </VBox>
                         <HBox spacing="12" alignment="CENTER_RIGHT">
                             <Button fx:id="cancelBtn" styleClass="btn-secondary" managed="false" visible="false"

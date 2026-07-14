@@ -148,6 +148,16 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.autoClearPassword.tip")), 2, row);
         row++;
 
+        CheckBox archiveCustomEncryption = checkBox(Messages.get("settings.archiveCustomEncryption"));
+        grid.add(archiveCustomEncryption, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.archiveCustomEncryption.tip")), 2, row);
+        row++;
+
+        CheckBox archivePasswordFallback = checkBox(Messages.get("settings.archivePasswordFallback"));
+        grid.add(archivePasswordFallback, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.archivePasswordFallback.tip")), 2, row);
+        row++;
+
         // 加密线程数
         Spinner<Integer> threadCountSpinner = new Spinner<>(1, 16, 4);
         threadCountSpinner.setPrefWidth(90);
@@ -179,6 +189,8 @@ public final class SettingsDialog {
         defaultSplitSize.getValueFactory().setValue(SettingsManager.getDefaultSplitSize());
         rememberOutputDir.setSelected(SettingsManager.isRememberOutputDir());
         autoClearPassword.setSelected(SettingsManager.isAutoClearPassword());
+        archiveCustomEncryption.setSelected(SettingsManager.isArchiveCustomEncryption());
+        archivePasswordFallback.setSelected(SettingsManager.isArchivePasswordFallback());
         threadCountSpinner.getValueFactory().setValue(SettingsManager.getThreadCount());
 
         // ---- 监听即时写入 ----
@@ -216,6 +228,10 @@ public final class SettingsDialog {
                 SettingsManager.setRememberOutputDir(b));
         autoClearPassword.selectedProperty().addListener((o, a, b) ->
                 SettingsManager.setAutoClearPassword(b));
+        archiveCustomEncryption.selectedProperty().addListener((o, a, b) ->
+                SettingsManager.setArchiveCustomEncryption(b));
+        archivePasswordFallback.selectedProperty().addListener((o, a, b) ->
+                SettingsManager.setArchivePasswordFallback(b));
         threadCountSpinner.valueProperty().addListener((o, a, b) ->
                 SettingsManager.setThreadCount(b));
 

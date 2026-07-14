@@ -4,6 +4,7 @@ import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -116,8 +117,10 @@ public final class FolderCrypt {
             }
         }
 
-        // 线程数钳制
+        // 线程数钳制；并行时用聚合器以最慢任务为基准，避免进度条回跳并汇总吞吐
         int threads = Math.max(1, Math.min(opts.threadCount, total));
+        ParallelProgressAggregator progress =
+                reporter != null ? new ParallelProgressAggregator(reporter, total) : null;
         ExecutorService executor = CryptoThreadPool.forEncrypt(threads);
         AtomicInteger completed = new AtomicInteger(0);
         AtomicReference<Exception> firstError = new AtomicReference<>(null);
@@ -129,39 +132,50 @@ public final class FolderCrypt {
             for (int i = 0; i < filesToEncrypt.size(); i++) {
                 final Path src = filesToEncrypt.get(i);
                 futures.add(executor.submit(() -> {
-                    if (reporter != null && reporter.isCancelled()) {
+                    if ((progress != null && progress.isCancelled())
+                            || (reporter != null && reporter.isCancelled())) {
                         return;
                     }
                     if (firstError.get() != null) {
                         return;
                     }
+                    ParallelProgressAggregator.TaskHandle task =
+                            progress != null ? progress.openTask() : null;
                     try {
                         Path rel = inputDir.relativize(src);
                         Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
+                        ProgressReporter taskReporter = task != null ? task : reporter;
 
                         if (opts.split) {
                             Path chunkDir = destEnc.getParent().resolve(
                                     stripExt(destEnc.getFileName().toString()));
                             Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
-                            EncryptRequest req = buildRequest(src, chunkBase, opts);
+                            EncryptRequest req = buildRequest(src, chunkBase, opts, taskReporter);
                             req.setSplit(true);
                             req.setArchiveFormat(null);
                             Encryptor.encrypt(req);
                         } else {
-                            EncryptRequest req = buildRequest(src, destEnc, opts);
+                            EncryptRequest req = buildRequest(src, destEnc, opts, taskReporter);
                             req.setSplit(false);
                             req.setArchiveFormat(null);
                             Encryptor.encrypt(req);
                         }
 
                         int done = completed.incrementAndGet();
-                        if (reporter != null) {
+                        if (progress != null) {
+                            progress.setStatus(
+                                    Messages.format("status.encrypting.progress", done, total, rel));
+                        } else if (reporter != null) {
                             reporter.setStatus(
-                                    String.format("Encrypting %d/%d: %s", done, total, rel));
+                                    Messages.format("status.encrypting.progress", done, total, rel));
                             reporter.setProgress((float) done / total, "");
                         }
                     } catch (Exception e) {
                         firstError.compareAndSet(null, e);
+                    } finally {
+                        if (task != null) {
+                            task.close();
+                        }
                     }
                 }));
             }
@@ -170,13 +184,16 @@ public final class FolderCrypt {
             for (int i = 0; i < deepDirs.size(); i++) {
                 final Path deepDir = deepDirs.get(i);
                 futures.add(executor.submit(() -> {
-                    if (reporter != null && reporter.isCancelled()) {
+                    if ((progress != null && progress.isCancelled())
+                            || (reporter != null && reporter.isCancelled())) {
                         return;
                     }
                     if (firstError.get() != null) {
                         return;
                     }
                     Path tempArchive = null;
+                    ParallelProgressAggregator.TaskHandle task =
+                            progress != null ? progress.openTask() : null;
                     try {
                         Path rel = inputDir.relativize(deepDir);
                         String dirName = deepDir.getFileName().toString();
@@ -184,6 +201,7 @@ public final class FolderCrypt {
                                 ? workDir.resolve(rel.getParent().toString())
                                 : workDir;
                         Path destEnc = parentInWork.resolve(dirName + ".zip.ergou");
+                        ProgressReporter taskReporter = task != null ? task : reporter;
 
                         // 将深目录打包为临时 ZIP
                         tempArchive = archiveDirectory(deepDir);
@@ -192,27 +210,34 @@ public final class FolderCrypt {
                             Path chunkDir = destEnc.getParent().resolve(
                                     stripExt(destEnc.getFileName().toString()));
                             Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
-                            EncryptRequest req = buildRequest(tempArchive, chunkBase, opts);
+                            EncryptRequest req = buildRequest(tempArchive, chunkBase, opts, taskReporter);
                             req.setSplit(true);
                             req.setArchiveFormat(null);
                             Encryptor.encrypt(req);
                         } else {
-                            EncryptRequest req = buildRequest(tempArchive, destEnc, opts);
+                            EncryptRequest req = buildRequest(tempArchive, destEnc, opts, taskReporter);
                             req.setSplit(false);
                             req.setArchiveFormat(null);
                             Encryptor.encrypt(req);
                         }
 
                         int done = completed.incrementAndGet();
-                        if (reporter != null) {
+                        if (progress != null) {
+                            progress.setStatus(
+                                    Messages.format("status.encrypting.progress", done, total,
+                                            rel.getFileName() + " (archived)"));
+                        } else if (reporter != null) {
                             reporter.setStatus(
-                                    String.format("Encrypting %d/%d: %s", done, total,
+                                    Messages.format("status.encrypting.progress", done, total,
                                             rel.getFileName() + " (archived)"));
                             reporter.setProgress((float) done / total, "");
                         }
                     } catch (Exception e) {
                         firstError.compareAndSet(null, e);
                     } finally {
+                        if (task != null) {
+                            task.close();
+                        }
                         if (tempArchive != null) {
                             try {
                                 Files.deleteIfExists(tempArchive);
@@ -257,7 +282,8 @@ public final class FolderCrypt {
         // 若启用压缩：将整个工作目录打成一个压缩包，压缩为最后一步。
         if (opts.archiveFormat != null && !opts.archiveFormat.isEmpty()) {
             if (reporter != null) {
-                reporter.setStatus("Archiving...");
+                reporter.setStatus(Messages.get("status.archiving"), ProgressPhase.ARCHIVE);
+                reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
             }
             ArchivePacker.Format fmt = ArchivePacker.parseFormat(opts.archiveFormat);
             Path archivePath = outputDir.resolve(folderName + ArchivePacker.extOf(fmt));
@@ -265,8 +291,13 @@ public final class FolderCrypt {
             try (Stream<Path> walk = Files.walk(workDir)) {
                 entries = walk.filter(Files::isRegularFile).sorted().toList();
             }
-            ArchivePacker.packEntries(archivePath, workDir, entries, fmt, opts.archivePassword);
+            ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
+                    ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password, fmt),
+                    reporter);
             deleteRecursively(workDir);
+            if (reporter != null) {
+                reporter.setProgress(1f, "", ProgressPhase.ARCHIVE);
+            }
         }
 
         if (reporter != null) {
@@ -349,9 +380,12 @@ public final class FolderCrypt {
         Path extractDir = Files.createTempDirectory("ergou-extract-");
         try {
             if (reporter != null) {
-                reporter.setStatus("Extracting archive...");
+                reporter.setStatus(Messages.get("status.extracting"), ProgressPhase.ARCHIVE);
+                reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
             }
-            ArchiveExtractor.extractPreserving(archive, extractDir, opts.archivePassword, reporter);
+            String archPwd = ArchivePacker.resolveArchivePassword(
+                    opts.archivePassword, opts.password);
+            ArchiveExtractor.extractPreserving(archive, extractDir, archPwd, reporter);
             // 解压结果可能是普通加密文件、分卷碎片子目录、嵌套压缩包或多层目录结构，统一交给目录解密逻辑。
             decryptDirectory(extractDir, outputDir, base, opts, stats, depth);
         } finally {
@@ -401,9 +435,12 @@ public final class FolderCrypt {
         }
 
         // 嵌套调用（递归解压内部归档）始终使用串行模式，避免线程爆炸
-        // 外层调用使用配置的线程数
+        // 外层调用使用配置的线程数；并行时用聚合器以最慢任务为基准
         boolean isTopLevel = (depth == 0);
         int threads = isTopLevel ? Math.max(1, Math.min(opts.threadCount, total)) : 1;
+        ParallelProgressAggregator progress =
+                (reporter != null && threads > 1)
+                        ? new ParallelProgressAggregator(reporter, total) : null;
         ExecutorService executor = threads > 1 ? CryptoThreadPool.forDecrypt(threads) : null;
         AtomicInteger completed = new AtomicInteger(0);
         AtomicReference<Exception> firstError = new AtomicReference<>(null);
@@ -413,21 +450,27 @@ public final class FolderCrypt {
             for (int i = 0; i < units.size(); i++) {
                 final Unit u = units.get(i);
                 Runnable task = () -> {
-                    // 检查是否已被取消或已有错误
-                    if (reporter != null && reporter.isCancelled()) {
+                    if ((progress != null && progress.isCancelled())
+                            || (reporter != null && reporter.isCancelled())) {
                         return;
                     }
                     if (firstError.get() != null) {
                         return;
                     }
+                    ParallelProgressAggregator.TaskHandle handle =
+                            progress != null ? progress.openTask() : null;
                     try {
                         Path relParent = dir.relativize(u.relativeTo);
                         Path destParent = mirrorRoot.resolve(relParent.toString());
+                        DecryptOptions taskOpts = opts;
+                        if (handle != null) {
+                            taskOpts = cloneDecryptOptions(opts);
+                            taskOpts.reporter = handle;
+                        }
 
                         if (u.isArchive) {
                             if (allowNested) {
-                                // 嵌套归档：递归内部始终串行
-                                DecryptOptions nestedOpts = cloneDecryptOptions(opts);
+                                DecryptOptions nestedOpts = cloneDecryptOptions(taskOpts);
                                 nestedOpts.threadCount = 1;
                                 decryptArchive(u.encFile, destParent, nestedOpts, stats, depth + 1);
                             } else {
@@ -437,22 +480,29 @@ public final class FolderCrypt {
                             }
                         } else if (u.isChunkDir) {
                             Path out = destParent.resolve(stripEncExt(u.outputName));
-                            decryptRecombine(u.chunkBase, out, opts);
+                            decryptRecombine(u.chunkBase, out, taskOpts);
                             stats.decrypted.incrementAndGet();
                         } else {
                             Path out = destParent.resolve(stripEncExt(u.outputName));
-                            decryptSingle(u.encFile, out, opts);
+                            decryptSingle(u.encFile, out, taskOpts);
                             stats.decrypted.incrementAndGet();
                         }
 
                         int done = completed.incrementAndGet();
-                        if (reporter != null) {
+                        if (progress != null) {
+                            progress.setStatus(
+                                    Messages.format("status.decrypting.progress", done, total));
+                        } else if (reporter != null) {
                             reporter.setStatus(
-                                    String.format("Decrypting %d/%d", done, total));
+                                    Messages.format("status.decrypting.progress", done, total));
                             reporter.setProgress((float) done / total, "");
                         }
                     } catch (Exception e) {
                         firstError.compareAndSet(null, e);
+                    } finally {
+                        if (handle != null) {
+                            handle.close();
+                        }
                     }
                 };
 
@@ -544,7 +594,8 @@ public final class FolderCrypt {
             }
             try {
                 if (reporter != null) {
-                    reporter.setStatus("Extracting " + archive.getFileName() + "...");
+                    reporter.setStatus(Messages.format("status.extracting.file",
+                            archive.getFileName()), ProgressPhase.ARCHIVE);
                 }
                 // 深目录归档内是明文文件，直接解压即可（无需解密）
                 Path extractDest = archive.getParent();
@@ -555,7 +606,8 @@ public final class FolderCrypt {
             } catch (Exception e) {
                 // 归档解压失败不中断整体流程，仅跳过该归档
                 if (reporter != null) {
-                    reporter.setStatus("Skipped " + archive.getFileName() + ": " + e.getMessage());
+                    reporter.setStatus(Messages.format("status.skipped",
+                            archive.getFileName(), e.getMessage()));
                 }
             }
         }
@@ -798,7 +850,8 @@ public final class FolderCrypt {
     // 请求构建
     // ================================================================
 
-    private static EncryptRequest buildRequest(Path input, Path output, EncryptOptions opts) {
+    private static EncryptRequest buildRequest(Path input, Path output, EncryptOptions opts,
+                                               ProgressReporter reporter) {
         EncryptRequest req = new EncryptRequest();
         req.setInputFile(input.toString());
         req.setOutputFile(output.toString());
@@ -813,7 +866,7 @@ public final class FolderCrypt {
             req.setKeyfiles(opts.keyfiles);
             req.setKeyfileOrdered(opts.keyfileOrdered);
         }
-        req.setReporter(opts.reporter);
+        req.setReporter(reporter);
         return req;
     }
 

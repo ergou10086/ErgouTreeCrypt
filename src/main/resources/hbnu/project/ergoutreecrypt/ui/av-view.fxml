@@ -135,7 +135,13 @@
                     <Region HBox.hgrow="ALWAYS"/>
                     <Label fx:id="avProgressInfo" styleClass="status-info"/>
                 </HBox>
+                <Label fx:id="avCryptoProgressCaption" styleClass="progress-caption"/>
                 <ProgressBar fx:id="avProgressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
+                <VBox fx:id="avArchiveProgressBox" spacing="4" managed="false" visible="false">
+                    <Label fx:id="avArchiveProgressCaption" styleClass="progress-caption"/>
+                    <ProgressBar fx:id="avArchiveProgressBar" styleClass="progress, progress-archive"
+                                 progress="0" maxWidth="Infinity"/>
+                </VBox>
             </VBox>
             <HBox spacing="12" alignment="CENTER_RIGHT">
                 <Button fx:id="avCancelBtn" styleClass="btn-secondary" managed="false" visible="false" onAction="#onCancel"/>

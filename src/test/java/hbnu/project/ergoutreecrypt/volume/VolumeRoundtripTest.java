@@ -652,6 +652,119 @@ public final class VolumeRoundtripTest {
         return path;
     }
 
+    // ================================================================
+    // Dual Deniability integration
+    // ================================================================
+
+    @Test
+    void testDualDeniabilityIntegration(@TempDir Path tempDir) throws Exception {
+        byte[] realData = generateTestData(500 * 1024);
+        byte[] decoyData = "Integration test decoy.\n".getBytes();
+
+        Path realFile = createFile(tempDir, "real.bin", realData);
+        Path decoyFile = createFile(tempDir, "decoy.txt", decoyData);
+        Path output = tempDir.resolve("dual_int.ergou");
+        Path decReal = tempDir.resolve("real_out.bin");
+        Path decFake = tempDir.resolve("fake_out.txt");
+
+        EncryptRequest encReq = new EncryptRequest();
+        encReq.setInputFile(realFile.toString());
+        encReq.setDecoyFilePath(decoyFile.toString());
+        encReq.setPassword("real-integration");
+        encReq.setFakePassword("fake-integration");
+        encReq.setDualDeniability(true);
+        encReq.setOutputFile(output.toString());
+        encReq.setRsCodecs(rs);
+        Encryptor.encrypt(encReq);
+
+        assertTrue(DualDeniability.isDualDeniable(output.toString()));
+
+        // Real password decrypt
+        DecryptRequest realReq = new DecryptRequest();
+        realReq.setInputFile(output.toString());
+        realReq.setOutputFile(decReal.toString());
+        realReq.setPassword("real-integration");
+        realReq.setRsCodecs(rs);
+        Decryptor.decrypt(realReq);
+        assertArrayEquals(realData, Files.readAllBytes(decReal));
+
+        // Fake password decrypt (create new output file)
+        DecryptRequest fakeReq = new DecryptRequest();
+        fakeReq.setInputFile(output.toString());
+        fakeReq.setOutputFile(decFake.toString());
+        fakeReq.setPassword("fake-integration");
+        fakeReq.setRsCodecs(rs);
+        Decryptor.decrypt(fakeReq);
+        assertArrayEquals(decoyData, Files.readAllBytes(decFake));
+    }
+
+    @Test
+    void testDualDeniabilityWithParanoidRs(@TempDir Path tempDir) throws Exception {
+        byte[] realData = generateTestData(300 * 1024);
+        byte[] decoyData = generateTestData(100 * 1024);
+
+        Path realFile = createFile(tempDir, "real.bin", realData);
+        Path decoyFile = createFile(tempDir, "decoy.bin", decoyData);
+        Path output = tempDir.resolve("dual_pr.ergou");
+        Path decrypted = tempDir.resolve("out.bin");
+
+        EncryptRequest encReq = new EncryptRequest();
+        encReq.setInputFile(realFile.toString());
+        encReq.setDecoyFilePath(decoyFile.toString());
+        encReq.setPassword("real-pr");
+        encReq.setFakePassword("fake-pr");
+        encReq.setDualDeniability(true);
+        encReq.setParanoid(true);
+        encReq.setReedSolomon(true);
+        encReq.setOutputFile(output.toString());
+        encReq.setRsCodecs(rs);
+        Encryptor.encrypt(encReq);
+
+        DecryptRequest decReq = new DecryptRequest();
+        decReq.setInputFile(output.toString());
+        decReq.setOutputFile(decrypted.toString());
+        decReq.setPassword("real-pr");
+        decReq.setRsCodecs(rs);
+        Decryptor.decrypt(decReq);
+        assertArrayEquals(realData, Files.readAllBytes(decrypted));
+    }
+
+    @Test
+    void testDualDeniabilitySplit(@TempDir Path tempDir) throws Exception {
+        byte[] realData = generateTestData(3 * 1024 * 1024); // 3 MiB
+        byte[] decoyData = generateTestData(200 * 1024);
+
+        Path realFile = createFile(tempDir, "real.bin", realData);
+        Path decoyFile = createFile(tempDir, "decoy.bin", decoyData);
+        Path output = tempDir.resolve("dual_split.ergou");
+        Path decrypted = tempDir.resolve("out.bin");
+
+        EncryptRequest encReq = new EncryptRequest();
+        encReq.setInputFile(realFile.toString());
+        encReq.setDecoyFilePath(decoyFile.toString());
+        encReq.setPassword("real-split");
+        encReq.setFakePassword("fake-split");
+        encReq.setDualDeniability(true);
+        encReq.setSplit(true);
+        encReq.setChunkSize(1); // 1 MiB chunks
+        encReq.setOutputFile(output.toString());
+        encReq.setRsCodecs(rs);
+        Encryptor.encrypt(encReq);
+
+        // After split, chunks are in dual_split/ folder
+        Path chunkDir = tempDir.resolve("dual_split");
+        assertTrue(Files.exists(chunkDir.resolve("dual_split.ergou.0")), "chunk 0 should exist");
+
+        DecryptRequest decReq = new DecryptRequest();
+        decReq.setInputFile(chunkDir.resolve("dual_split.ergou.0").toString());
+        decReq.setOutputFile(decrypted.toString());
+        decReq.setPassword("real-split");
+        decReq.setRecombine(true);
+        decReq.setRsCodecs(rs);
+        Decryptor.decrypt(decReq);
+        assertArrayEquals(realData, Files.readAllBytes(decrypted));
+    }
+
     private static byte[] generateTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {

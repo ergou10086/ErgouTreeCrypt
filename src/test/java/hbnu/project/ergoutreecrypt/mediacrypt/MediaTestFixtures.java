@@ -198,6 +198,57 @@ final class MediaTestFixtures {
     }
 
     /**
+     * 构造最小合法 M4A 音频文件，其中 {@code mdat} 使用 size==0（延伸至文件尾）。
+     *
+     * <p>模拟 Apple 风格 m4a（ftyp → moov → mdat(size=0)）。
+     * 用于验证 size==0 mdat 的加解密正确性。
+     *
+     * @param mdatData mdat 中的音频数据
+     */
+    static byte[] buildM4aWithZeroSizeMdat(byte[] mdatData) {
+        int timescale = 44100;
+        int sampleDelta = 1024;
+        int numSamples = 1;
+        int duration = numSamples * sampleDelta;
+
+        byte[] ftypPayload = M4aBoxBuilder.ftypPayload();
+        int ftypSize = 8 + ftypPayload.length;
+
+        byte[] moovBodyPlaceholder = M4aBoxBuilder.buildMoovBody(
+                timescale, duration, numSamples, sampleDelta, 0);
+        int moovSize = 8 + moovBodyPlaceholder.length;
+
+        int mdatHeaderSize = 8;
+        int mdatBoxStart = ftypSize + moovSize;
+        int mdatPayloadOffset = mdatBoxStart + mdatHeaderSize;
+
+        byte[] moovBody = M4aBoxBuilder.buildMoovBody(
+                timescale, duration, numSamples, sampleDelta, mdatPayloadOffset);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        writeBox(out, "ftyp", ftypPayload);
+        writeBox(out, "moov", moovBody);
+        // mdat with size==0（延伸至文件尾）
+        writeZeroSizeBox(out, "mdat", mdatData);
+        return out.toByteArray();
+    }
+
+    /**
+     * 写入一个 size==0 的 ISO-BMFF box（表示"延伸至文件尾"）。
+     */
+    private static void writeZeroSizeBox(ByteArrayOutputStream out, String type, byte[] payload) {
+        try {
+            ByteBuffer size = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
+            size.putInt(0); // size==0 → 延伸至文件尾
+            out.write(size.array());
+            out.write(type.getBytes(StandardCharsets.US_ASCII));
+            out.write(payload);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * 生成可识别的伪 PCM/媒体数据（非全 0，便于验证加密确实改变了内容）。
      */
     static byte[] pseudoData(int len) {

@@ -21,8 +21,9 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata;
  *
  * <p>元数据载体：文件末尾追加自定义 {@code uuid} box（{@link Mp4UuidMetadata}），不改变 {@code mdat} 偏移。
  *
- * <p>限制（MVP）：要求 {@code mdat} 为确定长度（非 size==0 延伸至文件尾的形态），否则末尾追加会被 mdat 吞并；
- * 该情况会在解密重扫描时被检测。
+ * <p>对 {@code mdat} 使用 size==0（ISO-BMFF"延伸至文件尾"）的源文件，
+ * 解密时通过回退扫描（{@link BoxParser#scanForMetaUuidBox}）定位被 mdat 吞并的 uuid box，
+ * 不会修改原文件的 mdat 头，因此解密可逐字节还原原始文件。
  *
  * @author ErgouTree
  */
@@ -55,8 +56,15 @@ public final class Mp4Cipher extends AbstractMediaCipher {
     @Override
     protected DecryptPlan readMetadata(Path input, Path output)
             throws MediaCryptException, IOException {
+        // 先用常规解析查找 uuid box。
         BoxParser parser = BoxParser.parse(input);
         Mp4Box uuidBox = parser.findMetaUuidBox(input);
+        if (uuidBox == null) {
+            // 回退：直接扫描文件末尾，兼容 mdat 使用 size==0 的源文件。
+            // 此时 mdat 延伸至文件尾会吞并追加的 uuid box，导致 parser 的 box
+            // 列表中不包含 uuid，必须通过原始字节扫描定位。
+            uuidBox = BoxParser.scanForMetaUuidBox(input);
+        }
         if (uuidBox == null) {
             throw new MediaCryptException("MP4 中未找到加密元数据（uuid box），可能不是本工具加密的文件");
         }
@@ -91,7 +99,11 @@ public final class Mp4Cipher extends AbstractMediaCipher {
     public boolean isEncrypted(Path input) throws IOException {
         try {
             BoxParser parser = BoxParser.parse(input);
-            return parser.findMetaUuidBox(input) != null;
+            if (parser.findMetaUuidBox(input) != null) {
+                return true;
+            }
+            // 回退：兼容 mdat 使用 size==0 的加密文件。
+            return BoxParser.scanForMetaUuidBox(input) != null;
         } catch (MediaCryptException e) {
             return false;
         }

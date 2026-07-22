@@ -26,7 +26,7 @@
                 <VBox styleClass="content" spacing="16" maxWidth="720" HBox.hgrow="ALWAYS">
                     <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
 
-                    <!-- 隐写方案选择：LSB像素 / Chunk结构 -->
+                    <!-- 隐写方案选择 -->
                     <HBox styleClass="segmented" alignment="CENTER">
                         <ToggleButton fx:id="stegoPixelTab" styleClass="seg-btn" selected="true">
                             <toggleGroup><ToggleGroup fx:id="stegoSubGroup"/></toggleGroup>
@@ -35,10 +35,8 @@
                                       toggleGroup="$stegoSubGroup"/>
                     </HBox>
 
-                    <!-- ===== LSB像素 内容区 ===== -->
+                    <!-- ===== LSB像素 ===== -->
                     <VBox fx:id="stegoPixelContent" spacing="16">
-
-                        <!-- 隐藏/提取分段切换 -->
                         <HBox styleClass="segmented" alignment="CENTER">
                             <ToggleButton fx:id="stegoHideTab" styleClass="seg-btn" selected="true">
                                 <toggleGroup><ToggleGroup fx:id="stegoModeGroup"/></toggleGroup>
@@ -47,7 +45,7 @@
                                           toggleGroup="$stegoModeGroup"/>
                         </HBox>
 
-                        <!-- 图片选择卡片 -->
+                        <!-- 图片选择 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoImageLabel" styleClass="card-title"/>
                             <StackPane fx:id="stegoImageStack"
@@ -59,16 +57,14 @@
                                        text="⛶" StackPane.alignment="CENTER"/>
                             </StackPane>
                             <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label fx:id="stegoImageInfo" styleClass="field-hint"
-                                       HBox.hgrow="ALWAYS"/>
-                                <Button fx:id="stegoImageBtn" styleClass="btn-ghost"
-                                        onAction="#onChooseImage"/>
+                                <Label fx:id="stegoImageInfo" styleClass="field-hint" HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="stegoImageBtn" styleClass="btn-ghost" onAction="#onChooseImage"/>
                                 <Button fx:id="stegoClearImageBtn" styleClass="btn-ghost"
                                         onAction="#onClearImage" managed="false" visible="false"/>
                             </HBox>
                         </VBox>
 
-                        <!-- 待隐藏文件卡片（仅隐藏模式） -->
+                        <!-- 待隐藏文件 -->
                         <VBox fx:id="stegoFileCard" styleClass="card" spacing="8">
                             <Label fx:id="stegoFileLabel" styleClass="card-title"/>
                             <HBox alignment="CENTER_LEFT" spacing="12">
@@ -77,14 +73,13 @@
                                     <Label fx:id="stegoFileName" styleClass="file-name"/>
                                     <Label fx:id="stegoFileSize" styleClass="file-meta"/>
                                 </VBox>
-                                <Button fx:id="stegoFileBtn" styleClass="btn-ghost"
-                                        onAction="#onChooseFile"/>
+                                <Button fx:id="stegoFileBtn" styleClass="btn-ghost" onAction="#onChooseFile"/>
                                 <Button fx:id="stegoClearFileBtn" styleClass="btn-ghost"
                                         onAction="#onClearFile" managed="false" visible="false"/>
                             </HBox>
                         </VBox>
 
-                        <!-- 密码卡片 -->
+                        <!-- 密码 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoPasswordLabel" styleClass="card-title"/>
                             <StackPane>
@@ -100,7 +95,7 @@
                             </HBox>
                         </VBox>
 
-                        <!-- 选项卡片 -->
+                        <!-- 选项 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoOptionsLabel" styleClass="card-title"/>
                             <HBox spacing="12" alignment="CENTER_LEFT">
@@ -115,9 +110,27 @@
                                 <CheckBox fx:id="stegoIntegrityCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoIntegrityLabel"/>
                             </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoStealthCheck" styleClass="check"/>
+                                <Label fx:id="stegoStealthLabel"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoObfuscateCheck" styleClass="check"/>
+                                <Label fx:id="stegoObfuscateLabel"/>
+                            </HBox>
+                            <HBox fx:id="stegoObfuscateRow" spacing="12" alignment="CENTER_LEFT"
+                                  managed="false" visible="false">
+                                <Label fx:id="stegoObfuscateSizeLabel" styleClass="field-hint"/>
+                                <TextField fx:id="stegoObfuscateSizeField" styleClass="text-input"
+                                           prefWidth="120" maxWidth="120" promptText="KB"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoBruteForceCheck" styleClass="check" selected="true"/>
+                                <Label fx:id="stegoBruteForceLabel"/>
+                            </HBox>
                         </VBox>
 
-                        <!-- 容量指示器（仅隐藏模式） -->
+                        <!-- 容量 -->
                         <VBox fx:id="stegoCapacityCard" styleClass="card" spacing="8">
                             <Label fx:id="stegoCapacityLabel" styleClass="card-title"/>
                             <ProgressBar fx:id="stegoCapacityBar" styleClass="progress"
@@ -126,10 +139,8 @@
                         </VBox>
                     </VBox>
 
-                    <!-- ===== Chunk结构 内容区 ===== -->
+                    <!-- ===== Chunk结构 ===== -->
                     <VBox fx:id="stegoChunkContent" spacing="16" managed="false" visible="false">
-
-                        <!-- 隐藏/提取分段切换 -->
                         <HBox styleClass="segmented" alignment="CENTER">
                             <ToggleButton fx:id="stegoChunkHideTab" styleClass="seg-btn" selected="true">
                                 <toggleGroup><ToggleGroup fx:id="stegoChunkModeGroup"/></toggleGroup>
@@ -138,7 +149,7 @@
                                           toggleGroup="$stegoChunkModeGroup"/>
                         </HBox>
 
-                        <!-- 图片选择卡片 -->
+                        <!-- 图片 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoChunkImageLabel" styleClass="card-title"/>
                             <StackPane fx:id="stegoChunkImageStack"
@@ -150,16 +161,14 @@
                                        text="⛶" StackPane.alignment="CENTER"/>
                             </StackPane>
                             <HBox spacing="8" alignment="CENTER_LEFT">
-                                <Label fx:id="stegoChunkImageInfo" styleClass="field-hint"
-                                       HBox.hgrow="ALWAYS"/>
-                                <Button fx:id="stegoChunkImageBtn" styleClass="btn-ghost"
-                                        onAction="#onChooseChunkImage"/>
+                                <Label fx:id="stegoChunkImageInfo" styleClass="field-hint" HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="stegoChunkImageBtn" styleClass="btn-ghost" onAction="#onChooseChunkImage"/>
                                 <Button fx:id="stegoChunkClearImageBtn" styleClass="btn-ghost"
                                         onAction="#onClearChunkImage" managed="false" visible="false"/>
                             </HBox>
                         </VBox>
 
-                        <!-- 待隐藏文件卡片（仅隐藏模式） -->
+                        <!-- 待隐藏文件 -->
                         <VBox fx:id="stegoChunkFileCard" styleClass="card" spacing="8">
                             <Label fx:id="stegoChunkFileLabel" styleClass="card-title"/>
                             <HBox alignment="CENTER_LEFT" spacing="12">
@@ -168,14 +177,13 @@
                                     <Label fx:id="stegoChunkFileName" styleClass="file-name"/>
                                     <Label fx:id="stegoChunkFileSize" styleClass="file-meta"/>
                                 </VBox>
-                                <Button fx:id="stegoChunkFileBtn" styleClass="btn-ghost"
-                                        onAction="#onChooseChunkFile"/>
+                                <Button fx:id="stegoChunkFileBtn" styleClass="btn-ghost" onAction="#onChooseChunkFile"/>
                                 <Button fx:id="stegoChunkClearFileBtn" styleClass="btn-ghost"
                                         onAction="#onClearChunkFile" managed="false" visible="false"/>
                             </HBox>
                         </VBox>
 
-                        <!-- 密码卡片 -->
+                        <!-- 密码 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoChunkPasswordLabel" styleClass="card-title"/>
                             <StackPane>
@@ -190,7 +198,7 @@
                             </HBox>
                         </VBox>
 
-                        <!-- 选项卡片 -->
+                        <!-- 选项 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoChunkOptionsLabel" styleClass="card-title"/>
                             <HBox spacing="12" alignment="CENTER_LEFT">
@@ -200,6 +208,24 @@
                             <HBox spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkIntegrityCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoChunkIntegrityLabel"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoChunkStealthCheck" styleClass="check"/>
+                                <Label fx:id="stegoChunkStealthLabel"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoChunkObfuscateCheck" styleClass="check"/>
+                                <Label fx:id="stegoChunkObfuscateLabel"/>
+                            </HBox>
+                            <HBox fx:id="stegoChunkObfuscateRow" spacing="12" alignment="CENTER_LEFT"
+                                  managed="false" visible="false">
+                                <Label fx:id="stegoChunkObfuscateSizeLabel" styleClass="field-hint"/>
+                                <TextField fx:id="stegoChunkObfuscateSizeField" styleClass="text-input"
+                                           prefWidth="120" maxWidth="120" promptText="KB"/>
+                            </HBox>
+                            <HBox spacing="12" alignment="CENTER_LEFT">
+                                <CheckBox fx:id="stegoChunkBruteForceCheck" styleClass="check" selected="true"/>
+                                <Label fx:id="stegoChunkBruteForceLabel"/>
                             </HBox>
                         </VBox>
                     </VBox>
@@ -217,8 +243,7 @@
                     <Region HBox.hgrow="ALWAYS"/>
                     <Label fx:id="stegoProgressInfo" styleClass="status-info"/>
                 </HBox>
-                <ProgressBar fx:id="stegoProgressBar" styleClass="progress"
-                             progress="0" maxWidth="Infinity"/>
+                <ProgressBar fx:id="stegoProgressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
             </VBox>
             <HBox spacing="12" alignment="CENTER_RIGHT">
                 <Button fx:id="stegoCancelBtn" styleClass="btn-secondary"

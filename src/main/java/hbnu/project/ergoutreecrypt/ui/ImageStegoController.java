@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui;
 
+import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.stego.ImageStegoCodec;
 import hbnu.project.ergoutreecrypt.stego.ImageStegoException;
@@ -7,14 +8,14 @@ import hbnu.project.ergoutreecrypt.stego.StegoOptions;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.Dragboard;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
@@ -27,47 +28,81 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * 图像隐写标签页控制器。
+ * 图像隐写标签页控制器（v1.9.6）。
  *
- * <p>支持两种隐写方案：
+ * <p>支持 LSB 像素 和 Chunk 结构两种隐写方案，以及：
  * <ul>
- *   <li><b>LSB像素</b>：当前已实现的像素域 LSB 嵌入，容量受限于图像像素数</li>
- *   <li><b>Chunk结构</b>：未来实现的块域隐写，不依赖像素容量</li>
+ *   <li>Paranoid 模式（Serpent + XChaCha20 双层加密）</li>
+ *   <li>隐蔽模式（HMAC 派生魔数，避免固定魔数检测）</li>
+ *   <li>文件大小混淆（追加随机填充）</li>
+ *   <li>防暴力破解（BruteForceGuard）</li>
  * </ul>
  *
  * @author ErgouTree
  */
 public class ImageStegoController {
 
-    // ---- 依赖 ----
     private final ImageStegoCodec codec = new ImageStegoCodec();
     private final TaskRunner taskRunner = new TaskRunner();
     private Toast toast;
 
     // ---- 子方案切换 ----
-    @FXML
-    private ToggleButton stegoPixelTab;
-    @FXML
-    private ToggleButton stegoChunkTab;
-    @FXML
-    private ToggleGroup stegoSubGroup;
-    @FXML
-    private VBox stegoPixelContent;
-    @FXML
-    private VBox stegoChunkContent;
+    @FXML private ToggleButton stegoPixelTab;
+    @FXML private ToggleButton stegoChunkTab;
+    @FXML private ToggleGroup stegoSubGroup;
+    @FXML private VBox stegoPixelContent;
+    @FXML private VBox stegoChunkContent;
 
-    // ---- 模式（Pixel LSB 隐藏/提取）----
-    @FXML
-    private ToggleButton stegoHideTab;
-    @FXML
-    private ToggleButton stegoExtractTab;
-    @FXML
-    private ToggleGroup stegoModeGroup;
+    // ---- LSB 模式 ----
+    @FXML private ToggleButton stegoHideTab;
+    @FXML private ToggleButton stegoExtractTab;
+    @FXML private ToggleGroup stegoModeGroup;
 
-    // ---- Chunk 结构 UI 控件 ----
+    // ---- Chunk 模式 ----
     @FXML private ToggleButton stegoChunkHideTab;
     @FXML private ToggleButton stegoChunkExtractTab;
     @FXML private ToggleGroup stegoChunkModeGroup;
+
+    // ---- LSB 控件 ----
+    @FXML private Label stegoImageLabel;
+    @FXML private StackPane stegoImageStack;
+    @FXML private ImageView stegoImageView;
+    @FXML private Label stegoImagePlaceholder;
+    @FXML private Label stegoImageInfo;
+    @FXML private Button stegoImageBtn;
+    @FXML private Button stegoClearImageBtn;
+    @FXML private VBox stegoFileCard;
+    @FXML private Label stegoFileLabel;
+    @FXML private Label stegoFileName;
+    @FXML private Label stegoFileSize;
+    @FXML private Button stegoFileBtn;
+    @FXML private Button stegoClearFileBtn;
+    @FXML private Label stegoPasswordLabel;
+    @FXML private PasswordField stegoPasswordField;
+    @FXML private TextField stegoPasswordVisibleField;
+    @FXML private CheckBox stegoShowPasswordCheck;
+    @FXML private Label stegoOptionsLabel;
+    @FXML private Label stegoLsbDepthLabel;
+    @FXML private ComboBox<Integer> stegoLsbDepthCombo;
+    @FXML private CheckBox stegoParanoidCheck;
+    @FXML private Label stegoParanoidLabel;
+    @FXML private CheckBox stegoIntegrityCheck;
+    @FXML private Label stegoIntegrityLabel;
+    @FXML private CheckBox stegoStealthCheck;
+    @FXML private Label stegoStealthLabel;
+    @FXML private CheckBox stegoObfuscateCheck;
+    @FXML private Label stegoObfuscateLabel;
+    @FXML private HBox stegoObfuscateRow;
+    @FXML private Label stegoObfuscateSizeLabel;
+    @FXML private TextField stegoObfuscateSizeField;
+    @FXML private CheckBox stegoBruteForceCheck;
+    @FXML private Label stegoBruteForceLabel;
+    @FXML private VBox stegoCapacityCard;
+    @FXML private Label stegoCapacityLabel;
+    @FXML private ProgressBar stegoCapacityBar;
+    @FXML private Label stegoCapacityText;
+
+    // ---- Chunk 控件 ----
     @FXML private Label stegoChunkImageLabel;
     @FXML private StackPane stegoChunkImageStack;
     @FXML private ImageView stegoChunkImageView;
@@ -90,143 +125,147 @@ public class ImageStegoController {
     @FXML private Label stegoChunkParanoidLabel;
     @FXML private CheckBox stegoChunkIntegrityCheck;
     @FXML private Label stegoChunkIntegrityLabel;
-
-    // ---- Chunk 结构状态 ----
-    private File chunkImageFile;
-    private File chunkSecretFile;
-    private boolean isChunkHideMode = true;
-
-    // ---- 根 ----
-    @FXML
-    private StackPane stegoRoot;
-
-    // ---- 图片区 ----
-    @FXML
-    private Label stegoImageLabel;
-    @FXML
-    private StackPane stegoImageStack;
-    @FXML
-    private ImageView stegoImageView;
-    @FXML
-    private Label stegoImagePlaceholder;
-    @FXML
-    private Label stegoImageInfo;
-    @FXML
-    private Button stegoImageBtn;
-    @FXML
-    private Button stegoClearImageBtn;
-
-    // ---- 文件区 ----
-    @FXML
-    private VBox stegoFileCard;
-    @FXML
-    private Label stegoFileLabel;
-    @FXML
-    private Label stegoFileName;
-    @FXML
-    private Label stegoFileSize;
-    @FXML
-    private Button stegoFileBtn;
-    @FXML
-    private Button stegoClearFileBtn;
-
-    // ---- 密码区 ----
-    @FXML
-    private Label stegoPasswordLabel;
-    @FXML
-    private PasswordField stegoPasswordField;
-    @FXML
-    private TextField stegoPasswordVisibleField;
-    @FXML
-    private CheckBox stegoShowPasswordCheck;
-
-    // ---- 选项区 ----
-    @FXML
-    private Label stegoOptionsLabel;
-    @FXML
-    private Label stegoLsbDepthLabel;
-    @FXML
-    private ComboBox<Integer> stegoLsbDepthCombo;
-    @FXML
-    private CheckBox stegoParanoidCheck;
-    @FXML
-    private Label stegoParanoidLabel;
-    @FXML
-    private CheckBox stegoIntegrityCheck;
-    @FXML
-    private Label stegoIntegrityLabel;
-
-    // ---- 容量 ----
-    @FXML
-    private VBox stegoCapacityCard;
-    @FXML
-    private Label stegoCapacityLabel;
-    @FXML
-    private ProgressBar stegoCapacityBar;
-    @FXML
-    private Label stegoCapacityText;
+    @FXML private CheckBox stegoChunkStealthCheck;
+    @FXML private Label stegoChunkStealthLabel;
+    @FXML private CheckBox stegoChunkObfuscateCheck;
+    @FXML private Label stegoChunkObfuscateLabel;
+    @FXML private HBox stegoChunkObfuscateRow;
+    @FXML private Label stegoChunkObfuscateSizeLabel;
+    @FXML private TextField stegoChunkObfuscateSizeField;
+    @FXML private CheckBox stegoChunkBruteForceCheck;
+    @FXML private Label stegoChunkBruteForceLabel;
 
     // ---- 底部 ----
-    @FXML
-    private VBox stegoProgressBox;
-    @FXML
-    private Label stegoStatusLabel;
-    @FXML
-    private Label stegoProgressInfo;
-    @FXML
-    private ProgressBar stegoProgressBar;
-    @FXML
-    private Button stegoCancelBtn;
-    @FXML
-    private Button stegoActionBtn;
+    @FXML private StackPane stegoRoot;
+    @FXML private VBox stegoProgressBox;
+    @FXML private Label stegoStatusLabel;
+    @FXML private Label stegoProgressInfo;
+    @FXML private ProgressBar stegoProgressBar;
+    @FXML private Button stegoCancelBtn;
+    @FXML private Button stegoActionBtn;
 
     // ---- 状态 ----
     private File selectedImageFile;
     private File selectedSecretFile;
     private boolean isHideMode = true;
+    private File chunkImageFile;
+    private File chunkSecretFile;
+    private boolean isChunkHideMode = true;
 
-    /**
-     * FXML 加载完成后由 FXMLLoader 调用。
-     */
+    /** 密码变更监听器（用于联动选项可用性）。 */
+    private final ChangeListener<String> lsbPasswordListener = (obs, old, val) -> updateOptionLinkage();
+    private final ChangeListener<String> chunkPasswordListener = (obs, old, val) -> updateChunkOptionLinkage();
+
     @FXML
     private void initialize() {
         toast = new Toast(stegoRoot);
         stegoLsbDepthCombo.getItems().addAll(1, 2, 3, 4);
         stegoLsbDepthCombo.getSelectionModel().select(0);
-        // ImageView 宽度跟随父容器自适应
         stegoImageView.fitWidthProperty().bind(stegoImageStack.widthProperty().subtract(20));
         stegoChunkImageView.fitWidthProperty().bind(stegoChunkImageStack.widthProperty().subtract(20));
+
+        // 子方案切换
         stegoSubGroup.selectedToggleProperty().addListener((obs, old, val) -> onSubChanged());
         stegoModeGroup.selectedToggleProperty().addListener((obs, old, val) -> onModeChanged());
         stegoChunkModeGroup.selectedToggleProperty().addListener((obs, old, val) -> onChunkModeChanged());
+
+        // 密码联动
+        stegoPasswordField.textProperty().addListener(lsbPasswordListener);
+        stegoPasswordVisibleField.textProperty().addListener(lsbPasswordListener);
+        stegoChunkPasswordField.textProperty().addListener(chunkPasswordListener);
+        stegoChunkPasswordVisibleField.textProperty().addListener(chunkPasswordListener);
+
+        // 混淆大小联动
+        stegoObfuscateCheck.selectedProperty().addListener((obs, old, val) -> {
+            setVisibility(stegoObfuscateRow, val);
+        });
+        stegoChunkObfuscateCheck.selectedProperty().addListener((obs, old, val) -> {
+            setVisibility(stegoChunkObfuscateRow, val);
+        });
+
+        // 隐蔽模式联动
+        stegoStealthCheck.selectedProperty().addListener((obs, old, val) -> updateOptionLinkage());
+        stegoChunkStealthCheck.selectedProperty().addListener((obs, old, val) -> updateChunkOptionLinkage());
+
         setupDragDrop();
         applyTexts();
         updateSubUI();
         updateModeUI();
         updateChunkModeUI();
+        updateOptionLinkage();
+        updateChunkOptionLinkage();
+    }
+
+    // ---- 密码联动：无密码时禁用隐蔽模式 ----
+
+    /**
+     * 获取 LSB 标签页当前密码长度。
+     */
+    private int getLsbPasswordLength() {
+        String pwd = stegoPasswordField.isVisible()
+                ? stegoPasswordField.getText()
+                : stegoPasswordVisibleField.getText();
+        return (pwd == null) ? 0 : pwd.length();
+    }
+
+    /**
+     * 获取 Chunk 标签页当前密码长度。
+     */
+    private int getChunkPasswordLength() {
+        String pwd = stegoChunkPasswordField.isVisible()
+                ? stegoChunkPasswordField.getText()
+                : stegoChunkPasswordVisibleField.getText();
+        return (pwd == null) ? 0 : pwd.length();
+    }
+
+    /**
+     * 更新 LSB 标签页选项联动：
+     * - 隐蔽模式：需要密码
+     * - 防暴力破解：需要密码（无密码时无法区分正确/错误）
+     */
+    private void updateOptionLinkage() {
+        boolean hasPassword = getLsbPasswordLength() > 0;
+        // 隐蔽模式需要密码
+        if (!hasPassword && stegoStealthCheck.isSelected()) {
+            stegoStealthCheck.setSelected(false);
+        }
+        stegoStealthCheck.setDisable(!hasPassword);
+        // 防暴力破解：无密码时无意义（空密码提取不会"错误"）
+        if (!hasPassword) {
+            stegoBruteForceCheck.setSelected(false);
+        }
+        stegoBruteForceCheck.setDisable(!hasPassword);
+    }
+
+    /**
+     * 更新 Chunk 标签页选项联动。
+     */
+    private void updateChunkOptionLinkage() {
+        boolean hasPassword = getChunkPasswordLength() > 0;
+        if (!hasPassword && stegoChunkStealthCheck.isSelected()) {
+            stegoChunkStealthCheck.setSelected(false);
+        }
+        stegoChunkStealthCheck.setDisable(!hasPassword);
+        if (!hasPassword) {
+            stegoChunkBruteForceCheck.setSelected(false);
+        }
+        stegoChunkBruteForceCheck.setDisable(!hasPassword);
     }
 
     // ---- 子方案切换 ----
 
-    private void onSubChanged() {
-        updateSubUI();
-    }
+    private void onSubChanged() { updateSubUI(); }
 
     private void updateSubUI() {
         boolean isPixel = stegoPixelTab.isSelected();
         setVisibility(stegoPixelContent, isPixel);
         setVisibility(stegoChunkContent, !isPixel);
-        // 根据当前方案切换底部按钮行为
         stegoActionBtn.setOnAction(e -> {
-            if (stegoPixelTab.isSelected()) {
-                onAction();
-            } else {
-                onChunkAction();
-            }
+            if (stegoPixelTab.isSelected()) onAction(); else onChunkAction();
         });
     }
 
-    // ---- 模式切换（隐藏/提取）----
+    // ---- LSB 模式切换 ----
 
     private void onModeChanged() {
         isHideMode = stegoHideTab.isSelected();
@@ -236,27 +275,63 @@ public class ImageStegoController {
     private void updateModeUI() {
         setVisibility(stegoFileCard, isHideMode);
         setVisibility(stegoCapacityCard, isHideMode);
+        // 隐藏模式才有的选项：LSB深度、paranoid、完整性、隐蔽、混淆大小
+        boolean showHideOpts = isHideMode;
+        setVisibility(stegoLsbDepthLabel, showHideOpts);
+        setVisibility(stegoLsbDepthCombo, showHideOpts);
+        setVisibility(stegoParanoidCheck, showHideOpts);
+        setVisibility(stegoParanoidLabel, showHideOpts);
+        setVisibility(stegoIntegrityCheck, showHideOpts);
+        setVisibility(stegoIntegrityLabel, showHideOpts);
+        setVisibility(stegoStealthCheck, showHideOpts);
+        setVisibility(stegoStealthLabel, showHideOpts);
+        setVisibility(stegoObfuscateCheck, showHideOpts);
+        setVisibility(stegoObfuscateLabel, showHideOpts);
+        setVisibility(stegoObfuscateRow, showHideOpts && stegoObfuscateCheck.isSelected());
+        // 提取模式才有的选项：防暴力破解
+        setVisibility(stegoBruteForceCheck, !isHideMode);
+        setVisibility(stegoBruteForceLabel, !isHideMode);
         stegoActionBtn.setText(isHideMode
                 ? Messages.get("stego.btn.hide")
                 : Messages.get("stego.btn.extract"));
     }
 
-    // ---- 图片选择 ----
+    // ---- Chunk 模式切换 ----
 
-    @FXML
-    private void onChooseImage() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle(Messages.get("stego.choose.image"));
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                "PNG images", "*.png"));
-        File f = chooser.showOpenDialog(stegoRoot.getScene().getWindow());
-        if (f != null) {
-            setImageFile(f);
-        }
+    private void onChunkModeChanged() {
+        isChunkHideMode = stegoChunkHideTab.isSelected();
+        updateChunkModeUI();
     }
 
-    @FXML
-    private void onClearImage() {
+    private void updateChunkModeUI() {
+        setVisibility(stegoChunkFileCard, isChunkHideMode);
+        // 隐藏模式才有的选项
+        boolean showHideOpts = isChunkHideMode;
+        setVisibility(stegoChunkParanoidCheck, showHideOpts);
+        setVisibility(stegoChunkParanoidLabel, showHideOpts);
+        setVisibility(stegoChunkIntegrityCheck, showHideOpts);
+        setVisibility(stegoChunkIntegrityLabel, showHideOpts);
+        setVisibility(stegoChunkStealthCheck, showHideOpts);
+        setVisibility(stegoChunkStealthLabel, showHideOpts);
+        setVisibility(stegoChunkObfuscateCheck, showHideOpts);
+        setVisibility(stegoChunkObfuscateLabel, showHideOpts);
+        setVisibility(stegoChunkObfuscateRow, showHideOpts && stegoChunkObfuscateCheck.isSelected());
+        // 提取模式才有的选项
+        setVisibility(stegoChunkBruteForceCheck, !isChunkHideMode);
+        setVisibility(stegoChunkBruteForceLabel, !isChunkHideMode);
+        stegoActionBtn.setText(isChunkHideMode
+                ? Messages.get("stego.btn.hide")
+                : Messages.get("stego.btn.extract"));
+    }
+
+    // ---- LSB 图片 ----
+
+    @FXML private void onChooseImage() {
+        File f = choosePngFile(Messages.get("stego.choose.image"));
+        if (f != null) setImageFile(f);
+    }
+
+    @FXML private void onClearImage() {
         selectedImageFile = null;
         stegoImageView.setImage(null);
         stegoImagePlaceholder.setVisible(true);
@@ -268,7 +343,6 @@ public class ImageStegoController {
 
     private void setImageFile(final File file) {
         selectedImageFile = file;
-        // 预览
         try {
             Image img = new Image(file.toURI().toString(), 660, 240, true, true, true);
             stegoImageView.setImage(img);
@@ -276,7 +350,6 @@ public class ImageStegoController {
         } catch (Exception e) {
             stegoImagePlaceholder.setVisible(true);
         }
-        // 信息
         try {
             java.awt.image.BufferedImage bi = javax.imageio.ImageIO.read(file);
             if (bi != null) {
@@ -292,22 +365,14 @@ public class ImageStegoController {
         updateCapacityDisplay();
     }
 
-    // ---- 文件选择 ----
+    // ---- LSB 文件 ----
 
-    @FXML
-    private void onChooseFile() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle(Messages.get("stego.choose.file"));
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                Messages.get("stego.file.filter"), "*.*"));
-        File f = chooser.showOpenDialog(stegoRoot.getScene().getWindow());
-        if (f != null) {
-            setSecretFile(f);
-        }
+    @FXML private void onChooseFile() {
+        File f = chooseAnyFile(Messages.get("stego.choose.file"));
+        if (f != null) setSecretFile(f);
     }
 
-    @FXML
-    private void onClearFile() {
+    @FXML private void onClearFile() {
         selectedSecretFile = null;
         stegoFileName.setText("");
         stegoFileSize.setText("");
@@ -325,10 +390,9 @@ public class ImageStegoController {
         updateCapacityDisplay();
     }
 
-    // ---- 密码 ----
+    // ---- LSB 密码 ----
 
-    @FXML
-    private void onToggleShowPassword() {
+    @FXML private void onToggleShowPassword() {
         boolean show = stegoShowPasswordCheck.isSelected();
         if (show) {
             stegoPasswordVisibleField.setText(stegoPasswordField.getText());
@@ -349,36 +413,18 @@ public class ImageStegoController {
         String pwd = stegoPasswordField.isVisible()
                 ? stegoPasswordField.getText()
                 : stegoPasswordVisibleField.getText();
-        if (pwd == null || pwd.isEmpty()) {
-            return new byte[0];
-        }
-        return pwd.getBytes(StandardCharsets.UTF_8);
+        return (pwd == null || pwd.isEmpty()) ? new byte[0]
+                : pwd.getBytes(StandardCharsets.UTF_8);
     }
 
-    // ---- Chunk 模式切换 ----
+    // ---- Chunk 图片 ----
 
-    private void onChunkModeChanged() {
-        isChunkHideMode = stegoChunkHideTab.isSelected();
-        updateChunkModeUI();
-    }
-
-    private void updateChunkModeUI() {
-        setVisibility(stegoChunkFileCard, isChunkHideMode);
-        stegoActionBtn.setText(isChunkHideMode
-                ? Messages.get("stego.btn.hide")
-                : Messages.get("stego.btn.extract"));
-    }
-
-    // ---- Chunk 图片选择 ----
-
-    @FXML
-    private void onChooseChunkImage() {
+    @FXML private void onChooseChunkImage() {
         File f = choosePngFile(Messages.get("stego.choose.image"));
         if (f != null) setChunkImageFile(f);
     }
 
-    @FXML
-    private void onClearChunkImage() {
+    @FXML private void onClearChunkImage() {
         chunkImageFile = null;
         stegoChunkImageView.setImage(null);
         stegoChunkImagePlaceholder.setVisible(true);
@@ -401,16 +447,14 @@ public class ImageStegoController {
         stegoChunkClearImageBtn.setManaged(true);
     }
 
-    // ---- Chunk 文件选择 ----
+    // ---- Chunk 文件 ----
 
-    @FXML
-    private void onChooseChunkFile() {
+    @FXML private void onChooseChunkFile() {
         File f = chooseAnyFile(Messages.get("stego.choose.file"));
         if (f != null) setChunkSecretFile(f);
     }
 
-    @FXML
-    private void onClearChunkFile() {
+    @FXML private void onClearChunkFile() {
         chunkSecretFile = null;
         stegoChunkFileName.setText("");
         stegoChunkFileSize.setText("");
@@ -428,8 +472,7 @@ public class ImageStegoController {
 
     // ---- Chunk 密码 ----
 
-    @FXML
-    private void onToggleChunkShowPassword() {
+    @FXML private void onToggleChunkShowPassword() {
         boolean show = stegoChunkShowPasswordCheck.isSelected();
         if (show) {
             stegoChunkPasswordVisibleField.setText(stegoChunkPasswordField.getText());
@@ -454,33 +497,118 @@ public class ImageStegoController {
                 : pwd.getBytes(StandardCharsets.UTF_8);
     }
 
+    // ---- LSB 操作 ----
+
+    @FXML private void onAction() {
+        if (isHideMode) doHide(); else doExtract();
+    }
+
+    private void doHide() {
+        if (selectedImageFile == null) {
+            toast.info(Messages.get("stego.toast.no.image")); return;
+        }
+        if (selectedSecretFile == null) {
+            toast.info(Messages.get("stego.toast.no.file")); return;
+        }
+        File outFile = chooseSavePng(Messages.get("stego.save.stego"),
+                "stego_" + selectedImageFile.getName());
+        if (outFile == null) return;
+
+        // 解析目标大小
+        long targetSizeBytes = 0;
+        if (stegoObfuscateCheck.isSelected()) {
+            targetSizeBytes = parseTargetSize(stegoObfuscateSizeField.getText());
+            if (targetSizeBytes <= 0) {
+                toast.info(Messages.get("stego.toast.invalid.size")); return;
+            }
+        }
+
+        StegoOptions options = StegoOptions.builder()
+                .lsbDepth(stegoLsbDepthCombo.getValue())
+                .paranoid(stegoParanoidCheck.isSelected())
+                .storeMac(stegoIntegrityCheck.isSelected())
+                .stealth(stegoStealthCheck.isSelected() && getLsbPasswordLength() > 0)
+                .obfuscateSize(stegoObfuscateCheck.isSelected())
+                .targetSizeBytes(targetSizeBytes)
+                .bruteForceGuard(stegoBruteForceCheck.isSelected())
+                .build();
+        byte[] pwd = getPasswordBytes();
+        Path outputPath = outFile.toPath();
+
+        showProgress(true);
+        taskRunner.submit(() -> {
+            codec.hide(selectedImageFile.toPath(), selectedSecretFile.toPath(),
+                    outputPath, pwd, options);
+            Platform.runLater(() -> {
+                showProgress(false);
+                toast.success(Messages.format("stego.status.success.hide",
+                        outputPath.getFileName()));
+            });
+        }, () -> {}, ex -> {
+            Platform.runLater(() -> {
+                showProgress(false);
+                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+                tryDelete(outputPath);
+            });
+        });
+    }
+
+    private void doExtract() {
+        if (selectedImageFile == null) {
+            toast.info(Messages.get("stego.toast.no.image")); return;
+        }
+        File outDir = chooseDirectory(Messages.get("stego.choose.output.dir"));
+        if (outDir == null) return;
+
+        byte[] pwd = getPasswordBytes();
+        showProgress(true);
+        taskRunner.submit(() -> {
+            Path extracted = codec.extract(selectedImageFile.toPath(), outDir.toPath(), pwd);
+            Platform.runLater(() -> {
+                showProgress(false);
+                toast.success(Messages.format("stego.status.success.extract",
+                        extracted.getFileName()));
+            });
+        }, () -> {}, ex -> {
+            Platform.runLater(() -> {
+                showProgress(false);
+                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+            });
+        });
+    }
+
     // ---- Chunk 操作 ----
 
-    @FXML
-    private void onChunkAction() {
-        if (isChunkHideMode) {
-            doChunkHide();
-        } else {
-            doChunkExtract();
-        }
+    @FXML private void onChunkAction() {
+        if (isChunkHideMode) doChunkHide(); else doChunkExtract();
     }
 
     private void doChunkHide() {
         if (chunkImageFile == null) {
-            toast.info(Messages.get("stego.toast.no.image"));
-            return;
+            toast.info(Messages.get("stego.toast.no.image")); return;
         }
         if (chunkSecretFile == null) {
-            toast.info(Messages.get("stego.toast.no.file"));
-            return;
+            toast.info(Messages.get("stego.toast.no.file")); return;
         }
         File outFile = chooseSavePng(Messages.get("stego.save.stego"),
                 "stego_" + chunkImageFile.getName());
         if (outFile == null) return;
 
+        long targetSizeBytes = 0;
+        if (stegoChunkObfuscateCheck.isSelected()) {
+            targetSizeBytes = parseTargetSize(stegoChunkObfuscateSizeField.getText());
+            if (targetSizeBytes <= 0) {
+                toast.info(Messages.get("stego.toast.invalid.size")); return;
+            }
+        }
+
         StegoOptions opts = StegoOptions.builder()
                 .paranoid(stegoChunkParanoidCheck.isSelected())
                 .storeMac(stegoChunkIntegrityCheck.isSelected())
+                .stealth(stegoChunkStealthCheck.isSelected() && getChunkPasswordLength() > 0)
+                .obfuscateSize(stegoChunkObfuscateCheck.isSelected())
+                .targetSizeBytes(targetSizeBytes)
+                .bruteForceGuard(stegoChunkBruteForceCheck.isSelected())
                 .build();
         byte[] pwd = getChunkPasswordBytes();
         Path outputPath = outFile.toPath();
@@ -505,8 +633,7 @@ public class ImageStegoController {
 
     private void doChunkExtract() {
         if (chunkImageFile == null) {
-            toast.info(Messages.get("stego.toast.no.image"));
-            return;
+            toast.info(Messages.get("stego.toast.no.image")); return;
         }
         File outDir = chooseDirectory(Messages.get("stego.choose.output.dir"));
         if (outDir == null) return;
@@ -514,8 +641,7 @@ public class ImageStegoController {
         byte[] pwd = getChunkPasswordBytes();
         showProgress(true);
         taskRunner.submit(() -> {
-            Path extracted = codec.extractChunk(chunkImageFile.toPath(),
-                    outDir.toPath(), pwd);
+            Path extracted = codec.extractChunk(chunkImageFile.toPath(), outDir.toPath(), pwd);
             Platform.runLater(() -> {
                 showProgress(false);
                 toast.success(Messages.format("stego.status.success.extract",
@@ -534,8 +660,7 @@ public class ImageStegoController {
     private File choosePngFile(final String title) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("PNG images", "*.png"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG images", "*.png"));
         return chooser.showOpenDialog(stegoRoot.getScene().getWindow());
     }
 
@@ -550,8 +675,7 @@ public class ImageStegoController {
     private File chooseSavePng(final String title, final String initialName) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("PNG", "*.png"));
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG", "*.png"));
         chooser.setInitialFileName(initialName);
         return chooser.showSaveDialog(stegoRoot.getScene().getWindow());
     }
@@ -562,98 +686,7 @@ public class ImageStegoController {
         return chooser.showDialog(stegoRoot.getScene().getWindow());
     }
 
-    // ---- 操作（LSB像素）----
-
-    @FXML
-    private void onAction() {
-        if (isHideMode) {
-            doHide();
-        } else {
-            doExtract();
-        }
-    }
-
-    private void doHide() {
-        if (selectedImageFile == null) {
-            toast.info(Messages.get("stego.toast.no.image"));
-            return;
-        }
-        if (selectedSecretFile == null) {
-            toast.info(Messages.get("stego.toast.no.file"));
-            return;
-        }
-        Path imagePath = selectedImageFile.toPath();
-        Path secretPath = selectedSecretFile.toPath();
-
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle(Messages.get("stego.save.stego"));
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNG", "*.png"));
-        chooser.setInitialFileName("stego_" + selectedImageFile.getName());
-        File outFile = chooser.showSaveDialog(stegoRoot.getScene().getWindow());
-        if (outFile == null) {
-            return;
-        }
-
-        StegoOptions options = StegoOptions.builder()
-                .lsbDepth(stegoLsbDepthCombo.getValue())
-                .paranoid(stegoParanoidCheck.isSelected())
-                .storeMac(stegoIntegrityCheck.isSelected())
-                .build();
-        byte[] pwd = getPasswordBytes();
-        Path outputPath = outFile.toPath();
-
-        showProgress(true);
-        taskRunner.submit(() -> {
-            codec.hide(imagePath, secretPath, outputPath, pwd, options);
-        }, () -> {
-            showProgress(false);
-            toast.success(Messages.format("stego.status.success.hide",
-                    outputPath.getFileName()));
-        }, ex -> {
-            showProgress(false);
-            toast.info(Messages.format("stego.toast.error", ex.getMessage()));
-            tryDelete(outputPath);
-        });
-    }
-
-    private void doExtract() {
-        if (selectedImageFile == null) {
-            toast.info(Messages.get("stego.toast.no.image"));
-            return;
-        }
-        Path imagePath = selectedImageFile.toPath();
-        byte[] pwd = getPasswordBytes();
-
-        File outDir = chooseDirectory(Messages.get("stego.choose.output.dir"));
-        if (outDir == null) {
-            return;
-        }
-
-        showProgress(true);
-        taskRunner.submit(() -> {
-            Path extracted = codec.extract(imagePath, outDir.toPath(), pwd);
-            Platform.runLater(() -> {
-                showProgress(false);
-                toast.success(Messages.format("stego.status.success.extract",
-                        extracted.getFileName()));
-            });
-        }, () -> {
-            // onSuccess 回调由 CheckedRunnable 内部的 Platform.runLater 处理
-        }, ex -> {
-            Platform.runLater(() -> {
-                showProgress(false);
-                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
-            });
-        });
-    }
-
-    @FXML
-    private void onCancel() {
-        taskRunner.shutdown();
-        showProgress(false);
-    }
-
-    // ---- 容量计算 ----
+    // ---- 容量 ----
 
     private void updateCapacityDisplay() {
         if (!isHideMode || selectedImageFile == null || selectedSecretFile == null) {
@@ -665,6 +698,8 @@ public class ImageStegoController {
             StegoOptions opts = StegoOptions.builder()
                     .lsbDepth(stegoLsbDepthCombo.getValue())
                     .storeMac(stegoIntegrityCheck.isSelected())
+                    .paranoid(stegoParanoidCheck.isSelected())
+                    .stealth(stegoStealthCheck.isSelected() && getLsbPasswordLength() > 0)
                     .build();
             long capacity = codec.availableCapacity(selectedImageFile.toPath(), opts,
                     selectedSecretFile.getName());
@@ -673,11 +708,8 @@ public class ImageStegoController {
             stegoCapacityBar.setProgress(Math.min(ratio, 1.0));
             stegoCapacityText.setText(Messages.format("stego.capacity.text",
                     formatSize(needed), formatSize(capacity)));
-            if (needed > capacity) {
-                stegoCapacityBar.setStyle("-fx-accent: #e74c3c;");
-            } else {
-                stegoCapacityBar.setStyle("-fx-accent: #2ecc71;");
-            }
+            stegoCapacityBar.setStyle(needed > capacity
+                    ? "-fx-accent: #e74c3c;" : "-fx-accent: #2ecc71;");
         } catch (Exception e) {
             stegoCapacityText.setText("");
         }
@@ -693,9 +725,8 @@ public class ImageStegoController {
     }
 
     private void onDragEntered(final DragEvent e) {
-        if (e.getDragboard().hasFiles()) {
+        if (e.getDragboard().hasFiles())
             stegoImageStack.setStyle("-fx-background-color: #d0e4f7; -fx-background-radius: 6;");
-        }
     }
 
     private void onDragExited(final DragEvent e) {
@@ -703,17 +734,15 @@ public class ImageStegoController {
     }
 
     private void onDragOver(final DragEvent e) {
-        if (e.getDragboard().hasFiles()) {
+        if (e.getDragboard().hasFiles())
             e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
-        }
     }
 
     private void onImageDragDropped(final DragEvent e) {
         stegoImageStack.setStyle("-fx-background-color: #e8e8e8; -fx-background-radius: 6;");
         Dragboard db = e.getDragboard();
-        if (db.hasFiles() && !db.getFiles().isEmpty()) {
+        if (db.hasFiles() && !db.getFiles().isEmpty())
             setImageFile(db.getFiles().get(0));
-        }
         e.setDropCompleted(true);
     }
 
@@ -726,45 +755,67 @@ public class ImageStegoController {
         stegoActionBtn.setDisable(show);
     }
 
+    @FXML private void onCancel() {
+        taskRunner.shutdown();
+        showProgress(false);
+    }
+
     // ---- 工具 ----
 
     private static void setVisibility(final javafx.scene.Node node, final boolean visible) {
-        node.setVisible(visible);
-        node.setManaged(visible);
+        if (node != null) {
+            node.setVisible(visible);
+            node.setManaged(visible);
+        }
     }
 
     private static String formatSize(final long bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        } else if (bytes < 1024 * 1024) {
-            return String.format("%.1f KB", bytes / 1024.0);
-        } else if (bytes < 1024 * 1024 * 1024) {
+        if (bytes < 1024) return bytes + " B";
+        else if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        else if (bytes < 1024 * 1024 * 1024)
             return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
-        }
         return String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
     }
 
-    private static void tryDelete(final Path path) {
+    /**
+     * 解析目标大小字符串（支持 "500"=500KB, "1.5"=1.5MB, "200KB", "3MB"）。
+     */
+    private static long parseTargetSize(final String text) {
+        if (text == null || text.isBlank()) return 0;
+        String t = text.trim().toUpperCase();
         try {
-            Files.deleteIfExists(path);
-        } catch (IOException ignored) {
+            if (t.endsWith("KB")) {
+                return (long) (Double.parseDouble(t.replace("KB", "").trim()) * 1024);
+            } else if (t.endsWith("MB")) {
+                return (long) (Double.parseDouble(t.replace("MB", "").trim()) * 1024 * 1024);
+            } else if (t.endsWith("GB")) {
+                return (long) (Double.parseDouble(t.replace("GB", "").trim()) * 1024 * 1024 * 1024);
+            } else if (t.endsWith("B")) {
+                return Long.parseLong(t.replace("B", "").trim());
+            } else {
+                // 纯数字，默认 KB
+                return (long) (Double.parseDouble(t) * 1024);
+            }
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 
-    /**
-     * 刷新所有 UI 文案（语言切换时调用）。
-     */
+    private static void tryDelete(final Path path) {
+        try { Files.deleteIfExists(path); } catch (IOException ignored) {}
+    }
+
+    // ---- 国际化 ----
+
     public void applyTexts() {
-        if (stegoPixelTab == null) {
-            return;
-        }
+        if (stegoPixelTab == null) return;
         stegoPixelTab.setText(Messages.get("stego.sub.pixel"));
         stegoChunkTab.setText(Messages.get("stego.sub.chunk"));
         stegoHideTab.setText(Messages.get("stego.mode.hide"));
         stegoExtractTab.setText(Messages.get("stego.mode.extract"));
         stegoChunkHideTab.setText(Messages.get("stego.mode.hide"));
         stegoChunkExtractTab.setText(Messages.get("stego.mode.extract"));
-        // LSB 控件
+        // LSB
         stegoImageLabel.setText(Messages.get("stego.image.label"));
         stegoImageBtn.setText(Messages.get("stego.image.choose"));
         stegoClearImageBtn.setText(Messages.get("stego.image.clear"));
@@ -777,8 +828,12 @@ public class ImageStegoController {
         stegoLsbDepthLabel.setText(Messages.get("stego.option.lsbDepth"));
         stegoParanoidLabel.setText(Messages.get("options.paranoid"));
         stegoIntegrityLabel.setText(Messages.get("stego.option.integrity"));
+        stegoStealthLabel.setText(Messages.get("stego.option.stealth"));
+        stegoObfuscateLabel.setText(Messages.get("stego.option.obfuscate"));
+        stegoObfuscateSizeLabel.setText(Messages.get("stego.option.obfuscateSize"));
+        stegoBruteForceLabel.setText(Messages.get("stego.option.bruteForce"));
         stegoCapacityLabel.setText(Messages.get("stego.capacity.label"));
-        // Chunk 控件
+        // Chunk
         stegoChunkImageLabel.setText(Messages.get("stego.image.label"));
         stegoChunkImageBtn.setText(Messages.get("stego.image.choose"));
         stegoChunkClearImageBtn.setText(Messages.get("stego.image.clear"));
@@ -790,29 +845,14 @@ public class ImageStegoController {
         stegoChunkOptionsLabel.setText(Messages.get("stego.options.label"));
         stegoChunkParanoidLabel.setText(Messages.get("options.paranoid"));
         stegoChunkIntegrityLabel.setText(Messages.get("stego.option.integrity"));
-        stegoImageLabel.setText(Messages.get("stego.image.label"));
-        stegoImageBtn.setText(Messages.get("stego.image.choose"));
-        stegoClearImageBtn.setText(Messages.get("stego.image.clear"));
-        stegoFileLabel.setText(Messages.get("stego.file.label"));
-        stegoFileBtn.setText(Messages.get("stego.file.choose"));
-        stegoClearFileBtn.setText(Messages.get("stego.file.clear"));
-        stegoPasswordLabel.setText(Messages.get("password.label"));
-        stegoShowPasswordCheck.setText(Messages.get("password.show"));
-        stegoOptionsLabel.setText(Messages.get("stego.options.label"));
-        stegoLsbDepthLabel.setText(Messages.get("stego.option.lsbDepth"));
-        stegoParanoidLabel.setText(Messages.get("options.paranoid"));
-        stegoIntegrityLabel.setText(Messages.get("stego.option.integrity"));
-        stegoCapacityLabel.setText(Messages.get("stego.capacity.label"));
+        stegoChunkStealthLabel.setText(Messages.get("stego.option.stealth"));
+        stegoChunkObfuscateLabel.setText(Messages.get("stego.option.obfuscate"));
+        stegoChunkObfuscateSizeLabel.setText(Messages.get("stego.option.obfuscateSize"));
+        stegoChunkBruteForceLabel.setText(Messages.get("stego.option.bruteForce"));
         stegoCancelBtn.setText(Messages.get("action.cancel"));
         stegoActionBtn.setText(isHideMode
-                ? Messages.get("stego.btn.hide")
-                : Messages.get("stego.btn.extract"));
+                ? Messages.get("stego.btn.hide") : Messages.get("stego.btn.extract"));
     }
 
-    /**
-     * 关闭时释放资源。
-     */
-    public void shutdown() {
-        taskRunner.shutdown();
-    }
+    public void shutdown() { taskRunner.shutdown(); }
 }

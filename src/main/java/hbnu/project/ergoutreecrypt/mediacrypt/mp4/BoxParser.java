@@ -87,7 +87,8 @@ public final class BoxParser {
 
                 long payloadOffset = pos + headerSize;
                 long payloadSize = boxSize - headerSize;
-                boxes.add(new Mp4Box(type, pos, headerSize, payloadOffset, payloadSize));
+                boolean zeroSize = (size32 == 0);
+                boxes.add(new Mp4Box(type, pos, headerSize, payloadOffset, payloadSize, zeroSize));
                 pos += boxSize;
             }
 
@@ -177,6 +178,62 @@ public final class BoxParser {
                 ByteBuffer u = readAt(ch, b.payloadOffset(), META_UUID.length);
                 if (matches(u, META_UUID)) {
                     return b;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 直接扫描文件原始字节查找自定义 uuid 元数据 box（绕过解析出的 box 列表）。
+     *
+     * <p>用于恢复场景：当某个前置 box 使用 size==0（延伸至文件尾），
+     * 解析器会把追加在末尾的 uuid box "吞并"进该 box，导致 parsed box 列表中不包含 uuid。
+     * 本方法从文件末尾逐 box 向前扫描，定位匹配 {@link #META_UUID} 的 uuid box。
+     *
+     * @param path 加密后的媒体文件
+     * @return 匹配的 uuid box 或 {@code null}
+     */
+    public static Mp4Box scanForMetaUuidBox(Path path) throws IOException {
+        try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
+            long fileSize = ch.size();
+            // uuid box 至少需要 8(header) + 16(uuid) = 24 字节。
+            // 从文件末尾向前搜索，步进为读取 8 字节头。
+            // 策略：从文件末尾区域扫描可能的 uuid box 头。
+            long searchStart = Math.max(0, fileSize - 2048);
+            // 从 searchStart 开始，以 1 字节步进扫描 "uuid" 类型标记
+            for (long pos = searchStart; pos + 8 <= fileSize; pos++) {
+                ByteBuffer hdr = readAt(ch, pos, 8);
+                long size32 = hdr.order(ByteOrder.BIG_ENDIAN).getInt(0) & 0xFFFFFFFFL;
+                String type = ascii(hdr, 4, 4);
+                if (!"uuid".equals(type)) {
+                    continue;
+                }
+                int headerSize = 8;
+                long boxSize;
+                if (size32 == 1) {
+                    if (pos + 16 > fileSize) {
+                        continue;
+                    }
+                    ByteBuffer large = readAt(ch, pos + 8, 8);
+                    boxSize = large.order(ByteOrder.BIG_ENDIAN).getLong(0);
+                    headerSize = 16;
+                } else if (size32 == 0) {
+                    boxSize = fileSize - pos;
+                } else {
+                    boxSize = size32;
+                }
+                if (boxSize < headerSize + META_UUID.length || pos + boxSize > fileSize) {
+                    continue;
+                }
+                long payloadOffset = pos + headerSize;
+                long payloadSize = boxSize - headerSize;
+                if (payloadSize < META_UUID.length) {
+                    continue;
+                }
+                ByteBuffer u = readAt(ch, payloadOffset, META_UUID.length);
+                if (matches(u, META_UUID)) {
+                    return new Mp4Box(type, pos, headerSize, payloadOffset, payloadSize);
                 }
             }
         }

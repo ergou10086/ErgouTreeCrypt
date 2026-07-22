@@ -14,11 +14,20 @@ import java.nio.charset.StandardCharsets;
  * @param headerSize    box 头长度（8 或 16，含 largesize）
  * @param payloadOffset payload 起始偏移（= boxOffset + headerSize）
  * @param payloadSize   payload 字节数
- *                      
+ * @param zeroSize      原始 size 字段是否为 0（延伸至文件尾）
+ *
  * @author ErgouTree
  */
 public record Mp4Box(String type, long boxOffset, int headerSize, long payloadOffset,
-                     long payloadSize) {
+                     long payloadSize, boolean zeroSize) {
+
+    /**
+     * 兼容构造器：zeroSize 默认为 false。
+     */
+    public Mp4Box(String type, long boxOffset, int headerSize, long payloadOffset,
+                  long payloadSize) {
+        this(type, boxOffset, headerSize, payloadOffset, payloadSize, false);
+    }
 
     /**
      * 整个 box 占用的字节数（头 + payload）。

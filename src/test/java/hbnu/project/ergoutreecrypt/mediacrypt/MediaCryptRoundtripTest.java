@@ -133,6 +133,57 @@ class MediaCryptRoundtripTest {
         assertTrue(moov != null && moov.payloadSize() > 0, "M4A 应包含 moov box");
     }
 
+    // ---- M4A with size==0 mdat（Apple 风格，mdat 延伸至文件尾）----
+
+    @Test
+    void m4aZeroSizeMdatRoundtripByteExact(@TempDir Path dir) throws Exception {
+        byte[] original = MediaTestFixtures.buildM4aWithZeroSizeMdat(
+                MediaTestFixtures.pseudoData(4096));
+        Path in = MediaTestFixtures.write(dir, "in.m4a", original);
+        Path enc = dir.resolve("enc.m4a");
+        Path dec = dir.resolve("dec.m4a");
+
+        codec.encrypt(in, enc, PASSWORD, MediaCryptOptions.defaults());
+
+        // 加密后应能被识别为本工具加密
+        assertTrue(codec.isEncrypted(enc), "加密后应被识别为本工具加密");
+        assertContentChanged(original, Files.readAllBytes(enc));
+
+        codec.decrypt(enc, dec, PASSWORD);
+        assertArrayEquals(original, Files.readAllBytes(dec),
+                "size==0 mdat M4A 解密应逐字节还原");
+    }
+
+    @Test
+    void m4aZeroSizeMdatDecryptOldFormat(@TempDir Path dir) throws Exception {
+        // 模拟旧版加密产物：mdat 头仍为 size==0（未做显式改写），
+        // 验证新版解密可通过回退扫描恢复。
+        byte[] original = MediaTestFixtures.buildM4aWithZeroSizeMdat(
+                MediaTestFixtures.pseudoData(4096));
+        Path in = MediaTestFixtures.write(dir, "in.m4a", original);
+        Path enc = dir.resolve("enc.m4a");
+        Path dec = dir.resolve("dec.m4a");
+
+        codec.encrypt(in, enc, PASSWORD, MediaCryptOptions.defaults());
+
+        // 新版加密已自动将 mdat 头改写为显式 size。
+        // 为模拟旧版产物，将 mdat 头改回 size==0。
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(enc.toFile(), "rw")) {
+            // 需要先定位 mdat box。跳过 ftyp 和 moov。
+            hbnu.project.ergoutreecrypt.mediacrypt.mp4.BoxParser parser =
+                    hbnu.project.ergoutreecrypt.mediacrypt.mp4.BoxParser.parse(enc);
+            hbnu.project.ergoutreecrypt.mediacrypt.mp4.Mp4Box mdat = parser.requireMdat();
+            raf.seek(mdat.boxOffset());
+            raf.writeInt(0); // 将显式 size 改回 0
+        }
+
+        // 此时 mdat 头恢复为 size==0，但文件末尾仍存在 uuid box（被 mdat 吞并）。
+        // 新版解密应能通过 BoxParser.scanForMetaUuidBox 回退扫描找到 uuid。
+        codec.decrypt(enc, dec, PASSWORD);
+        assertArrayEquals(original, Files.readAllBytes(dec),
+                "旧版 size==0 mdat 加密文件应能被新版解密恢复");
+    }
+
     @Test
     void m4aWrongPasswordDetected(@TempDir Path dir) throws Exception {
         byte[] original = MediaTestFixtures.buildM4a(MediaTestFixtures.pseudoData(2048));

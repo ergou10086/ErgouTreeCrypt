@@ -14,48 +14,66 @@ import java.util.Arrays;
  * Chunk 结构隐写引擎——将加密数据追加在 PNG 的 IEND 块之后。
  *
  * <p>PNG 规范保证 IEND 是文件的最后一个块，解码器读到 IEND 即停止。
- * 因此 IEND 之后追加的数据对图像查看器完全透明——图片显示与原图无异，
- * 且可嵌入的数据量不受像素尺寸限制（仅受文件系统和 PNG 总大小限制）。
+ * 因此 IEND 之后追加的数据对图像查看器完全透明。
  *
- * <h3>文件布局</h3>
+ * <h3>普通模式文件布局</h3>
  * <pre>
  *   [原始 PNG 数据，以 IEND 块结束]
- *   [加密载荷：encryptedSize 字节]
+ *   [加密载荷]
  *   [ChunkTrailer 序列化字节]
  *   [trailerSize：4 字节 int]
  *   [MAGIC：16 字节 "EGTC-CHUNK-END01"]
+ * </pre>
+ *
+ * <h3>隐蔽模式文件布局</h3>
+ * <pre>
+ *   [原始 PNG 数据，以 IEND 块结束]
+ *   [加密载荷]
+ *   [ChunkTrailer 序列化字节]
+ *   [trailerSize：4 字节 int]
+ *   [stealthSalt：16 字节]
+ *   [stealthMagic：16 字节 HMAC 派生]
  * </pre>
  *
  * @author ErgouTree
  */
 public final class PngChunkStego {
 
-    private PngChunkStego() {
-    }
+    private PngChunkStego() {}
 
     /**
      * 将加密后的载荷追加到 PNG 文件末尾。
      *
-     * @param source          原始 PNG 文件
-     * @param output          输出隐写文件
-     * @param encryptedPayload 加密后的文件内容
-     * @param trailer         尾部元数据
+     * @param stealthSalt  隐蔽模式盐（普通模式为 null）
+     * @param stealthMagic 隐蔽模式魔数（普通模式为 null）
      */
     public static void embed(final Path source, final Path output,
                               final byte[] encryptedPayload,
-                              final ChunkTrailer trailer) throws IOException, ImageStegoException {
+                              final ChunkTrailer trailer,
+                              final byte[] stealthSalt,
+                              final byte[] stealthMagic)
+            throws IOException, ImageStegoException {
         byte[] original = Files.readAllBytes(source);
-        // 确保原文件以有效的 PNG 结尾（至少末尾是 IEND）
         validatePngEnd(original);
 
         byte[] trailerBytes = trailer.toBytes();
         int trailerSize = trailerBytes.length;
 
-        ByteBuffer footer = ByteBuffer.allocate(trailerSize + 4 + ChunkTrailer.MAGIC_LEN)
+        boolean isStealth = (stealthSalt != null && stealthMagic != null);
+        int suffixLen = isStealth
+                ? ChunkTrailer.STEALTH_FOOTER_SUFFIX_LEN
+                : ChunkTrailer.FOOTER_SUFFIX_LEN;
+
+        ByteBuffer footer = ByteBuffer.allocate(trailerSize + suffixLen)
                 .order(ByteOrder.BIG_ENDIAN);
         footer.put(trailerBytes);
         footer.putInt(trailerSize);
-        footer.put(ChunkTrailer.MAGIC);
+        if (isStealth) {
+            footer.put(stealthSalt);
+            footer.put(stealthMagic);
+        } else {
+            footer.put(ChunkTrailer.MAGIC);
+        }
         footer.flip();
 
         try (OutputStream out = Files.newOutputStream(output, StandardOpenOption.CREATE,
@@ -66,48 +84,91 @@ public final class PngChunkStego {
         }
     }
 
+    /** 向后兼容：普通模式嵌入。 */
+    public static void embed(final Path source, final Path output,
+                              final byte[] encryptedPayload,
+                              final ChunkTrailer trailer)
+            throws IOException, ImageStegoException {
+        embed(source, output, encryptedPayload, trailer, null, null);
+    }
+
     /**
      * 从 PNG 文件中提取追加的加密载荷和元数据。
      *
-     * @param source 隐写 PNG 文件
-     * @return 提取结果
-     * @throws IOException         读取失败
-     * @throws ImageStegoException 未检测到隐写数据
+     * @param source   隐写 PNG 文件
+     * @param password 密码（隐蔽模式需要；普通模式可为 null）
      */
-    public static ChunkExtractResult extract(final Path source)
+    public static ChunkExtractResult extract(final Path source, final byte[] password)
             throws IOException, ImageStegoException {
         long fileLen = Files.size(source);
-        if (fileLen < ChunkTrailer.MAGIC_LEN + 4) {
+        if (fileLen < ChunkTrailer.FOOTER_SUFFIX_LEN) {
             throw new ImageStegoException("文件太小，不可能包含 Chunk 隐写数据");
         }
 
-        // 从文件末尾读取 MAGIC + trailerSize
-        byte[] suffix = new byte[ChunkTrailer.FOOTER_SUFFIX_LEN];
+        // 先读文件末尾最后 16 字节检测魔数类型
+        byte[] last16 = new byte[ChunkTrailer.MAGIC_LEN];
         try (InputStream in = Files.newInputStream(source)) {
-            skipFully(in, fileLen - suffix.length);
-            int read = in.readNBytes(suffix, 0, suffix.length);
-            if (read != suffix.length) {
+            skipFully(in, fileLen - last16.length);
+            in.readNBytes(last16, 0, last16.length);
+        }
+
+        boolean isStealth;
+        int suffixLen;
+        if (ChunkTrailer.isMagicMatch(last16)) {
+            // 普通模式：末尾 16B = MAGIC
+            isStealth = false;
+            suffixLen = ChunkTrailer.FOOTER_SUFFIX_LEN;
+        } else {
+            // 隐蔽模式：末尾 16B = stealthMagic，其前 16B = stealthSalt
+            if (password == null || password.length == 0) {
+                throw new ImageStegoException(
+                        "检测到隐蔽模式 Chunk 隐写数据，需要提供密码才能提取");
+            }
+            isStealth = true;
+            suffixLen = ChunkTrailer.STEALTH_FOOTER_SUFFIX_LEN;
+            if (fileLen < suffixLen) {
+                throw new ImageStegoException("文件太小，不可能包含隐蔽模式 Chunk 隐写数据");
+            }
+        }
+
+        // 读取完整后缀（精确 suffixLen 字节）
+        byte[] suffix = new byte[suffixLen];
+        try (InputStream in = Files.newInputStream(source)) {
+            skipFully(in, fileLen - suffixLen);
+            int read = in.readNBytes(suffix, 0, suffixLen);
+            if (read != suffixLen) {
                 throw new ImageStegoException("读取文件末尾失败");
             }
         }
 
-        ByteBuffer footer = ByteBuffer.wrap(suffix).order(ByteOrder.BIG_ENDIAN);
-        int trailerSize = footer.getInt(suffix.length - 4 - ChunkTrailer.MAGIC_LEN);
-        byte[] magic = new byte[ChunkTrailer.MAGIC_LEN];
-        System.arraycopy(suffix, suffix.length - ChunkTrailer.MAGIC_LEN,
-                magic, 0, ChunkTrailer.MAGIC_LEN);
-
-        if (!Arrays.equals(magic, ChunkTrailer.MAGIC)) {
-            throw new ImageStegoException("未检测到 Chunk 隐写数据（魔数不匹配）");
+        // 隐蔽模式：验证 stealthMagic
+        if (isStealth) {
+            int stealthMagicStart = suffixLen - ChunkTrailer.STEALTH_MAGIC_LEN;
+            int stealthSaltStart = stealthMagicStart - ChunkTrailer.STEALTH_SALT_LEN;
+            byte[] stealthSalt = Arrays.copyOfRange(suffix, stealthSaltStart, stealthMagicStart);
+            byte[] storedMagic = Arrays.copyOfRange(suffix, stealthMagicStart, suffixLen);
+            byte[] expected = ChunkTrailer.deriveStealthMagic(stealthSalt, password);
+            if (!Arrays.equals(storedMagic, expected)) {
+                throw new ImageStegoException("密码错误（隐蔽魔数不匹配）");
+            }
         }
 
-        if (trailerSize <= 0 || trailerSize > fileLen - ChunkTrailer.FOOTER_SUFFIX_LEN) {
+        // 解析 trailerSize：在 suffix 中，trailerSize 紧邻魔数（或 stealthSalt）之前
+        ByteBuffer footer = ByteBuffer.wrap(suffix).order(ByteOrder.BIG_ENDIAN);
+        int trailerSizeOffset = suffixLen - ChunkTrailer.MAGIC_LEN - 4;
+        if (isStealth) {
+            trailerSizeOffset = suffixLen - ChunkTrailer.STEALTH_MAGIC_LEN
+                    - ChunkTrailer.STEALTH_SALT_LEN - 4;
+        }
+        int trailerSize = footer.getInt(trailerSizeOffset);
+
+        if (trailerSize <= 0 || trailerSize > fileLen - suffixLen) {
             throw new ImageStegoException("Chunk trailer 大小异常: " + trailerSize);
         }
 
         // 读取 trailer 字节
         byte[] trailerBytes = new byte[trailerSize];
-        long trailerStart = fileLen - ChunkTrailer.FOOTER_SUFFIX_LEN - trailerSize;
+        long trailerStart = fileLen - suffixLen - trailerSize;
         try (InputStream in = Files.newInputStream(source)) {
             skipFully(in, trailerStart);
             int read = in.readNBytes(trailerBytes, 0, trailerSize);
@@ -116,7 +177,7 @@ public final class PngChunkStego {
             }
         }
 
-        ChunkTrailer trailer = ChunkTrailer.fromBytes(trailerBytes);
+        ChunkTrailer trailer = ChunkTrailer.fromBytes(trailerBytes, isStealth);
         long encryptedSize = trailer.encryptedSize;
         if (encryptedSize <= 0 || encryptedSize > Integer.MAX_VALUE) {
             throw new ImageStegoException("加密载荷大小异常: " + encryptedSize);
@@ -139,27 +200,34 @@ public final class PngChunkStego {
         return new ChunkExtractResult(trailer, encryptedPayload);
     }
 
-    /**
-     * 快速检测文件是否包含 Chunk 隐写数据（仅检查末尾魔数）。
-     */
+    /** 向后兼容：不带密码提取（仅支持普通模式）。 */
+    public static ChunkExtractResult extract(final Path source)
+            throws IOException, ImageStegoException {
+        return extract(source, null);
+    }
+
+    /** 快速检测文件是否包含 Chunk 隐写数据。 */
     public static boolean isChunkStego(final Path file) throws IOException {
         try {
             long len = Files.size(file);
-            if (len < ChunkTrailer.MAGIC_LEN) return false;
-            byte[] tail = new byte[ChunkTrailer.MAGIC_LEN];
-            try (InputStream in = Files.newInputStream(file)) {
-                skipFully(in, len - tail.length);
-                in.readNBytes(tail, 0, tail.length);
+            // 检查普通模式
+            if (len >= ChunkTrailer.MAGIC_LEN) {
+                byte[] tail = new byte[ChunkTrailer.MAGIC_LEN];
+                try (InputStream in = Files.newInputStream(file)) {
+                    skipFully(in, len - tail.length);
+                    in.readNBytes(tail, 0, tail.length);
+                }
+                if (ChunkTrailer.isMagicMatch(tail)) {
+                    return true;
+                }
             }
-            return Arrays.equals(tail, ChunkTrailer.MAGIC);
+            // 隐蔽模式无法快速检测（无固定魔数），返回 false
+            return false;
         } catch (Exception e) {
             return false;
         }
     }
 
-    /**
-     * 跳过指定字节数（循环 skip，确保完全跳过）。
-     */
     private static void skipFully(final InputStream in, final long n) throws IOException {
         long remaining = n;
         while (remaining > 0) {
@@ -171,22 +239,14 @@ public final class PngChunkStego {
         }
     }
 
-    /**
-     * 验证 PNG 以有效 IEND 结束（至少检查最后 12 字节）。
-     */
     private static void validatePngEnd(final byte[] data) throws ImageStegoException {
         if (data.length < 12) {
             throw new ImageStegoException("文件太小，不是有效 PNG");
         }
-        // PNG 签名
         if (data[0] != (byte) 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G') {
             throw new ImageStegoException("不是有效的 PNG 文件（签名不匹配）");
         }
     }
 
-    /**
-     * Chunk 提取结果。
-     */
-    public record ChunkExtractResult(ChunkTrailer trailer, byte[] encryptedPayload) {
-    }
+    public record ChunkExtractResult(ChunkTrailer trailer, byte[] encryptedPayload) {}
 }

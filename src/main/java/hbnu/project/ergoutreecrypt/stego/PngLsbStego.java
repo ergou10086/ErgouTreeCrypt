@@ -34,8 +34,8 @@ public final class PngLsbStego {
      * @throws ImageStegoException 容量不足或格式不支持
      */
     public static void embed(final Path source, final Path output,
-                              final byte[] header, final byte[] payload,
-                              final int lsbDepth) throws IOException, ImageStegoException {
+                             final byte[] header, final byte[] payload,
+                             final int lsbDepth) throws IOException, ImageStegoException {
         BufferedImage image = readImage(source);
         // 确保图像可写（灰度→RGB 转换在这里完成）
         BufferedImage workImage = ensureWritable(image);
@@ -67,12 +67,14 @@ public final class PngLsbStego {
      * @param source             隐写 PNG 文件路径
      * @param expectedHeaderSize 预期的元数据头字节数
      * @param lsbDepth           LSB 深度（1–4）
+     * @param password           密码（隐蔽模式需要；普通模式可为 null）
      * @return 提取结果：{@link ExtractResult}
      * @throws IOException         图像读取失败
-     * @throws ImageStegoException 未检测到隐写数据
+     * @throws ImageStegoException 未检测到隐写数据或密码错误
      */
     public static ExtractResult extract(final Path source, final int expectedHeaderSize,
-                                         final int lsbDepth) throws IOException, ImageStegoException {
+                                        final int lsbDepth, final byte[] password)
+            throws IOException, ImageStegoException {
         BufferedImage image = readImage(source);
         int channels = getRgbChannels(image);
         long totalBits = (long) image.getWidth() * image.getHeight() * channels * lsbDepth;
@@ -80,16 +82,14 @@ public final class PngLsbStego {
         if (totalBits < requiredBits) {
             throw new ImageStegoException("图像容量不足以包含隐写数据");
         }
-        // 先将所有像素的 LSB 数据提取为流
         byte[] extracted = extractFromPixels(image, channels, lsbDepth);
-        // 读取头
         if (extracted.length < expectedHeaderSize) {
             throw new ImageStegoException("提取数据短于预期头长度");
         }
         byte[] headerBytes = new byte[expectedHeaderSize];
         System.arraycopy(extracted, 0, headerBytes, 0, expectedHeaderSize);
-        StegoMetadata meta = StegoMetadata.fromBytes(headerBytes);
-        // 读取加密内容
+        // 传入密码以支持隐蔽模式
+        StegoMetadata meta = StegoMetadata.fromBytes(headerBytes, password);
         long dataLen = meta.payloadSize();
         if (dataLen < 0 || dataLen > extracted.length - expectedHeaderSize) {
             throw new ImageStegoException("文件大小异常或数据不完整: " + dataLen);
@@ -100,12 +100,12 @@ public final class PngLsbStego {
     }
 
     /**
-     * 提取结果：包含元数据与加密后的文件内容。
+     * 向后兼容：不带密码的提取（仅支持普通模式）。
      */
-    public record ExtractResult(StegoMetadata metadata, byte[] encryptedPayload) {
+    public static ExtractResult extract(final Path source, final int expectedHeaderSize,
+                                        final int lsbDepth) throws IOException, ImageStegoException {
+        return extract(source, expectedHeaderSize, lsbDepth, null);
     }
-
-    // ---- 内部实现 ----
 
     /**
      * 读取图像并验证格式支持。
@@ -123,6 +123,8 @@ public final class PngLsbStego {
         }
         return image;
     }
+
+    // ---- 内部实现 ----
 
     /**
      * 获取有效的 RGB 通道数（Alpha 不参与嵌入）。
@@ -158,7 +160,7 @@ public final class PngLsbStego {
      * <p>按行序、每像素 R→G→B 顺序处理每个通道。每个通道嵌入 lsbDepth 个比特。
      */
     private static void embedIntoPixels(final BufferedImage image, final int channels,
-                                         final int lsbDepth, final byte[] data) {
+                                        final int lsbDepth, final byte[] data) {
         int w = image.getWidth();
         int h = image.getHeight();
         int[] pixels = new int[w * h];
@@ -214,7 +216,7 @@ public final class PngLsbStego {
      * @return 提取出的所有数据字节
      */
     private static byte[] extractFromPixels(final BufferedImage image,
-                                             final int channels, final int lsbDepth) {
+                                            final int channels, final int lsbDepth) {
         int w = image.getWidth();
         int h = image.getHeight();
         int[] pixels = new int[w * h];
@@ -251,5 +253,11 @@ public final class PngLsbStego {
             }
         }
         return result;
+    }
+
+    /**
+     * 提取结果：包含元数据与加密后的文件内容。
+     */
+    public record ExtractResult(StegoMetadata metadata, byte[] encryptedPayload) {
     }
 }

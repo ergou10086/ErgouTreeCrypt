@@ -98,33 +98,33 @@
                         <!-- 选项 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoOptionsLabel" styleClass="card-title"/>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoLsbDepthRow" spacing="12" alignment="CENTER_LEFT">
                                 <Label fx:id="stegoLsbDepthLabel" styleClass="field-hint"/>
                                 <ComboBox fx:id="stegoLsbDepthCombo" prefWidth="80" maxWidth="80"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoParanoidRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoParanoidCheck" styleClass="check"/>
                                 <Label fx:id="stegoParanoidLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoIntegrityRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoIntegrityCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoIntegrityLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoStealthRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoStealthCheck" styleClass="check"/>
                                 <Label fx:id="stegoStealthLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoObfuscateRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoObfuscateCheck" styleClass="check"/>
                                 <Label fx:id="stegoObfuscateLabel"/>
                             </HBox>
-                            <HBox fx:id="stegoObfuscateRow" spacing="12" alignment="CENTER_LEFT"
+                            <HBox fx:id="stegoObfuscateSizeRow" spacing="12" alignment="CENTER_LEFT"
                                   managed="false" visible="false">
                                 <Label fx:id="stegoObfuscateSizeLabel" styleClass="field-hint"/>
                                 <TextField fx:id="stegoObfuscateSizeField" styleClass="text-input"
                                            prefWidth="120" maxWidth="120" promptText="KB"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoBruteForceRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoBruteForceCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoBruteForceLabel"/>
                             </HBox>
@@ -201,29 +201,29 @@
                         <!-- 选项 -->
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoChunkOptionsLabel" styleClass="card-title"/>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoChunkParanoidRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkParanoidCheck" styleClass="check"/>
                                 <Label fx:id="stegoChunkParanoidLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoChunkIntegrityRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkIntegrityCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoChunkIntegrityLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoChunkStealthRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkStealthCheck" styleClass="check"/>
                                 <Label fx:id="stegoChunkStealthLabel"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoChunkObfuscateRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkObfuscateCheck" styleClass="check"/>
                                 <Label fx:id="stegoChunkObfuscateLabel"/>
                             </HBox>
-                            <HBox fx:id="stegoChunkObfuscateRow" spacing="12" alignment="CENTER_LEFT"
+                            <HBox fx:id="stegoChunkObfuscateSizeRow" spacing="12" alignment="CENTER_LEFT"
                                   managed="false" visible="false">
                                 <Label fx:id="stegoChunkObfuscateSizeLabel" styleClass="field-hint"/>
                                 <TextField fx:id="stegoChunkObfuscateSizeField" styleClass="text-input"
                                            prefWidth="120" maxWidth="120" promptText="KB"/>
                             </HBox>
-                            <HBox spacing="12" alignment="CENTER_LEFT">
+                            <HBox fx:id="stegoChunkBruteForceRow" spacing="12" alignment="CENTER_LEFT">
                                 <CheckBox fx:id="stegoChunkBruteForceCheck" styleClass="check" selected="true"/>
                                 <Label fx:id="stegoChunkBruteForceLabel"/>
                             </HBox>

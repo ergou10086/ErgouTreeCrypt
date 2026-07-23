@@ -82,19 +82,26 @@ public class ImageStegoController {
     @FXML private TextField stegoPasswordVisibleField;
     @FXML private CheckBox stegoShowPasswordCheck;
     @FXML private Label stegoOptionsLabel;
+    // 选项行容器（控制整行显示/隐藏）
+    @FXML private HBox stegoLsbDepthRow;
     @FXML private Label stegoLsbDepthLabel;
     @FXML private ComboBox<Integer> stegoLsbDepthCombo;
+    @FXML private HBox stegoParanoidRow;
     @FXML private CheckBox stegoParanoidCheck;
     @FXML private Label stegoParanoidLabel;
+    @FXML private HBox stegoIntegrityRow;
     @FXML private CheckBox stegoIntegrityCheck;
     @FXML private Label stegoIntegrityLabel;
+    @FXML private HBox stegoStealthRow;
     @FXML private CheckBox stegoStealthCheck;
     @FXML private Label stegoStealthLabel;
+    @FXML private HBox stegoObfuscateRow;
     @FXML private CheckBox stegoObfuscateCheck;
     @FXML private Label stegoObfuscateLabel;
-    @FXML private HBox stegoObfuscateRow;
+    @FXML private HBox stegoObfuscateSizeRow;
     @FXML private Label stegoObfuscateSizeLabel;
     @FXML private TextField stegoObfuscateSizeField;
+    @FXML private HBox stegoBruteForceRow;
     @FXML private CheckBox stegoBruteForceCheck;
     @FXML private Label stegoBruteForceLabel;
     @FXML private VBox stegoCapacityCard;
@@ -121,17 +128,22 @@ public class ImageStegoController {
     @FXML private TextField stegoChunkPasswordVisibleField;
     @FXML private CheckBox stegoChunkShowPasswordCheck;
     @FXML private Label stegoChunkOptionsLabel;
+    @FXML private HBox stegoChunkParanoidRow;
     @FXML private CheckBox stegoChunkParanoidCheck;
     @FXML private Label stegoChunkParanoidLabel;
+    @FXML private HBox stegoChunkIntegrityRow;
     @FXML private CheckBox stegoChunkIntegrityCheck;
     @FXML private Label stegoChunkIntegrityLabel;
+    @FXML private HBox stegoChunkStealthRow;
     @FXML private CheckBox stegoChunkStealthCheck;
     @FXML private Label stegoChunkStealthLabel;
+    @FXML private HBox stegoChunkObfuscateRow;
     @FXML private CheckBox stegoChunkObfuscateCheck;
     @FXML private Label stegoChunkObfuscateLabel;
-    @FXML private HBox stegoChunkObfuscateRow;
+    @FXML private HBox stegoChunkObfuscateSizeRow;
     @FXML private Label stegoChunkObfuscateSizeLabel;
     @FXML private TextField stegoChunkObfuscateSizeField;
+    @FXML private HBox stegoChunkBruteForceRow;
     @FXML private CheckBox stegoChunkBruteForceCheck;
     @FXML private Label stegoChunkBruteForceLabel;
 
@@ -175,12 +187,12 @@ public class ImageStegoController {
         stegoChunkPasswordField.textProperty().addListener(chunkPasswordListener);
         stegoChunkPasswordVisibleField.textProperty().addListener(chunkPasswordListener);
 
-        // 混淆大小联动
+        // 混淆大小联动：勾选时显示目标大小输入行
         stegoObfuscateCheck.selectedProperty().addListener((obs, old, val) -> {
-            setVisibility(stegoObfuscateRow, val);
+            setVisibility(stegoObfuscateSizeRow, val);
         });
         stegoChunkObfuscateCheck.selectedProperty().addListener((obs, old, val) -> {
-            setVisibility(stegoChunkObfuscateRow, val);
+            setVisibility(stegoChunkObfuscateSizeRow, val);
         });
 
         // 隐蔽模式联动
@@ -225,31 +237,20 @@ public class ImageStegoController {
      */
     private void updateOptionLinkage() {
         boolean hasPassword = getLsbPasswordLength() > 0;
-        // 隐蔽模式需要密码
+        // 隐蔽模式需要密码（嵌入时由密码派生魔数）
         if (!hasPassword && stegoStealthCheck.isSelected()) {
             stegoStealthCheck.setSelected(false);
         }
         stegoStealthCheck.setDisable(!hasPassword);
-        // 防暴力破解：无密码时无意义（空密码提取不会"错误"）
-        if (!hasPassword) {
-            stegoBruteForceCheck.setSelected(false);
-        }
-        stegoBruteForceCheck.setDisable(!hasPassword);
+        // 防暴力破解始终可点击（提取时用户可能后续输入密码）
     }
 
-    /**
-     * 更新 Chunk 标签页选项联动。
-     */
     private void updateChunkOptionLinkage() {
         boolean hasPassword = getChunkPasswordLength() > 0;
         if (!hasPassword && stegoChunkStealthCheck.isSelected()) {
             stegoChunkStealthCheck.setSelected(false);
         }
         stegoChunkStealthCheck.setDisable(!hasPassword);
-        if (!hasPassword) {
-            stegoChunkBruteForceCheck.setSelected(false);
-        }
-        stegoChunkBruteForceCheck.setDisable(!hasPassword);
     }
 
     // ---- 子方案切换 ----
@@ -275,22 +276,14 @@ public class ImageStegoController {
     private void updateModeUI() {
         setVisibility(stegoFileCard, isHideMode);
         setVisibility(stegoCapacityCard, isHideMode);
-        // 隐藏模式才有的选项：LSB深度、paranoid、完整性、隐蔽、混淆大小
-        boolean showHideOpts = isHideMode;
-        setVisibility(stegoLsbDepthLabel, showHideOpts);
-        setVisibility(stegoLsbDepthCombo, showHideOpts);
-        setVisibility(stegoParanoidCheck, showHideOpts);
-        setVisibility(stegoParanoidLabel, showHideOpts);
-        setVisibility(stegoIntegrityCheck, showHideOpts);
-        setVisibility(stegoIntegrityLabel, showHideOpts);
-        setVisibility(stegoStealthCheck, showHideOpts);
-        setVisibility(stegoStealthLabel, showHideOpts);
-        setVisibility(stegoObfuscateCheck, showHideOpts);
-        setVisibility(stegoObfuscateLabel, showHideOpts);
-        setVisibility(stegoObfuscateRow, showHideOpts && stegoObfuscateCheck.isSelected());
-        // 提取模式才有的选项：防暴力破解
-        setVisibility(stegoBruteForceCheck, !isHideMode);
-        setVisibility(stegoBruteForceLabel, !isHideMode);
+        // 隐藏模式显示嵌入选项行，提取模式显示防暴力破解行
+        setVisibility(stegoLsbDepthRow, isHideMode);
+        setVisibility(stegoParanoidRow, isHideMode);
+        setVisibility(stegoIntegrityRow, isHideMode);
+        setVisibility(stegoStealthRow, isHideMode);
+        setVisibility(stegoObfuscateRow, isHideMode);
+        setVisibility(stegoObfuscateSizeRow, isHideMode && stegoObfuscateCheck.isSelected());
+        setVisibility(stegoBruteForceRow, !isHideMode);
         stegoActionBtn.setText(isHideMode
                 ? Messages.get("stego.btn.hide")
                 : Messages.get("stego.btn.extract"));
@@ -305,20 +298,12 @@ public class ImageStegoController {
 
     private void updateChunkModeUI() {
         setVisibility(stegoChunkFileCard, isChunkHideMode);
-        // 隐藏模式才有的选项
-        boolean showHideOpts = isChunkHideMode;
-        setVisibility(stegoChunkParanoidCheck, showHideOpts);
-        setVisibility(stegoChunkParanoidLabel, showHideOpts);
-        setVisibility(stegoChunkIntegrityCheck, showHideOpts);
-        setVisibility(stegoChunkIntegrityLabel, showHideOpts);
-        setVisibility(stegoChunkStealthCheck, showHideOpts);
-        setVisibility(stegoChunkStealthLabel, showHideOpts);
-        setVisibility(stegoChunkObfuscateCheck, showHideOpts);
-        setVisibility(stegoChunkObfuscateLabel, showHideOpts);
-        setVisibility(stegoChunkObfuscateRow, showHideOpts && stegoChunkObfuscateCheck.isSelected());
-        // 提取模式才有的选项
-        setVisibility(stegoChunkBruteForceCheck, !isChunkHideMode);
-        setVisibility(stegoChunkBruteForceLabel, !isChunkHideMode);
+        setVisibility(stegoChunkParanoidRow, isChunkHideMode);
+        setVisibility(stegoChunkIntegrityRow, isChunkHideMode);
+        setVisibility(stegoChunkStealthRow, isChunkHideMode);
+        setVisibility(stegoChunkObfuscateRow, isChunkHideMode);
+        setVisibility(stegoChunkObfuscateSizeRow, isChunkHideMode && stegoChunkObfuscateCheck.isSelected());
+        setVisibility(stegoChunkBruteForceRow, !isChunkHideMode);
         stegoActionBtn.setText(isChunkHideMode
                 ? Messages.get("stego.btn.hide")
                 : Messages.get("stego.btn.extract"));

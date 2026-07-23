@@ -86,24 +86,30 @@ public class ImageStegoController {
     @FXML private HBox stegoLsbDepthRow;
     @FXML private Label stegoLsbDepthLabel;
     @FXML private ComboBox<Integer> stegoLsbDepthCombo;
+    @FXML private Label stegoLsbDepthInfo;
     @FXML private HBox stegoParanoidRow;
     @FXML private CheckBox stegoParanoidCheck;
     @FXML private Label stegoParanoidLabel;
+    @FXML private Label stegoParanoidInfo;
     @FXML private HBox stegoIntegrityRow;
     @FXML private CheckBox stegoIntegrityCheck;
     @FXML private Label stegoIntegrityLabel;
+    @FXML private Label stegoIntegrityInfo;
     @FXML private HBox stegoStealthRow;
     @FXML private CheckBox stegoStealthCheck;
     @FXML private Label stegoStealthLabel;
+    @FXML private Label stegoStealthInfo;
     @FXML private HBox stegoObfuscateRow;
     @FXML private CheckBox stegoObfuscateCheck;
     @FXML private Label stegoObfuscateLabel;
+    @FXML private Label stegoObfuscateInfo;
     @FXML private HBox stegoObfuscateSizeRow;
     @FXML private Label stegoObfuscateSizeLabel;
     @FXML private TextField stegoObfuscateSizeField;
     @FXML private HBox stegoBruteForceRow;
     @FXML private CheckBox stegoBruteForceCheck;
     @FXML private Label stegoBruteForceLabel;
+    @FXML private Label stegoBruteForceInfo;
     @FXML private VBox stegoCapacityCard;
     @FXML private Label stegoCapacityLabel;
     @FXML private ProgressBar stegoCapacityBar;
@@ -131,21 +137,26 @@ public class ImageStegoController {
     @FXML private HBox stegoChunkParanoidRow;
     @FXML private CheckBox stegoChunkParanoidCheck;
     @FXML private Label stegoChunkParanoidLabel;
+    @FXML private Label stegoChunkParanoidInfo;
     @FXML private HBox stegoChunkIntegrityRow;
     @FXML private CheckBox stegoChunkIntegrityCheck;
     @FXML private Label stegoChunkIntegrityLabel;
+    @FXML private Label stegoChunkIntegrityInfo;
     @FXML private HBox stegoChunkStealthRow;
     @FXML private CheckBox stegoChunkStealthCheck;
     @FXML private Label stegoChunkStealthLabel;
+    @FXML private Label stegoChunkStealthInfo;
     @FXML private HBox stegoChunkObfuscateRow;
     @FXML private CheckBox stegoChunkObfuscateCheck;
     @FXML private Label stegoChunkObfuscateLabel;
+    @FXML private Label stegoChunkObfuscateInfo;
     @FXML private HBox stegoChunkObfuscateSizeRow;
     @FXML private Label stegoChunkObfuscateSizeLabel;
     @FXML private TextField stegoChunkObfuscateSizeField;
     @FXML private HBox stegoChunkBruteForceRow;
     @FXML private CheckBox stegoChunkBruteForceCheck;
     @FXML private Label stegoChunkBruteForceLabel;
+    @FXML private Label stegoChunkBruteForceInfo;
 
     // ---- 底部 ----
     @FXML private StackPane stegoRoot;
@@ -700,25 +711,36 @@ public class ImageStegoController {
         }
     }
 
-    // ---- 拖拽 ----
+    // ---- 拖拽（LSB + Chunk 两个图片区都支持）----
 
     private void setupDragDrop() {
+        // LSB 图片区
         stegoImageStack.setOnDragOver(this::onDragOver);
         stegoImageStack.setOnDragDropped(this::onImageDragDropped);
-        stegoImageStack.setOnDragEntered(this::onDragEntered);
-        stegoImageStack.setOnDragExited(this::onDragExited);
+        stegoImageStack.setOnDragEntered(e -> onDragEntered(e, stegoImageStack));
+        stegoImageStack.setOnDragExited(e -> onDragExited(e, stegoImageStack));
+        // Chunk 图片区
+        stegoChunkImageStack.setOnDragOver(this::onChunkDragOver);
+        stegoChunkImageStack.setOnDragDropped(this::onChunkImageDragDropped);
+        stegoChunkImageStack.setOnDragEntered(e -> onDragEntered(e, stegoChunkImageStack));
+        stegoChunkImageStack.setOnDragExited(e -> onDragExited(e, stegoChunkImageStack));
     }
 
-    private void onDragEntered(final DragEvent e) {
+    private void onDragEntered(final DragEvent e, final StackPane zone) {
         if (e.getDragboard().hasFiles())
-            stegoImageStack.setStyle("-fx-background-color: #d0e4f7; -fx-background-radius: 6;");
+            zone.setStyle("-fx-background-color: #d0e4f7; -fx-background-radius: 6;");
     }
 
-    private void onDragExited(final DragEvent e) {
-        stegoImageStack.setStyle("-fx-background-color: #e8e8e8; -fx-background-radius: 6;");
+    private void onDragExited(final DragEvent e, final StackPane zone) {
+        zone.setStyle("-fx-background-color: #e8e8e8; -fx-background-radius: 6;");
     }
 
     private void onDragOver(final DragEvent e) {
+        if (e.getDragboard().hasFiles())
+            e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+    }
+
+    private void onChunkDragOver(final DragEvent e) {
         if (e.getDragboard().hasFiles())
             e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
     }
@@ -728,6 +750,14 @@ public class ImageStegoController {
         Dragboard db = e.getDragboard();
         if (db.hasFiles() && !db.getFiles().isEmpty())
             setImageFile(db.getFiles().get(0));
+        e.setDropCompleted(true);
+    }
+
+    private void onChunkImageDragDropped(final DragEvent e) {
+        stegoChunkImageStack.setStyle("-fx-background-color: #e8e8e8; -fx-background-radius: 6;");
+        Dragboard db = e.getDragboard();
+        if (db.hasFiles() && !db.getFiles().isEmpty())
+            setChunkImageFile(db.getFiles().get(0));
         e.setDropCompleted(true);
     }
 
@@ -790,6 +820,19 @@ public class ImageStegoController {
         try { Files.deleteIfExists(path); } catch (IOException ignored) {}
     }
 
+    /** 安装带样式的提示气泡到 info-icon 标签上。 */
+    private static void setTip(final Label label, final String text) {
+        if (label == null) return;
+        javafx.scene.control.Tooltip tip = new javafx.scene.control.Tooltip(text);
+        tip.getStyleClass().add("info-tooltip");
+        tip.setShowDuration(javafx.util.Duration.seconds(20));
+        tip.setHideDelay(javafx.util.Duration.millis(120));
+        tip.setWrapText(true);
+        tip.setMaxWidth(300);
+        javafx.scene.control.Tooltip.install(label, tip);
+        label.setTooltip(tip);
+    }
+
     // ---- 国际化 ----
 
     public void applyTexts() {
@@ -837,6 +880,18 @@ public class ImageStegoController {
         stegoCancelBtn.setText(Messages.get("action.cancel"));
         stegoActionBtn.setText(isHideMode
                 ? Messages.get("stego.btn.hide") : Messages.get("stego.btn.extract"));
+        // 提示气泡
+        setTip(stegoLsbDepthInfo, Messages.get("stego.option.lsbDepth.tip"));
+        setTip(stegoParanoidInfo, Messages.get("options.paranoid.tip"));
+        setTip(stegoIntegrityInfo, Messages.get("stego.option.integrity.tip"));
+        setTip(stegoStealthInfo, Messages.get("stego.option.stealth.tip"));
+        setTip(stegoObfuscateInfo, Messages.get("stego.option.obfuscate.tip"));
+        setTip(stegoBruteForceInfo, Messages.get("stego.option.bruteForce.tip"));
+        setTip(stegoChunkParanoidInfo, Messages.get("options.paranoid.tip"));
+        setTip(stegoChunkIntegrityInfo, Messages.get("stego.option.integrity.tip"));
+        setTip(stegoChunkStealthInfo, Messages.get("stego.option.stealth.tip"));
+        setTip(stegoChunkObfuscateInfo, Messages.get("stego.option.obfuscate.tip"));
+        setTip(stegoChunkBruteForceInfo, Messages.get("stego.option.bruteForce.tip"));
     }
 
     public void shutdown() { taskRunner.shutdown(); }

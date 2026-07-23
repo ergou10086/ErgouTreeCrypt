@@ -16,11 +16,11 @@
             <padding>
                 <Insets top="8" right="12" bottom="8" left="16"/>
             </padding>
-            <ImageView fitWidth="24" fitHeight="24" preserveRatio="true" styleClass="title-logo" smooth="true">
+            <ImageView fitWidth="24" fitHeight="24" preserveRatio="true" styleClass="title-logo" smooth="true" mouseTransparent="true">
                 <Image url="@img/logo.png"/>
             </ImageView>
-            <Label fx:id="appTitleLabel" styleClass="title-text" text="ErgouTreeCrypt"/>
-            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="appTitleLabel" styleClass="title-text" text="ErgouTreeCrypt" mouseTransparent="true"/>
+            <Region HBox.hgrow="ALWAYS" mouseTransparent="true"/>
             <Button fx:id="langButton" styleClass="title-tool" onAction="#onToggleLang"/>
             <Button fx:id="themeButton" styleClass="title-tool" text="☽" onAction="#onToggleTheme"/>
             <Button fx:id="minBtn" styleClass="title-win,win-min" text="—" onAction="#onMinimize"/>

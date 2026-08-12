@@ -2,6 +2,10 @@
 <module version="4">
   <component name="AdditionalModuleElements">
     <content url="file://$MODULE_DIR$" dumb="true">
+      <excludeFolder url="file://$MODULE_DIR$/.idea/artifacts" />
+      <excludeFolder url="file://$MODULE_DIR$/android/.gradle" />
+      <excludeFolder url="file://$MODULE_DIR$/android/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/android/jcef" />
       <excludeFolder url="file://$MODULE_DIR$/docs" />
     </content>
   </component>

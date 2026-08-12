@@ -111,6 +111,22 @@ public final class EncryptRequest {
      */
     private RsCodecs rsCodecs;
 
+    /**
+     * 覆写 Argon2id 内存参数（KiB），null 表示使用 CryptoConstants 默认值。
+     * Android 移动端可通过此字段设置更低的内存参数以适配移动设备。
+     */
+    private Integer argon2MemoryKib;
+
+    /**
+     * 覆写 Argon2id 迭代次数，null 表示使用默认值。
+     */
+    private Integer argon2Passes;
+
+    /**
+     * 覆写 Argon2id 并行线程数，null 表示使用默认值。
+     */
+    private Integer argon2Threads;
+
     public String getInputFile() {
         return inputFile;
     }
@@ -269,5 +285,59 @@ public final class EncryptRequest {
 
     public void setRsCodecs(RsCodecs rs) {
         this.rsCodecs = rs;
+    }
+
+    /**
+     * 获取覆写的 Argon2id 内存参数（KiB），null 表示使用默认值。
+     *
+     * @return 内存参数（KiB），可能为 null
+     */
+    public Integer getArgon2MemoryKib() {
+        return argon2MemoryKib;
+    }
+
+    /**
+     * 设置覆写的 Argon2id 内存参数（KiB），null 表示使用默认值。
+     *
+     * @param argon2MemoryKib 内存参数（KiB），可为 null
+     */
+    public void setArgon2MemoryKib(Integer argon2MemoryKib) {
+        this.argon2MemoryKib = argon2MemoryKib;
+    }
+
+    /**
+     * 获取覆写的 Argon2id 迭代次数，null 表示使用默认值。
+     *
+     * @return 迭代次数，可能为 null
+     */
+    public Integer getArgon2Passes() {
+        return argon2Passes;
+    }
+
+    /**
+     * 设置覆写的 Argon2id 迭代次数，null 表示使用默认值。
+     *
+     * @param argon2Passes 迭代次数，可为 null
+     */
+    public void setArgon2Passes(Integer argon2Passes) {
+        this.argon2Passes = argon2Passes;
+    }
+
+    /**
+     * 获取覆写的 Argon2id 并行线程数，null 表示使用默认值。
+     *
+     * @return 线程数，可能为 null
+     */
+    public Integer getArgon2Threads() {
+        return argon2Threads;
+    }
+
+    /**
+     * 设置覆写的 Argon2id 并行线程数，null 表示使用默认值。
+     *
+     * @param argon2Threads 线程数，可为 null
+     */
+    public void setArgon2Threads(Integer argon2Threads) {
+        this.argon2Threads = argon2Threads;
     }
 }

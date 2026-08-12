@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 共享路径配置 -->
+<!-- 用于将应用的加密输出文件安全地提供给外部应用（分享/发送） -->
+<paths>
+    <!-- 内部 filesDir 的临时输出目录 -->
+    <files-path
+        name="crypto_output"
+        path="crypto_tmp/" />
+
+    <!-- 外部 filesDir（App 专用，Phase 2 可扩展） -->
+    <external-files-path
+        name="external_output"
+        path="ErgouTreeCrypt/" />
+
+    <!-- 缓存目录（临时文件，不持久） -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

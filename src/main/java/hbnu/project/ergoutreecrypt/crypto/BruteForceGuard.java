@@ -360,7 +360,8 @@ public final class BruteForceGuard {
             return;
         }
         try {
-            String json = Files.readString(dbPath, StandardCharsets.UTF_8);
+            byte[] raw = Files.readAllBytes(dbPath);
+            String json = new String(raw, StandardCharsets.UTF_8);
             // 简易 JSON 解析：提取 entries 数组中的每个对象
             parseJson(json);
         } catch (IOException e) {
@@ -452,7 +453,7 @@ public final class BruteForceGuard {
 
             // 原子写入：先写临时文件，再重命名
             Path tmp = dbPath.resolveSibling(dbPath.getFileName() + ".tmp");
-            Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
+            Files.write(tmp, sb.toString().getBytes(StandardCharsets.UTF_8));
             Files.move(tmp, dbPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             // 静默失败：计数器丢失比阻止用户解密更好

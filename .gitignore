@@ -1,4 +1,27 @@
+# --- IDE (root) ---
 .idea
+*.iml
+
+# --- Desktop (Maven) ---
+target/
+
+# --- Android ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/jcef/
+android/.idea/workspace.xml
+android/.idea/caches/
+android/.idea/libraries/
+android/.idea/modules.xml
+android/.idea/navEditor.xml
+android/.idea/assetWizardSettings.xml
+android/.DS_Store
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+
+# --- Docs ---
 docs
-target
-Claude.md
+CLAUDE.md

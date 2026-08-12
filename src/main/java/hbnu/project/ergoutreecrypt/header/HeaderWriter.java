@@ -96,6 +96,12 @@ public final class HeaderWriter {
         // 8. nonce: RS24(24→72)
         totalWritten += writeAll(ReedSolomon.encode(rs.rs24, h.getNonce()));
 
+        // 8b. Argon2 参数（仅 v2.15+）：RS6(6→18)
+        if (h.isV215()) {
+            byte[] argon2Raw = encodeArgon2Params(h);
+            totalWritten += writeAll(ReedSolomon.encode(rs.rs6, argon2Raw));
+        }
+
         // 9. keyHash 占位符: 192 字节零
         totalWritten += writeAll(new byte[HeaderLayout.KEY_HASH_ENC_SIZE]);
 
@@ -133,6 +139,29 @@ public final class HeaderWriter {
         ch.write(keyfileHashBuf, offset);
         offset += HeaderLayout.KEYFILE_HASH_ENC_SIZE;
         ch.write(authTagBuf, offset);
+    }
+
+    /**
+     * 将 VolumeHeader 中的 Argon2 参数编码为 6 字节原始数据。
+     *
+     * <p>布局：memoryKib（4B, BE int32）+ passes（1B, uint8）+ threads（1B, uint8）。
+     *
+     * @param h 卷头数据
+     * @return 6 字节原始 Argon2 参数
+     */
+    private static byte[] encodeArgon2Params(VolumeHeader h) {
+        byte[] raw = new byte[HeaderLayout.ARGON2_PARAMS_SRC_SIZE];
+        // memoryKiB: 4 字节大端
+        int mem = h.getArgon2MemoryKib();
+        raw[0] = (byte) (mem >>> 24);
+        raw[1] = (byte) (mem >>> 16);
+        raw[2] = (byte) (mem >>> 8);
+        raw[3] = (byte) mem;
+        // passes: 1 字节
+        raw[4] = (byte) h.getArgon2Passes();
+        // threads: 1 字节
+        raw[5] = (byte) h.getArgon2Threads();
+        return raw;
     }
 
     /**

@@ -138,6 +138,23 @@ public final class Encryptor {
 
         ctx.header = new VolumeHeader(salt, hkdfSalt, serpentIV, nonce);
         ctx.header.setComments(req.getComments() == null ? "" : req.getComments());
+
+        // v2.15: 若 EncryptRequest 包含 Argon2 参数覆写，升级 header 版本并写入参数
+        boolean hasArgon2Override = req.getArgon2MemoryKib() != null
+                || req.getArgon2Passes() != null
+                || req.getArgon2Threads() != null;
+        if (hasArgon2Override) {
+            ctx.header.setVersion(VolumeHeader.VERSION_V215);
+            if (req.getArgon2MemoryKib() != null) {
+                ctx.header.setArgon2MemoryKib(req.getArgon2MemoryKib());
+            }
+            if (req.getArgon2Passes() != null) {
+                ctx.header.setArgon2Passes(req.getArgon2Passes());
+            }
+            if (req.getArgon2Threads() != null) {
+                ctx.header.setArgon2Threads(req.getArgon2Threads());
+            }
+        }
         Flags flags = new Flags(
                 req.isParanoid(),
                 req.getKeyfiles() != null && !req.getKeyfiles().isEmpty(),
@@ -165,12 +182,15 @@ public final class Encryptor {
 
     /**
      * Argon2id 密码派生。无密码时使用公开默认密码。
+     *
+     * <p>若 EncryptRequest 中指定了 Argon2 参数覆写（如 Android 移动端），则优先使用覆写值。
      */
     private static void encryptDeriveKeys(OperationContext ctx, EncryptRequest req) {
         ctx.setStatus(Messages.get("status.deriving"));
         String effectivePw = Passwordless.effectivePassword(req.getPassword());
         byte[] pwBytes = PasswordNormalizer.encodeForKdf(effectivePw);
-        byte[] key = Argon2Kdf.deriveKey(pwBytes, ctx.header.getSalt(), req.isParanoid());
+        byte[] key = Argon2Kdf.deriveKey(pwBytes, ctx.header.getSalt(), req.isParanoid(),
+                req.getArgon2MemoryKib(), req.getArgon2Passes(), req.getArgon2Threads());
         SecureZero.zero(pwBytes);
         ctx.setKey(key);
     }
@@ -312,7 +332,8 @@ public final class Encryptor {
         try (FileChannel ch = FileChannel.open(Path.of(incomplete), StandardOpenOption.WRITE)) {
             HeaderWriter.writeAuthValues(ch,
                     HeaderLayout.authValuesOffset(
-                            ctx.header.getComments().getBytes(StandardCharsets.UTF_8).length),
+                            ctx.header.getComments().getBytes(StandardCharsets.UTF_8).length,
+                            ctx.header.getVersion()),
                     ctx.header.getKeyHash(), ctx.header.getKeyfileHash(), authTag,
                     req.getRsCodecs());
         }

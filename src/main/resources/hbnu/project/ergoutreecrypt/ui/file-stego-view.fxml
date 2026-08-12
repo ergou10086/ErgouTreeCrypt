@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.RadioButton?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane fx:id="fsRoot" xmlns:fx="http://javafx.com/fxml"
+           fx:controller="hbnu.project.ergoutreecrypt.ui.FileStegoController">
+    <VBox styleClass="tab-body">
+
+        <ScrollPane styleClass="content-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
+            <HBox alignment="TOP_CENTER">
+                <VBox styleClass="content" spacing="16" maxWidth="720" HBox.hgrow="ALWAYS">
+                    <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
+
+                    <!-- 模式切换：隐藏 / 提取 -->
+                    <HBox styleClass="segmented" alignment="CENTER">
+                        <ToggleButton fx:id="fsHideTab" styleClass="seg-btn" selected="true">
+                            <toggleGroup><ToggleGroup fx:id="fsModeGroup"/></toggleGroup>
+                        </ToggleButton>
+                        <ToggleButton fx:id="fsExtractTab" styleClass="seg-btn"
+                                      toggleGroup="$fsModeGroup"/>
+                    </HBox>
+
+                    <!-- 载体文件 -->
+                    <VBox styleClass="card" spacing="10">
+                        <Label fx:id="fsCarrierLabel" styleClass="card-title"/>
+                        <StackPane fx:id="fsCarrierStack"
+                                   style="-fx-background-color: #e8e8e8; -fx-background-radius: 6;"
+                                   minHeight="110" maxHeight="150" alignment="CENTER">
+                            <VBox alignment="CENTER" spacing="6">
+                                <Label fx:id="fsCarrierPlaceholder" styleClass="drop-hint" text="⤓"/>
+                                <Label fx:id="fsCarrierHint" styleClass="drop-sub"/>
+                                <Label fx:id="fsCarrierSub" styleClass="field-hint"/>
+                            </VBox>
+                        </StackPane>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <Label fx:id="fsCarrierInfo" styleClass="field-hint" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="fsCarrierBtn" styleClass="btn-ghost" onAction="#onChooseCarrier"/>
+                            <Button fx:id="fsCarrierClearBtn" styleClass="btn-ghost"
+                                    onAction="#onClearCarrier" managed="false" visible="false"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 待隐藏文件（隐藏模式） -->
+                    <VBox fx:id="fsSecretCard" styleClass="card" spacing="8">
+                        <Label fx:id="fsSecretLabel" styleClass="card-title"/>
+                        <StackPane fx:id="fsSecretStack"
+                                   style="-fx-background-color: #e8e8e8; -fx-background-radius: 6;"
+                                   minHeight="70" alignment="CENTER">
+                            <HBox alignment="CENTER_LEFT" spacing="12">
+                                <padding><Insets top="4" right="12" bottom="4" left="12"/></padding>
+                                <Label styleClass="file-icon" text="▤"/>
+                                <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                    <Label fx:id="fsSecretName" styleClass="file-name"/>
+                                    <Label fx:id="fsSecretSize" styleClass="file-meta"/>
+                                </VBox>
+                            </HBox>
+                            <Label fx:id="fsSecretPlaceholder" styleClass="drop-sub"
+                                   StackPane.alignment="CENTER"/>
+                        </StackPane>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="fsSecretBtn" styleClass="btn-ghost" onAction="#onChooseSecret"/>
+                            <Button fx:id="fsSecretClearBtn" styleClass="btn-ghost"
+                                    onAction="#onClearSecret" managed="false" visible="false"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 输出目录（提取模式） -->
+                    <VBox fx:id="fsOutputCard" styleClass="card" spacing="8" managed="false" visible="false">
+                        <Label fx:id="fsOutputLabel" styleClass="card-title"/>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <TextField fx:id="fsOutputField" styleClass="text-input" HBox.hgrow="ALWAYS"
+                                       editable="false"/>
+                            <Button fx:id="fsOutputBtn" styleClass="btn-ghost" onAction="#onChooseOutput"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 密码 -->
+                    <VBox styleClass="card" spacing="10">
+                        <Label fx:id="fsPasswordLabel" styleClass="card-title"/>
+                        <StackPane>
+                            <PasswordField fx:id="fsPasswordField" styleClass="text-input"/>
+                            <TextField fx:id="fsPasswordVisibleField" styleClass="text-input"
+                                       managed="false" visible="false"/>
+                        </StackPane>
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <CheckBox fx:id="fsShowPasswordCheck" styleClass="check"
+                                      onAction="#onToggleShowPassword"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 高级选项 -->
+                    <VBox fx:id="fsOptionsCard" styleClass="card" spacing="10">
+                        <Label fx:id="fsOptionsLabel" styleClass="card-title"/>
+
+                        <!-- 布尔选项 -->
+                        <HBox fx:id="fsParanoidRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsParanoidCheck" styleClass="check"/>
+                            <Label fx:id="fsParanoidInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsCompressRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsCompressCheck" styleClass="check"/>
+                            <Label fx:id="fsCompressInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsIntegrityRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsIntegrityCheck" styleClass="check" selected="true"/>
+                            <Label fx:id="fsIntegrityInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsStealthRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsStealthCheck" styleClass="check"/>
+                            <Label fx:id="fsStealthInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsObfuscateRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsObfuscateCheck" styleClass="check"/>
+                            <Label fx:id="fsObfuscateInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsObfuscateSizeRow" spacing="8" alignment="CENTER_LEFT"
+                              managed="false" visible="false">
+                            <Label fx:id="fsObfuscateSizeLabel" styleClass="field-hint"/>
+                            <TextField fx:id="fsObfuscateSizeField" styleClass="text-input"
+                                       prefWidth="120" maxWidth="120" promptText="KB"/>
+                        </HBox>
+                        <HBox fx:id="fsBruteForceRow" spacing="8" alignment="CENTER_LEFT">
+                            <CheckBox fx:id="fsBruteForceCheck" styleClass="check" selected="true"/>
+                            <Label fx:id="fsBruteForceInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+
+                        <!-- 嵌入方式 -->
+                        <Label fx:id="fsEmbedModeLabel" styleClass="field-label"/>
+                        <HBox fx:id="fsEmbedModeRow" spacing="16" alignment="CENTER_LEFT">
+                            <RadioButton fx:id="fsEmbedChunkRadio" styleClass="check" selected="true">
+                                <toggleGroup><ToggleGroup fx:id="fsEmbedGroup"/></toggleGroup>
+                            </RadioButton>
+                            <RadioButton fx:id="fsEmbedAppendRadio" styleClass="check"
+                                         toggleGroup="$fsEmbedGroup"/>
+                            <Label fx:id="fsEmbedModeInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 容量信息 -->
+                    <VBox fx:id="fsCapacityCard" styleClass="card" spacing="6">
+                        <Label fx:id="fsCapacityLabel" styleClass="card-title"/>
+                        <Label fx:id="fsPayloadSizeText" styleClass="field-hint"/>
+                        <Label fx:id="fsCarrierCapText" styleClass="field-hint"/>
+                        <Label fx:id="fsOutputEstText" styleClass="field-hint"/>
+                        <Label fx:id="fsCapacityWarn" styleClass="error-text" managed="false" visible="false"/>
+                    </VBox>
+
+                </VBox>
+            </HBox>
+        </ScrollPane>
+
+        <!-- 底部操作栏 -->
+        <VBox styleClass="footer" spacing="10">
+            <padding><Insets top="14" right="24" bottom="18" left="24"/></padding>
+            <VBox fx:id="fsProgressBox" spacing="6" managed="false" visible="false">
+                <HBox alignment="CENTER_LEFT" spacing="8">
+                    <Label fx:id="fsStatusLabel" styleClass="status-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <ProgressBar fx:id="fsProgressBar" styleClass="progress" progress="0" maxWidth="Infinity"/>
+            </VBox>
+            <HBox spacing="12" alignment="CENTER_RIGHT">
+                <Button fx:id="fsCancelBtn" styleClass="btn-secondary"
+                        managed="false" visible="false" onAction="#onCancel"/>
+                <Button fx:id="fsActionBtn" styleClass="btn-accent" onAction="#onAction"/>
+            </HBox>
+        </VBox>
+    </VBox>
+</StackPane>

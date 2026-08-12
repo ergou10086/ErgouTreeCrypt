@@ -41,6 +41,11 @@ public final class RsCodecs {
     public final Fec rs64;
 
     /**
+     * 6→18：用于 v2.15+ header 的 Argon2 参数字段（4B memory + 1B passes + 1B threads）。
+     */
+    public final Fec rs6;
+
+    /**
      * 128→136：用于载荷分块编码（约 6% 开销）。
      */
     public final Fec rs128;
@@ -51,6 +56,7 @@ public final class RsCodecs {
     public RsCodecs() {
         rs1 = Fec.newFec(1, 3);
         rs5 = Fec.newFec(5, 15);
+        rs6 = Fec.newFec(6, 18);
         rs16 = Fec.newFec(16, 48);
         rs24 = Fec.newFec(24, 72);
         rs32 = Fec.newFec(32, 96);

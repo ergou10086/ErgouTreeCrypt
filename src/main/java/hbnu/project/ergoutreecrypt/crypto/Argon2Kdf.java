@@ -34,15 +34,33 @@ public final class Argon2Kdf {
      * @throws IllegalStateException 若派生结果为全零，视为 Argon2 故障
      */
     public static byte[] deriveKey(byte[] password, byte[] salt, boolean paranoid) {
-        int passes = paranoid
-                ? CryptoConstants.ARGON2_PARANOID_PASSES
-                : CryptoConstants.ARGON2_NORMAL_PASSES;
-        int memoryKiB = paranoid
-                ? CryptoConstants.ARGON2_PARANOID_MEMORY_KIB
-                : CryptoConstants.ARGON2_NORMAL_MEMORY_KIB;
-        int threads = paranoid
-                ? CryptoConstants.ARGON2_PARANOID_THREADS
-                : CryptoConstants.ARGON2_NORMAL_THREADS;
+        return deriveKey(password, salt, paranoid, null, null, null);
+    }
+
+    /**
+     * 从密码与 salt 派生 32 字节加密密钥（支持参数覆写）。
+     *
+     * <p>当 override 参数为非 null 时使用覆写值，否则根据 paranoid 标志选择默认值。
+     * Android 移动端通过此方法使用更低的内存参数以适配移动设备。
+     *
+     * @param password           已归一化（NFC）的密码 UTF-8 字节
+     * @param salt               16 字节 Argon2 salt
+     * @param paranoid           是否使用偏执模式参数（更多迭代与线程）
+     * @param overrideMemoryKib  覆写的内存参数（KiB），null 表示使用默认值
+     * @param overridePasses     覆写的迭代次数，null 表示使用默认值
+     * @param overrideParallelism 覆写的并行线程数，null 表示使用默认值
+     * @return 32 字节派生密钥
+     * @throws IllegalStateException 若派生结果为全零，视为 Argon2 故障
+     */
+    public static byte[] deriveKey(byte[] password, byte[] salt, boolean paranoid,
+                                   Integer overrideMemoryKib, Integer overridePasses,
+                                   Integer overrideParallelism) {
+        int passes = overridePasses != null ? overridePasses
+                : (paranoid ? CryptoConstants.ARGON2_PARANOID_PASSES : CryptoConstants.ARGON2_NORMAL_PASSES);
+        int memoryKiB = overrideMemoryKib != null ? overrideMemoryKib
+                : (paranoid ? CryptoConstants.ARGON2_PARANOID_MEMORY_KIB : CryptoConstants.ARGON2_NORMAL_MEMORY_KIB);
+        int threads = overrideParallelism != null ? overrideParallelism
+                : (paranoid ? CryptoConstants.ARGON2_PARANOID_THREADS : CryptoConstants.ARGON2_NORMAL_THREADS);
 
         Argon2Parameters params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)

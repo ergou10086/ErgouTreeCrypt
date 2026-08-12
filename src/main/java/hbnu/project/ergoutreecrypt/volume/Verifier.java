@@ -82,7 +82,7 @@ public final class Verifier {
         boolean padded = ctx.header.getFlags().isPadded();
         int commentByteLen = ctx.header.getComments()
                 .getBytes(StandardCharsets.UTF_8).length;
-        long headerSize = HeaderLayout.headerSize(commentByteLen);
+        long headerSize = HeaderLayout.headerSize(commentByteLen, ctx.header.getVersion());
 
         try (InputStream fin = Files.newInputStream(Path.of(ctx.inputFile))) {
             fin.skipNBytes(headerSize);

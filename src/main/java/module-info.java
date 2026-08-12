@@ -33,4 +33,14 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.mediacrypt.mp3;
     exports hbnu.project.ergoutreecrypt.mediacrypt.mp4;
     exports hbnu.project.ergoutreecrypt.stego;
+    exports hbnu.project.ergoutreecrypt.filestego;
+    exports hbnu.project.ergoutreecrypt.filestego.api;
+    exports hbnu.project.ergoutreecrypt.filestego.codec;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.spi;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.png;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.zip;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.pdf;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.wav;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.flac;
+    exports hbnu.project.ergoutreecrypt.filestego.carrier.mp4;
 }

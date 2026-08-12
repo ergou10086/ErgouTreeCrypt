@@ -74,10 +74,20 @@ public final class HeaderLayout {
      */
     public static final int AUTH_TAG_ENC_SIZE = 192;
 
+    /**
+     * Argon2 参数源字段（v2.15+）：6 字节（4B memory + 1B passes + 1B threads）。
+     */
+    public static final int ARGON2_PARAMS_SRC_SIZE = 6;
+
+    /**
+     * Argon2 参数编码后尺寸：6→18（RS6）。
+     */
+    public static final int ARGON2_PARAMS_ENC_SIZE = 18;
+
     // ==================== 基础尺寸计算 ====================
 
     /**
-     * 不含注释的基础 header 大小。
+     * 不含注释的基础 header 大小（v2.14）。
      * 15+15+15+48+96+48+72+192+96+192 = 789 字节。
      */
     public static final int BASE_HEADER_SIZE =
@@ -85,6 +95,13 @@ public final class HeaderLayout {
                     + SALT_ENC_SIZE + HKDF_SALT_ENC_SIZE + SERPENT_IV_ENC_SIZE
                     + NONCE_ENC_SIZE + KEY_HASH_ENC_SIZE + KEYFILE_HASH_ENC_SIZE
                     + AUTH_TAG_ENC_SIZE;
+
+    /**
+     * 不含注释的基础 header 大小（v2.15+）。
+     * 789 + 18 = 807 字节。
+     */
+    public static final int BASE_HEADER_SIZE_V215 =
+            BASE_HEADER_SIZE + ARGON2_PARAMS_ENC_SIZE;
 
     // ==================== RS 编码前的源字段尺寸 ====================
 
@@ -112,17 +129,30 @@ public final class HeaderLayout {
     }
 
     /**
-     * 计算含注释的总 header 大小。
+     * 计算含注释的总 header 大小（v2.14 格式）。
      *
      * @param commentsLen 注释字符数（UTF-8 字节长度）
      * @return {@code 789 + commentsLen * 3} 字节
      */
     public static int headerSize(int commentsLen) {
-        return BASE_HEADER_SIZE + commentsLen * COMMENT_CHAR_ENC_SIZE;
+        return headerSize(commentsLen, "v2.14");
     }
 
     /**
-     * Auth 值（keyHash / keyfileHash / authTag）在文件中的起始偏移。
+     * 计算含注释的总 header 大小（版本感知）。
+     *
+     * @param commentsLen 注释字符数（UTF-8 字节长度）
+     * @param version     header 版本字符串（如 "v2.14" 或 "v2.15"）
+     * @return 总 header 字节数
+     */
+    public static int headerSize(int commentsLen, String version) {
+        int base = "v2.15".compareTo(version) <= 0
+                ? BASE_HEADER_SIZE_V215 : BASE_HEADER_SIZE;
+        return base + commentsLen * COMMENT_CHAR_ENC_SIZE;
+    }
+
+    /**
+     * Auth 值（keyHash / keyfileHash / authTag）在文件中的起始偏移（v2.14 格式）。
      *
      * <p>公式：version(15) + commentLen(15) + comments(len×3) + flags(15)
      * + salt(48) + hkdfSalt(96) + serpentIV(48) + nonce(72) = 309 + comments×3。
@@ -131,8 +161,25 @@ public final class HeaderLayout {
      * @return auth 值起始偏移（字节）
      */
     public static int authValuesOffset(int commentsLen) {
-        return VERSION_ENC_SIZE + COMMENT_LEN_ENC_SIZE + commentsLen * COMMENT_CHAR_ENC_SIZE
+        return authValuesOffset(commentsLen, "v2.14");
+    }
+
+    /**
+     * Auth 值（keyHash / keyfileHash / authTag）在文件中的起始偏移（版本感知）。
+     *
+     * <p>v2.15 额外包含 argon2 参数块（18 字节），offset 增加相应大小。
+     *
+     * @param commentsLen 注释字符数（UTF-8 字节长度）
+     * @param version     header 版本字符串
+     * @return auth 值起始偏移（字节）
+     */
+    public static int authValuesOffset(int commentsLen, String version) {
+        int offset = VERSION_ENC_SIZE + COMMENT_LEN_ENC_SIZE + commentsLen * COMMENT_CHAR_ENC_SIZE
                 + FLAGS_ENC_SIZE + SALT_ENC_SIZE + HKDF_SALT_ENC_SIZE + SERPENT_IV_ENC_SIZE
                 + NONCE_ENC_SIZE;
+        if ("v2.15".compareTo(version) <= 0) {
+            offset += ARGON2_PARAMS_ENC_SIZE;
+        }
+        return offset;
     }
 }

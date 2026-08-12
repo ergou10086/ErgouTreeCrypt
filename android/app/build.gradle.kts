@@ -1,0 +1,144 @@
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+
+// ============================================================
+// 任务：从桌面端同步共享核心源码到 Android 构建目录
+// 排除桌面特有层
+// ============================================================
+val syncCoreLibs by tasks.registering(Copy::class) {
+    from("../../src/main/java") {
+        exclude(
+            // 桌面 JavaFX UI 层
+            "hbnu/project/ergoutreecrypt/ui/**",
+            // 桌面入口类
+            "hbnu/project/ergoutreecrypt/Launcher.java",
+            "hbnu/project/ergoutreecrypt/PicocryptApplication.java",
+            // 桌面 java.util.prefs 设置
+            "hbnu/project/ergoutreecrypt/settings/SettingsManager.java",
+            // 图像隐写 — 依赖 java.awt.BufferedImage / javax.imageio（Android 不可用）
+            "hbnu/project/ergoutreecrypt/stego/**",
+            // JPMS 模块声明
+            "module-info.java"
+        )
+    }
+    into(layout.buildDirectory.dir("sync-core"))
+}
+
+val syncI18n by tasks.registering(Copy::class) {
+    from("../../src/main/resources/hbnu/project/ergoutreecrypt/i18n")
+    into("src/main/resources/hbnu/project/ergoutreecrypt/i18n")
+}
+
+android {
+    namespace = "hbnu.project.ergoutreecrypt.android"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "hbnu.project.ergoutreecrypt"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 47
+        versionName = "1.4.7"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+
+    // ============================================================
+    // sourceSets：Android 自有代码 + 同步后的共享核心代码
+    // ============================================================
+    sourceSets {
+        named("main") {
+            java.srcDirs(
+                "src/main/java",
+                layout.buildDirectory.dir("sync-core")  // 同步任务产物目录
+            )
+        }
+    }
+}
+
+// 编译前自动同步共享核心代码
+tasks.named("preBuild") { dependsOn(syncCoreLibs) }
+
+dependencies {
+    // ============================================================
+    // 共享核心加密依赖（版本与桌面端 pom.xml 严格一致）
+    // ============================================================
+    implementation(libs.bouncycastle)
+    implementation(libs.commons.compress)
+    implementation(libs.zip4j)
+    implementation(libs.tukaani.xz)
+
+    // ============================================================
+    // AndroidX 基础
+    // ============================================================
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.datastore.preferences)
+
+    // ============================================================
+    // Compose UI
+    // ============================================================
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation("androidx.compose.material:material-icons-extended")
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+
+    // ============================================================
+    // Kotlin 协程
+    // ============================================================
+    implementation(libs.kotlinx.coroutines.android)
+
+    // ============================================================
+    // 安全 / 生物识别（可选功能，Phase 3 启用）
+    // ============================================================
+    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.biometric)
+
+    // ============================================================
+    // Java 21 desugar（提供 java.nio.file 等 API 兼容低版本 Android）
+    // ============================================================
+    coreLibraryDesugaring(libs.androidx.core.desugar)
+
+    // ============================================================
+    // 测试
+    // ============================================================
+    testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+}

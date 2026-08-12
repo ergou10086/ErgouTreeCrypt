@@ -18,6 +18,14 @@ public final class VolumeHeader {
     public static final String CURRENT_VERSION = "v2.14";
 
     /**
+     * v2.15 协议版本（含 Argon2 参数覆写支持）。
+     *
+     * <p>当加密端使用非默认 Argon2 参数（如 Android LIGHT 模式）时，
+     * header 版本升级到 v2.15，新增 Argon2 参数块。
+     */
+    public static final String VERSION_V215 = "v2.15";
+
+    /**
      * 注释最大长度（UTF-8 字节数上限）。
      */
     public static final int MAX_COMMENT_LEN = 99999;
@@ -112,6 +120,27 @@ public final class VolumeHeader {
     private byte[] authTag;
 
     /**
+     * Argon2id 内存参数（KiB）。0 表示未设置，解密时使用 paranoid 标志推断默认值。
+     *
+     * <p>仅 v2.15+ header 包含此字段。
+     */
+    private int argon2MemoryKib;
+
+    /**
+     * Argon2id 迭代次数。0 表示未设置，解密时使用 paranoid 标志推断默认值。
+     *
+     * <p>仅 v2.15+ header 包含此字段。
+     */
+    private int argon2Passes;
+
+    /**
+     * Argon2id 并行线程数。0 表示未设置，解密时使用 paranoid 标志推断默认值。
+     *
+     * <p>仅 v2.15+ header 包含此字段。
+     */
+    private int argon2Threads;
+
+    /**
      * 创建空 header（字段均为默认值/零长度数组），供 Reader 填充。
      */
     public VolumeHeader() {
@@ -184,6 +213,35 @@ public final class VolumeHeader {
 
     public byte[] getAuthTag() { return authTag; }
     public void setAuthTag(byte[] authTag) { this.authTag = authTag; }
+
+    public int getArgon2MemoryKib() { return argon2MemoryKib; }
+    public void setArgon2MemoryKib(int argon2MemoryKib) { this.argon2MemoryKib = argon2MemoryKib; }
+
+    public int getArgon2Passes() { return argon2Passes; }
+    public void setArgon2Passes(int argon2Passes) { this.argon2Passes = argon2Passes; }
+
+    public int getArgon2Threads() { return argon2Threads; }
+    public void setArgon2Threads(int argon2Threads) { this.argon2Threads = argon2Threads; }
+
+    /**
+     * 是否包含有效的 Argon2 参数覆写。
+     *
+     * <p>任一字段 &gt; 0 即视为有效覆写。全为 0 表示使用默认参数（由 paranoid 标志决定）。
+     *
+     * @return 若有非零参数则返回 true
+     */
+    public boolean hasArgon2Params() {
+        return argon2MemoryKib > 0 || argon2Passes > 0 || argon2Threads > 0;
+    }
+
+    /**
+     * 是否为 v2.15+ 协议版本。
+     *
+     * @return 若版本为 {@value #VERSION_V215} 或更高则返回 true
+     */
+    public boolean isV215() {
+        return VERSION_V215.equals(version);
+    }
 
     @Override
     public String toString() {

@@ -169,7 +169,7 @@ public final class Decryptor {
             int commentByteLen = ctx.header.getComments()
                     .getBytes(StandardCharsets.UTF_8).length;
             ctx.total = Files.size(Path.of(ctx.inputFile))
-                    - HeaderLayout.headerSize(commentByteLen);
+                    - HeaderLayout.headerSize(commentByteLen, ctx.header.getVersion());
         }
 
         ctx.isLegacyV1 = ctx.header.isLegacyV1();
@@ -212,11 +212,24 @@ public final class Decryptor {
 
     /**
      * Argon2id 密钥派生。
+     *
+     * <p>若 header 包含 v2.15+ Argon2 参数覆写，优先使用 header 中的参数；
+     * 否则使用 paranoid 标志推断默认参数。
      */
     private static void decryptDeriveKeys(OperationContext ctx, DecryptRequest req) {
         ctx.setStatus(Messages.get("status.deriving"));
-        boolean paranoid = ctx.header.getFlags().isParanoid();
-        byte[] key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(), paranoid);
+        byte[] key;
+        if (ctx.header.hasArgon2Params()) {
+            // 使用 header 中存储的精确 Argon2 参数
+            key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(),
+                    false, // paranoid 标志无效 — 参数已显式指定
+                    ctx.header.getArgon2MemoryKib(),
+                    ctx.header.getArgon2Passes(),
+                    ctx.header.getArgon2Threads());
+        } else {
+            boolean paranoid = ctx.header.getFlags().isParanoid();
+            key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(), paranoid);
+        }
         ctx.setKey(key);
     }
 
@@ -319,7 +332,7 @@ public final class Decryptor {
         boolean padded = ctx.header.getFlags().isPadded();
         int commentByteLen = ctx.header.getComments()
                 .getBytes(StandardCharsets.UTF_8).length;
-        long headerSize = HeaderLayout.headerSize(commentByteLen);
+        long headerSize = HeaderLayout.headerSize(commentByteLen, ctx.header.getVersion());
 
         try (InputStream fin = Files.newInputStream(Path.of(ctx.inputFile));
              OutputStream fout = Files.newOutputStream(

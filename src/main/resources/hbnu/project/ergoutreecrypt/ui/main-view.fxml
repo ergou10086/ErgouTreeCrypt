@@ -288,6 +288,9 @@
             <Tab fx:id="stegoTab">
                 <fx:include fx:id="stegoView" source="stego-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>
+            <Tab fx:id="fileStegoTab">
+                <fx:include fx:id="fileStegoView" source="file-stego-view.fxml" VBox.vgrow="ALWAYS"/>
+            </Tab>
         </TabPane>
     </VBox>
 </StackPane>

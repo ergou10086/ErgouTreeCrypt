@@ -1,0 +1,74 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'src/main/java/hbnu/project/ergoutreecrypt/**'
+      - '.github/workflows/android-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'src/main/java/hbnu/project/ergoutreecrypt/**'
+      - '.github/workflows/android-ci.yml'
+
+jobs:
+  # ============================================================
+  # Android 单元测试（JVM 上运行，不需要模拟器）
+  # ============================================================
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v3
+
+      - name: Run Android unit tests
+        run: cd android && ./gradlew :app:testDebugUnitTest
+
+      - name: Run shared core tests (Android classpath)
+        run: cd android && ./gradlew :shared-test:test
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/shared-test/build/reports/tests/
+
+  # ============================================================
+  # APK 构建
+  # ============================================================
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v3
+
+      - name: Build debug APK
+        run: cd android && ./gradlew :app:assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk

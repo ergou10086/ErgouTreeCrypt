@@ -10,8 +10,6 @@ import hbnu.project.ergoutreecrypt.ui.support.*;
 import hbnu.project.ergoutreecrypt.volume.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.geometry.Pos;
-import javafx.scene.Cursor;
 import javafx.scene.control.*;
 import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
@@ -20,7 +18,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 
 import java.io.File;
 import java.io.IOException;
@@ -84,6 +81,10 @@ public class MainController {
     private Tab stegoTab;
     @FXML
     private ImageStegoController stegoViewController;
+    @FXML
+    private Tab fileStegoTab;
+    @FXML
+    private FileStegoController fileStegoViewController;
 
     // ---- 模式切换 ----
     @FXML
@@ -280,50 +281,9 @@ public class MainController {
     private boolean running = false;
     private FxProgressReporter activeReporter;
 
-    private static void setTip(Label label, String text) {
-        if (label == null) {
-            return;
-        }
-        Tooltip tip = new Tooltip(text);
-        tip.getStyleClass().add("info-tooltip");
-        tip.setShowDelay(Duration.millis(120));   // 几乎即时显示
-        tip.setShowDuration(Duration.seconds(20)); // 停留足够长
-        tip.setHideDelay(Duration.millis(120));
-        tip.setWrapText(true);
-        tip.setMaxWidth(300);
-        // 直接安装到节点，比 Label.setTooltip 更稳定地响应 hover
-        Tooltip.install(label, tip);
-        label.setTooltip(tip);
-    }
-
     private static void setVisible(Region node, boolean visible) {
         node.setVisible(visible);
         node.setManaged(visible);
-    }
-
-    private static List<String> toPaths(List<File> files) {
-        List<String> paths = new ArrayList<>(files.size());
-        for (File f : files) {
-            paths.add(f.getAbsolutePath());
-        }
-        return paths;
-    }
-
-    /**
-     * 判断异常是否与加密/密码相关（ZIP 加密条目、AES 封装等）。
-     */
-    private static boolean isEncryptionRelated(Throwable t) {
-        if (t == null) {
-            return false;
-        }
-        String msg = t.getMessage();
-        if (msg == null) {
-            msg = "";
-        }
-        String lower = msg.toLowerCase();
-        return lower.contains("encrypt") || lower.contains("password")
-                || lower.contains("unsupported compression method")
-                || lower.contains("unsupported feature");
     }
 
     @FXML
@@ -465,8 +425,7 @@ public class MainController {
             }
         }
         updateThemeButton();
-        enableWindowDrag();
-        enableCornerResize();
+        new WindowChrome(rootStack, titleBar, this::stage).install();
     }
 
     /**
@@ -527,6 +486,12 @@ public class MainController {
         }
         if (stegoViewController != null) {
             stegoViewController.applyTexts();
+        }
+        if (fileStegoTab != null) {
+            fileStegoTab.setText(Messages.get("tab.fileStego"));
+        }
+        if (fileStegoViewController != null) {
+            fileStegoViewController.applyTexts();
         }
 
         dropHintLabel.setText(Messages.get("file.drop.hint"));
@@ -599,39 +564,30 @@ public class MainController {
      * 为每个选项后面的 ⓘ 图标挂载 Tooltip，语言切换时重新调用以刷新文案。
      */
     private void setupInfoTooltips() {
-        setTip(paranoidInfo, Messages.get("options.paranoid.tip"));
-        setTip(reedSolomonInfo, Messages.get("options.reedSolomon.tip"));
-        setTip(deniabilityInfo, Messages.get("options.deniability.tip"));
-        setTip(compressInfo, Messages.get("options.compress.tip"));
-        setTip(compressAfterInfo, Messages.get(
+        MainViewSupport.installTooltip(paranoidInfo, Messages.get("options.paranoid.tip"));
+        MainViewSupport.installTooltip(reedSolomonInfo, Messages.get("options.reedSolomon.tip"));
+        MainViewSupport.installTooltip(deniabilityInfo, Messages.get("options.deniability.tip"));
+        MainViewSupport.installTooltip(compressInfo, Messages.get("options.compress.tip"));
+        MainViewSupport.installTooltip(compressAfterInfo, Messages.get(
                 SettingsManager.isArchiveCustomEncryption()
                         ? "options.compressAfter.tip"
                         : "options.compressAfter.tip.nocustom"));
-        setTip(splitInfo, Messages.get("options.split.tip"));
-        setTip(encryptDepthInfo, Messages.get("options.encryptDepth.tip"));
-        setTip(forceDecryptInfo, Messages.get("options.forceDecrypt.tip"));
-        setTip(autoUnzipInfo, Messages.get("options.autoUnzip.tip"));
-        setTip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
-        setTip(recursiveExtractInfo, Messages.get("options.recursiveExtract.tip"));
-        setTip(keyfileOrderedInfo, Messages.get("options.keyfiles.ordered.tip"));
+        MainViewSupport.installTooltip(splitInfo, Messages.get("options.split.tip"));
+        MainViewSupport.installTooltip(encryptDepthInfo, Messages.get("options.encryptDepth.tip"));
+        MainViewSupport.installTooltip(forceDecryptInfo, Messages.get("options.forceDecrypt.tip"));
+        MainViewSupport.installTooltip(autoUnzipInfo, Messages.get("options.autoUnzip.tip"));
+        MainViewSupport.installTooltip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
+        MainViewSupport.installTooltip(recursiveExtractInfo, Messages.get("options.recursiveExtract.tip"));
+        MainViewSupport.installTooltip(keyfileOrderedInfo, Messages.get("options.keyfiles.ordered.tip"));
     }
 
     /**
      * 将内置的高考真题 ZIP 解包到用户临时目录，设为默认钓鱼文件。
      */
     private void setDefaultDecoyFile() {
-        try {
-            java.nio.file.Path tmp = java.nio.file.Files.createTempFile("ergou_decoy_", ".zip");
-            try (java.io.InputStream in = getClass().getResourceAsStream(
-                    "/other/2025年高考全国一卷语文高考真题文档版（含答案）.zip")) {
-                if (in == null) {
-                    return;
-                }
-                java.nio.file.Files.copy(in, tmp,
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            }
-            decoyFilePathField.setText(tmp.toAbsolutePath().toString());
-        } catch (java.io.IOException ignored) {
+        String decoyPath = MainViewSupport.extractDefaultDecoyFile();
+        if (decoyPath != null) {
+            decoyFilePathField.setText(decoyPath);
         }
     }
 
@@ -685,6 +641,9 @@ public class MainController {
         }
         if (stegoViewController != null) {
             stegoViewController.shutdown();
+        }
+        if (fileStegoViewController != null) {
+            fileStegoViewController.shutdown();
         }
         Platform.exit();
     }
@@ -853,7 +812,7 @@ public class MainController {
             File parent = selectedFile.getParentFile();
             return parent != null ? parent.getAbsolutePath() : path;
         }
-        return deriveDecryptOutput(path);
+        return MainViewSupport.deriveDecryptOutput(path);
     }
 
     @FXML
@@ -945,9 +904,6 @@ public class MainController {
         optionsChevron.setText(optionsExpanded ? "⌃" : "⌄");
     }
 
-    // ================================================================
-    // 设置栏折叠
-    // ================================================================
     // ================================================================
     // 密钥文件
     // ================================================================
@@ -1061,7 +1017,7 @@ public class MainController {
         req.setForceDecrypt(forceDecryptCheck.isSelected());
         req.setRsCodecs(new RsCodecs());
         if (!keyfiles.isEmpty()) {
-            req.setKeyfiles(toPaths(keyfiles));
+            req.setKeyfiles(MainViewSupport.toPaths(keyfiles));
         }
 
         FxProgressReporter reporter = newReporter();
@@ -1099,7 +1055,7 @@ public class MainController {
             opts.archivePassword = archivePwd;
             opts.rsCodecs = new RsCodecs();
             if (!keyfiles.isEmpty()) {
-                opts.keyfiles = toPaths(keyfiles);
+                opts.keyfiles = MainViewSupport.toPaths(keyfiles);
                 opts.keyfileOrdered = keyfileOrderedCheck.isSelected();
             }
             opts.threadCount = SettingsManager.getThreadCount();
@@ -1141,7 +1097,7 @@ public class MainController {
         req.setChunkSize(splitSizeSpinner.getValue());
         req.setRsCodecs(new RsCodecs());
         if (!keyfiles.isEmpty()) {
-            req.setKeyfiles(toPaths(keyfiles));
+            req.setKeyfiles(MainViewSupport.toPaths(keyfiles));
             req.setKeyfileOrdered(keyfileOrderedCheck.isSelected());
         }
 
@@ -1163,7 +1119,7 @@ public class MainController {
 
         String out = outputFileField.getText();
         if (out == null || out.isEmpty()) {
-            out = deriveDecryptOutput(in);
+            out = MainViewSupport.deriveDecryptOutput(in);
         }
         DecryptRequest req = new DecryptRequest();
         req.setInputFile(in);
@@ -1174,7 +1130,7 @@ public class MainController {
         req.setVerifyFirst(verifyFirstCheck.isSelected());
         req.setRsCodecs(new RsCodecs());
         if (!keyfiles.isEmpty()) {
-            req.setKeyfiles(toPaths(keyfiles));
+            req.setKeyfiles(MainViewSupport.toPaths(keyfiles));
         }
 
         FxProgressReporter reporter = newReporter();
@@ -1202,7 +1158,7 @@ public class MainController {
         opts.autoUnzip = autoUnzipCheck.isSelected();
         opts.rsCodecs = new RsCodecs();
         if (!keyfiles.isEmpty()) {
-            opts.keyfiles = toPaths(keyfiles);
+            opts.keyfiles = MainViewSupport.toPaths(keyfiles);
         }
         opts.threadCount = SettingsManager.getThreadCount();
 
@@ -1245,7 +1201,7 @@ public class MainController {
             } catch (Exception firstErr) {
                 // 若预检遗漏了加密条目（如部分 TAR.GZ），运行时仍可弹窗重试
                 boolean needPassword = firstErr instanceof ArchiveExtractor.PasswordNeededException
-                        || isEncryptionRelated(firstErr);
+                        || MainViewSupport.isEncryptionRelated(firstErr);
                 if (!needPassword) {
                     throw firstErr;
                 }
@@ -1284,17 +1240,6 @@ public class MainController {
         dlg.setHeaderText(Messages.get("archivePassword.prompt"));
         dlg.setContentText(Messages.get("archivePassword.label"));
         return dlg.showAndWait().orElse("");
-    }
-
-    private String deriveDecryptOutput(String in) {
-        String lower = in.toLowerCase();
-        if (lower.endsWith(".ergou")) {
-            return in.substring(0, in.length() - ".ergou".length());
-        }
-        if (lower.endsWith(".pcv")) {
-            return in.substring(0, in.length() - ".pcv".length());
-        }
-        return in + ".decrypted";
     }
 
     private FxProgressReporter newReporter() {
@@ -1367,127 +1312,6 @@ public class MainController {
     // ================================================================
     // 工具类
     // ================================================================
-
-    private void enableWindowDrag() {
-        final double[] offset = new double[2];
-        titleBar.setOnMousePressed(e -> {
-            offset[0] = e.getSceneX();
-            offset[1] = e.getSceneY();
-        });
-        titleBar.setOnMouseDragged(e -> {
-            Stage s = stage();
-            s.setX(e.getScreenX() - offset[0]);
-            s.setY(e.getScreenY() - offset[1]);
-        });
-    }
-
-    /**
-     * 在窗口四角放置不可见的拖拽手柄，实现等比例缩放。
-     *
-     * <p>仅四角可拖拽，边框中点不响应。拖拽时保持窗口当前宽高比不变。
-     * 最大化时手柄自动禁用（由 {@code .maximized} CSS 类配合隐藏）。
-     */
-    private void enableCornerResize() {
-        final double gripSize = 8;
-        Region tl = cornerGrip(gripSize, Cursor.NW_RESIZE, -1, -1);
-        Region tr = cornerGrip(gripSize, Cursor.NE_RESIZE, 1, -1);
-        Region bl = cornerGrip(gripSize, Cursor.SW_RESIZE, -1, 1);
-        Region br = cornerGrip(gripSize, Cursor.SE_RESIZE, 1, 1);
-
-        StackPane.setAlignment(tl, Pos.TOP_LEFT);
-        StackPane.setAlignment(tr, Pos.TOP_RIGHT);
-        StackPane.setAlignment(bl, Pos.BOTTOM_LEFT);
-        StackPane.setAlignment(br, Pos.BOTTOM_RIGHT);
-
-        // 手柄置于最顶层，但不阻挡内容交互（尺寸极小，仅角部区域）
-        tl.setViewOrder(-100);
-        tr.setViewOrder(-100);
-        bl.setViewOrder(-100);
-        br.setViewOrder(-100);
-
-        rootStack.getChildren().addAll(tl, tr, bl, br);
-    }
-
-    /**
-     * 创建一个透明的角部拖拽手柄。
-     *
-     * @param size   手柄尺寸 (px)
-     * @param cursor 鼠标悬停光标
-     * @param signX  宽度变化方向：1=向右扩展，-1=向左扩展
-     * @param signY  高度变化方向：1=向下扩展，-1=向上扩展
-     */
-    private Region cornerGrip(double size, Cursor cursor, int signX, int signY) {
-        Region grip = new Region();
-        grip.setPrefSize(size, size);
-        grip.setMinSize(size, size);
-        grip.setMaxSize(size, size);
-        grip.setCursor(cursor);
-        grip.setStyle("-fx-background-color: transparent;");
-
-        final double[] startScreenX = new double[1];
-        final double[] startScreenY = new double[1];
-        final double[] startW = new double[1];
-        final double[] startH = new double[1];
-        final double[] startStageX = new double[1];
-        final double[] startStageY = new double[1];
-
-        grip.setOnMousePressed(e -> {
-            if (stage().isMaximized()) {
-                return;
-            }
-            startScreenX[0] = e.getScreenX();
-            startScreenY[0] = e.getScreenY();
-            startW[0] = stage().getWidth();
-            startH[0] = stage().getHeight();
-            startStageX[0] = stage().getX();
-            startStageY[0] = stage().getY();
-            e.consume();
-        });
-
-        grip.setOnMouseDragged(e -> {
-            if (stage().isMaximized()) {
-                return;
-            }
-            double dx = (e.getScreenX() - startScreenX[0]) * signX;
-            double dy = (e.getScreenY() - startScreenY[0]) * signY;
-
-            double aspect = startW[0] / startH[0];
-
-            // 以变化较大的维度为基准，另一维度按比例跟随
-            double newW, newH;
-            if (Math.abs(dx / aspect) > Math.abs(dy)) {
-                newW = startW[0] + dx;
-                newH = newW / aspect;
-            } else {
-                newH = startH[0] + dy;
-                newW = newH * aspect;
-            }
-
-            // 应用最小尺寸约束
-            if (newW < stage().getMinWidth()) {
-                newW = stage().getMinWidth();
-                newH = newW / aspect;
-            }
-            if (newH < stage().getMinHeight()) {
-                newH = stage().getMinHeight();
-                newW = newH * aspect;
-            }
-
-            // 对于左/上角拖拽，同步调整窗口位置
-            if (signX < 0) {
-                stage().setX(startStageX[0] + (startW[0] - newW));
-            }
-            if (signY < 0) {
-                stage().setY(startStageY[0] + (startH[0] - newH));
-            }
-
-            stage().setWidth(newW);
-            stage().setHeight(newH);
-            e.consume();
-        });
-
-        return grip;
-    }
 
     private Stage stage() {
         return (Stage) rootStack.getScene().getWindow();

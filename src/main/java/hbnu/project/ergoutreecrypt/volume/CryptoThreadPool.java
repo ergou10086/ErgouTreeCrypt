@@ -9,8 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 加密/解密专用的线程池工厂。
  *
- * <p>使用手动配置的 {@link ThreadPoolExecutor} 而非 {@code Executors.newFixedThreadPool}，
- * 以获得对线程命名、守护状态、队列策略的完全控制：
+ * <p>使用手动配置的 {@link ThreadPoolExecutor} 而非 {@code Executors.newFixedThreadPool}，以获得对线程命名、守护状态、队列策略的完全控制：
  * <ul>
  *   <li>线程池大小固定（core = max = 指定线程数），空闲线程立即回收（keepAlive=0）。</li>
  *   <li>工作线程为守护线程，不阻止 JVM 退出。</li>

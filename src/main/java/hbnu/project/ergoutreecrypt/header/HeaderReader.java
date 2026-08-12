@@ -201,6 +201,14 @@ public final class HeaderReader {
         }
         h.setNonce(nd.data);
 
+        // 8b. Argon2 参数（仅 v2.15+）：RS6(18→6)
+        if (h.isV215()) {
+            byte[] argon2Enc = new byte[HeaderLayout.ARGON2_PARAMS_ENC_SIZE];
+            n = readFull(argon2Enc);
+            bytesRead += n;
+            decodeArgon2Params(h, argon2Enc);
+        }
+
         // 9. keyHash: RS64(192→64)
         byte[] keyHashEnc = new byte[HeaderLayout.KEY_HASH_ENC_SIZE];
         n = readFull(keyHashEnc);
@@ -272,6 +280,33 @@ public final class HeaderReader {
      */
     public static boolean matchVersion(byte[] b) {
         return VERSION_RE.matcher(new String(b, StandardCharsets.UTF_8)).matches();
+    }
+
+    /**
+     * 从原始 6 字节解码 Argon2 参数并填充到 VolumeHeader。
+     *
+     * <p>使用 RS6 解码 18 字节编码数据 → 6 字节原始数据，然后按布局解析：
+     * memoryKib（4B, BE int32）+ passes（1B, uint8）+ threads（1B, uint8）。
+     *
+     * <p>RS 解码失败时（数据损坏），参数置 0（等效于使用默认值）。
+     *
+     * @param h     目标 VolumeHeader
+     * @param enc   18 字节 RS6 编码数据
+     */
+    private void decodeArgon2Params(VolumeHeader h, byte[] enc) {
+        ReedSolomon.DecodeResult dr = ReedSolomon.decode(rs.rs6, enc, false);
+        byte[] raw = dr.data;
+        if (raw.length < HeaderLayout.ARGON2_PARAMS_SRC_SIZE) {
+            return;
+        }
+        // memoryKiB: 4 字节大端
+        int mem = ((raw[0] & 0xFF) << 24)
+                | ((raw[1] & 0xFF) << 16)
+                | ((raw[2] & 0xFF) << 8)
+                | (raw[3] & 0xFF);
+        h.setArgon2MemoryKib(mem);
+        h.setArgon2Passes(raw[4] & 0xFF);
+        h.setArgon2Threads(raw[5] & 0xFF);
     }
 
     /**

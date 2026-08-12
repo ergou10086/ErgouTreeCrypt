@@ -589,5 +589,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt v1.4.3 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.0.9 · Android v1.4.7 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

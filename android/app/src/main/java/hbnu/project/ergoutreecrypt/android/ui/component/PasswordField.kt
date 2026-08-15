@@ -40,8 +40,7 @@ import java.security.SecureRandom
 /**
  * 密码输入组件
  *
- * <p>包含密码输入框、显示/隐藏切换、强度指示器、生成随机密码、复制到剪贴板、
- * 以及确认密码输入（可选的二次验证）。
+ * <p>包含密码输入框、显示/隐藏切换、强度指示器、生成随机密码、复制到剪贴板、以及确认密码输入。
  *
  * @param password         当前密码值
  * @param onPasswordChange 密码变更回调

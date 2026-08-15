@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.android.ui.screen
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,7 +52,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,19 +63,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
+import hbnu.project.ergoutreecrypt.android.platform.PendingSafOutput
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.android.platform.Argon2MobileMode
+import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
+import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
+import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordStrengthMeter
+import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultDialog
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
@@ -80,14 +91,19 @@ import hbnu.project.ergoutreecrypt.android.ui.component.buildSuccessMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.extractFileName
 import hbnu.project.ergoutreecrypt.android.ui.component.generateRandomPassword
 import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.android.viewmodel.EncryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.MediaCryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.history.HistoryService
+import hbnu.project.ergoutreecrypt.history.OperationType
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -107,15 +123,8 @@ private fun formatSize(bytes: Long): String {
 /** 归档格式 */
 private data class Fmt(val code: String, val label: String)
 private val ARCHIVE_FORMATS = listOf(
-    Fmt("", "不归档"), Fmt("ZIP", "ZIP"), Fmt("GZ", "GZ"),
-    Fmt("TAR.GZ", "TAR.GZ"), Fmt("7Z", "7Z")
+    Fmt("", "不归档"), Fmt("ZIP", "ZIP"), Fmt("7Z", "7Z")
 )
-
-/** Argon2 移动模式 */
-private enum class Argon2Mode(val label: String, val mem: Int, val passes: Int, val thr: Int) {
-    STANDARD("标准 (1 GiB)", 1 shl 20, 4, 4),
-    LIGHT("省电 (64 MiB)", 64 shl 10, 2, 2)
-}
 
 /** 检测文件是否为支持的媒体格式 */
 private fun detectMediaFormat(fileName: String?): MediaFormat? {
@@ -135,7 +144,7 @@ private val TIP_PARANOID = "启用后数据先经 Serpent 加密再经 XChaCha20
 private val TIP_RS = "使用 Reed-Solomon 纠错码，可在文件部分损坏时恢复数据。启用后文件体积增加约 6%。"
 private val TIP_DENIABILITY = "创建包含两份内容的加密容器：真密码解密真实文件，伪密码（钓鱼密码）解密无害的伪装文件。即使被胁迫，也可安全交出伪密码。"
 private val TIP_COMPRESS = "加密前先使用 Zstandard 压缩数据，可减小文件体积。"
-private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护。"
+private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护；7Z 不支持密码保护。"
 private val TIP_SPLIT = "将加密输出切分为多个指定大小的分卷文件，便于传输和存储。"
 private val TIP_DEPTH = "控制文件夹迭代加密的层数。深度内的文件逐一加密为 .ergou；超出深度的子目录会先整体打包再加密。默认值为 2。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
@@ -146,7 +155,7 @@ private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EncryptScreen() {
+fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
@@ -158,6 +167,7 @@ fun EncryptScreen() {
     val mediaProgress by mediaVm.progress.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
             || mediaProgress.state == ProgressState.State.RUNNING
+    val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
     // ---- 文件（仅单文件或单文件夹） ----
     var inUri by remember { mutableStateOf<Uri?>(null) }
@@ -167,6 +177,20 @@ fun EncryptScreen() {
     var isFolder by remember { mutableStateOf(false) }
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
+    var outDirUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingSafOut by remember { mutableStateOf<PendingSafOutput?>(null) }
+
+    // ---- 输入文件选择加载状态 ----
+    var fileLoading by remember { mutableStateOf(false) }
+    var filePickJob by remember { mutableStateOf<Job?>(null) }
+
+    // ---- 文件夹选择加载状态 ----
+    var folderLoading by remember { mutableStateOf(false) }
+    var folderPickJob by remember { mutableStateOf<Job?>(null) }
+
+    // ---- 输出目录选择加载状态 ----
+    var outDirLoading by remember { mutableStateOf(false) }
+    var outDirPickJob by remember { mutableStateOf<Job?>(null) }
 
     // ---- 密码 ----
     var password by remember { mutableStateOf("") }
@@ -180,15 +204,14 @@ fun EncryptScreen() {
     var compressAfter by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(false) }
     var encDepth by remember { mutableStateOf(2) }
-    var argon2Mode by remember { mutableStateOf(Argon2Mode.STANDARD) }
+    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.BALANCED) }
     var settingsLoaded by remember { mutableStateOf(false) }
 
     // 从 DataStore 加载默认设置（仅首次组合）
     LaunchedEffect(Unit) {
         paranoid = settings.isDefaultParanoid.first()
         reedSolomon = settings.isDefaultReedSolomon.first()
-        val argon2 = settings.argon2MobileMode.first()
-        argon2Mode = if (argon2 == "LIGHT") Argon2Mode.LIGHT else Argon2Mode.STANDARD
+        argon2Mode = Argon2MobileMode.fromKey(settings.argon2MobileMode.first())
         settingsLoaded = true
     }
 
@@ -215,71 +238,180 @@ fun EncryptScreen() {
     var kfNames by remember { mutableStateOf(listOf<String>()) }
     var kfOrdered by remember { mutableStateOf(false) }
 
+    // ---- 密钥文件选择加载状态 ----
+    var keyfileLoading by remember { mutableStateOf(false) }
+    var keyfilePickJob by remember { mutableStateOf<Job?>(null) }
+
+    // ---- 钓鱼文件选择加载状态 ----
+    var decoyLoading by remember { mutableStateOf(false) }
+    var decoyPickJob by remember { mutableStateOf<Job?>(null) }
+
     // ---- 单文件选择器 ----
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            inUri = u; inName = extractFileName(u)
-            inPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (inPath != null) {
-                val f = File(inPath!!)
-                inSize = if (f.exists()) f.length() else null
-                isFolder = f.isDirectory
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理，允许用户换选新文件
+        filePickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        fileLoading = true
+        filePickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                if (path != null) {
+                    val (size, parent, isDir) = withContext(Dispatchers.IO) {
+                        val f = File(path)
+                        val sz = if (f.exists()) f.length() else null
+                        Triple(sz, f.parent, f.isDirectory)
+                    }
+                    inUri = u
+                    inName = name
+                    inPath = path
+                    inSize = size
+                    isFolder = isDir
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
+                }
+                outName = inName?.let { "$it.ergou" }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (filePickJob === myJob) {
+                    fileLoading = false
                 }
             }
-            outName = inName?.let { "$it.ergou" }
         }
     }
 
     // ---- 文件夹选择器 ----
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
-        if (u != null) scope.launch {
-            inUri = u
-            val name = extractFileName(u)
-            inName = if (name == "未知文件") "选择的文件夹" else name
-            inPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (inPath != null) {
-                val f = File(inPath!!)
-                inSize = null
-                isFolder = true
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        folderPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        folderLoading = true
+        folderPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与目录解析全部移入 IO 线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                inUri = u
+                inName = if (name == "未知文件") "选择的文件夹" else name
+                inPath = path
+                if (path != null) {
+                    val parent = withContext(Dispatchers.IO) { File(path).parent }
+                    inSize = null
+                    isFolder = true
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
+                }
+                outName = "$inName.ergou"
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (folderPickJob === myJob) {
+                    folderLoading = false
                 }
             }
-            outName = "$inName.ergou"
         }
     }
 
     // ---- 输出目录选择器 ----
     val outDirPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
-        if (u != null) scope.launch {
-            val resolved = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (resolved != null) {
-                outDir = resolved
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        outDirPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        outDirLoading = true
+        outDirPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                val resolved = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                if (resolved != null) {
+                    outDir = resolved
+                    outDirUri = u
+                    // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
+                    try {
+                        ctx.contentResolver.takePersistableUriPermission(
+                            u,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                        // 个别文档提供者不支持持久授权，忽略即可
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (outDirPickJob === myJob) {
+                    outDirLoading = false
+                }
             }
         }
     }
 
     val keyfilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) scope.launch {
-            val nu = kfUris.toMutableList(); val np = kfPaths.toMutableList(); val nn = kfNames.toMutableList()
-            for (u in uris) {
-                if (u !in nu) {
-                    nu.add(u); nn.add(extractFileName(u))
-                    // 拷贝到安全区域，避免直接使用原始路径
-                    val securePath = withContext(Dispatchers.IO) { fileOps.copyKeyfileToSecureArea(u) }
-                    if (securePath != null) np.add(securePath)
+        if (uris.isEmpty()) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        keyfilePickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        keyfileLoading = true
+        keyfilePickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                val nu = kfUris.toMutableList(); val np = kfPaths.toMutableList(); val nn = kfNames.toMutableList()
+                for (u in uris) {
+                    if (u !in nu) {
+                        // 名称查询与安全区拷贝全部移入 IO 线程
+                        val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                        val securePath = withContext(Dispatchers.IO) { fileOps.copyKeyfileToSecureArea(u) }
+                        nu.add(u); nn.add(name)
+                        if (securePath != null) {
+                            np.add(securePath)
+                        }
+                    }
+                }
+                kfUris = nu; kfPaths = np; kfNames = nn
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (keyfilePickJob === myJob) {
+                    keyfileLoading = false
                 }
             }
-            kfUris = nu; kfPaths = np; kfNames = nn
         }
     }
 
     val decoyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            decoyName = extractFileName(u)
-            decoyPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        decoyPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        decoyLoading = true
+        decoyPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与文件解析全部移入 IO 线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                decoyName = name
+                decoyPath = path
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (decoyPickJob === myJob) {
+                    decoyLoading = false
+                }
+            }
         }
     }
 
@@ -290,7 +422,16 @@ fun EncryptScreen() {
         scope.launch {
             val req = EncryptRequest()
             req.inputFile = inPath
-            val outFile = "${outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath}/${outName ?: "encrypted.ergou"}"
+            // 若选择 SAF 输出目录，先写入内部临时目录，完成后再复制到 SAF 目录
+            val safUri = outDirUri
+            val writeDir = if (safUri != null) {
+                val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                pendingSafOut = PendingSafOutput(safUri, tmp)
+                tmp.absolutePath
+            } else {
+                outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+            }
+            val outFile = "$writeDir/${outName ?: "encrypted.ergou"}"
             req.outputFile = outFile
             req.password = password
             req.setParanoid(paranoid)
@@ -300,9 +441,9 @@ fun EncryptScreen() {
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
-            req.argon2MemoryKib = argon2Mode.mem
+            req.argon2MemoryKib = argon2Mode.memoryKiB
             req.argon2Passes = argon2Mode.passes
-            req.argon2Threads = argon2Mode.thr
+            req.argon2Threads = argon2Mode.threads
             if (archiveFmt.isNotEmpty()) {
                 req.archiveFormat = archiveFmt
                 if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) {
@@ -322,7 +463,15 @@ fun EncryptScreen() {
 
     /** 格式保持加密入口。档位自动选择推荐安全档，不开放手动选择。 */
     fun doMediaEncrypt() {
-        val outFile = "${outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath}/${outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}"}"
+        val safUri = outDirUri
+        val writeDir = if (safUri != null) {
+            val tmp = fileOps.createOutputTempDir()
+            pendingSafOut = PendingSafOutput(safUri, tmp)
+            tmp.absolutePath
+        } else {
+            outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+        }
+        val outFile = "$writeDir/${outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}"}"
         mediaVm.startEncrypt(
             input = inPath!!,
             output = outFile,
@@ -364,14 +513,50 @@ fun EncryptScreen() {
     var resultDetail by remember { mutableStateOf<String?>(null) }
     var resultType by remember { mutableStateOf(ResultType.INFO) }
 
+    // 提交 SAF 输出：将暂存临时文件复制到用户选择的 SAF 目录并清理。返回 null 表示非 SAF 输出
+    suspend fun commitSafOutput(): Boolean? {
+        val pending = pendingSafOut
+        if (pending == null) {
+            return null
+        }
+        val ok = withContext(Dispatchers.IO) { fileOps.copyDirectoryToTree(pending.treeUri, pending.tempDir) }
+        withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
+        pendingSafOut = null
+        return ok
+    }
+
     // 监听加密完成/失败状态，触发结果弹窗
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                resultTitle = "加密完成"
-                resultMessage = buildSuccessMessage("加密", outName)
-                resultDetail = null
-                resultType = ResultType.SUCCESS
+                val committed = commitSafOutput()
+                when (committed) {
+                    null, true -> {
+                        resultTitle = "加密完成"
+                        resultMessage = buildSuccessMessage("加密", outName)
+                        resultDetail = null
+                        resultType = ResultType.SUCCESS
+                        // 记录操作历史：输出目录取写路径同款回退，SAF 输出同时保存树 URI
+                        val outNameNow = outName ?: "encrypted.ergou"
+                        val resolvedOutDir = outDir
+                            ?: inPath?.let { File(it).parent }
+                            ?: ctx.filesDir.absolutePath
+                        withContext(Dispatchers.IO) {
+                            HistoryService.record(
+                                OperationType.GENERIC_ENCRYPT,
+                                outNameNow,
+                                "$resolvedOutDir/$outNameNow",
+                                outDirUri?.toString()
+                            )
+                        }
+                    }
+                    false -> {
+                        resultTitle = "加密完成但保存失败"
+                        resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                        resultDetail = null
+                        resultType = ResultType.ERROR
+                    }
+                }
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
@@ -396,10 +581,34 @@ fun EncryptScreen() {
     LaunchedEffect(mediaProgress.state) {
         when (mediaProgress.state) {
             ProgressState.State.DONE -> {
-                resultTitle = "格式保持加密完成"
-                resultMessage = buildSuccessMessage("加密", outName)
-                resultDetail = null
-                resultType = ResultType.SUCCESS
+                val committed = commitSafOutput()
+                when (committed) {
+                    null, true -> {
+                        resultTitle = "格式保持加密完成"
+                        resultMessage = buildSuccessMessage("加密", outName)
+                        resultDetail = null
+                        resultType = ResultType.SUCCESS
+                        // 记录操作历史（格式保持加密）
+                        val outNameNow = outName ?: "encrypted.media"
+                        val resolvedOutDir = outDir
+                            ?: inPath?.let { File(it).parent }
+                            ?: ctx.filesDir.absolutePath
+                        withContext(Dispatchers.IO) {
+                            HistoryService.record(
+                                OperationType.FPE_ENCRYPT,
+                                outNameNow,
+                                "$resolvedOutDir/$outNameNow",
+                                outDirUri?.toString()
+                            )
+                        }
+                    }
+                    false -> {
+                        resultTitle = "格式保持加密完成但保存失败"
+                        resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                        resultDetail = null
+                        resultType = ResultType.ERROR
+                    }
+                }
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
@@ -441,9 +650,16 @@ fun EncryptScreen() {
     }
 
     Scaffold(
+        // 容器透明，避免遮住全局背景图层
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("文件加密") }
+            CompactTopBar(
+                title = "文件加密",
+                actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
+                    }
+                }
             )
         },
         bottomBar = {
@@ -460,7 +676,8 @@ fun EncryptScreen() {
                     Button(
                         onClick = { if (mediaMode) doMediaEncrypt() else doEncrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = hasFile // 允许无密码模式
+                        // 允许无密码模式；选择处理中禁用，避免复制未完成即开始加密
+                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading
                     ) {
                         Icon(Icons.Default.Lock, null)
                         Text(if (mediaMode) "  格式保持加密" else "  加密")
@@ -474,6 +691,12 @@ fun EncryptScreen() {
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
+            // 低调的内存使用指示器（可在设置中关闭）
+            if (showMemoryIndicator) {
+                MemoryIndicator()
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
             // ============================================================
             // 一、文件选择区（仅单文件或单文件夹）
             // ============================================================
@@ -481,16 +704,24 @@ fun EncryptScreen() {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                         onClick = { filePicker.launch(arrayOf("*/*")) }
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Text("点击选择单个文件", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (mediaMode) {
+                        if (fileLoading) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                PickerLoadingIndicator(text = pickerLoadingText(), iconSize = 40.dp, vertical = true)
                                 Spacer(Modifier.height(4.dp))
-                                Text("格式保持加密仅支持 MP3 / MP4 / WAV 单文件", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                Text(pickerLoadingHint(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        } else {
+                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                                Text("点击选择单个文件", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (mediaMode) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("格式保持加密仅支持 MP3 / MP4 / WAV 单文件", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                }
                             }
                         }
                     }
@@ -502,39 +733,40 @@ fun EncryptScreen() {
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                             onClick = { folderPicker.launch(null) }
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("或选择单个文件夹", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            if (folderLoading) {
+                                PickerLoadingIndicator(
+                                    text = pickerLoadingText(),
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                )
+                            } else {
+                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("或选择单个文件夹", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                }
                             }
                         }
                     }
                 }
             } else {
                 // 已选文件卡片
-                FilePickerCard(fileName = inName, fileSize = inSize, onClick = { filePicker.launch(arrayOf("*/*")) }, label = "点击更换文件")
+                FilePickerCard(
+                    fileName = inName,
+                    fileSize = inSize,
+                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    label = "点击更换文件",
+                    loading = fileLoading,
+                    loadingText = pickerLoadingText(),
+                    loadingHint = pickerLoadingHint()
+                )
 
-                // 更换/移除按钮行
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilledTonalButton(
-                        onClick = { filePicker.launch(arrayOf("*/*")) },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text("  换文件") }
-                    // 格式保持加密仅支持单文件，隐藏文件夹切换
-                    if (!mediaMode) {
-                        Spacer(Modifier.width(6.dp))
-                        FilledTonalButton(
-                            onClick = { folderPicker.launch(null) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("📁 换文件夹") }
+                // 更换/移除按钮行（格式保持加密仅支持单文件，隐藏文件夹切换）
+                FileActionRow(
+                    onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                    onPickFolder = if (mediaMode) null else { { folderPicker.launch(null) } },
+                    onRemove = {
+                        inUri = null; inPath = null; inName = null; inSize = null
+                        isFolder = false; outName = null
                     }
-                    Spacer(Modifier.width(6.dp))
-                    FilledTonalButton(
-                        onClick = {
-                            inUri = null; inPath = null; inName = null; inSize = null
-                            isFolder = false; outName = null
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)); Text("  移除") }
-                }
+                )
 
                 Spacer(Modifier.height(8.dp))
 
@@ -557,26 +789,33 @@ fun EncryptScreen() {
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                     onClick = { outDirPicker.launch(null) }
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "输出目录",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = displayText,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    if (outDirLoading) {
+                        PickerLoadingIndicator(
+                            text = pickerLoadingText(),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "输出目录",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = displayText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -675,6 +914,8 @@ fun EncryptScreen() {
                                     Icon(Icons.Default.Close, "移除", Modifier.size(14.dp))
                                 }
                             }
+                        } else if (decoyLoading) {
+                            PickerLoadingIndicator(text = pickerLoadingText())
                         } else {
                             FilledTonalButton(
                                 onClick = { decoyPicker.launch(arrayOf("*/*")) },
@@ -761,10 +1002,38 @@ fun EncryptScreen() {
                 // ---- Argon2 移动模式（格式保持加密使用独立的密钥派生） ----
                 Text("Argon2 移动模式", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (!mediaMode) 1f else 0.38f))
                 Spacer(Modifier.height(4.dp))
-                Row {
-                    androidx.compose.material3.FilterChip(selected = argon2Mode == Argon2Mode.STANDARD, onClick = { argon2Mode = Argon2Mode.STANDARD }, label = { Text("标准 1 GiB") }, enabled = !mediaMode)
-                    Spacer(Modifier.width(8.dp))
-                    androidx.compose.material3.FilterChip(selected = argon2Mode == Argon2Mode.LIGHT, onClick = { argon2Mode = Argon2Mode.LIGHT }, label = { Text("省电 64 MiB") }, enabled = !mediaMode)
+                // 三个档位平分整行宽度，小字号保证单行内放下
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(
+                        selected = argon2Mode == Argon2MobileMode.STANDARD,
+                        onClick = { argon2Mode = Argon2MobileMode.STANDARD },
+                        label = { Text(Argon2MobileMode.STANDARD.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        enabled = !mediaMode,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = argon2Mode == Argon2MobileMode.BALANCED,
+                        onClick = { argon2Mode = Argon2MobileMode.BALANCED },
+                        label = { Text(Argon2MobileMode.BALANCED.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        enabled = !mediaMode,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = argon2Mode == Argon2MobileMode.LIGHT,
+                        onClick = { argon2Mode = Argon2MobileMode.LIGHT },
+                        label = { Text(Argon2MobileMode.LIGHT.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        enabled = !mediaMode,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // 所选档位超过应用堆时提示将使用离堆内存派生（速度较慢）
+                if (!Argon2MobileMode.isFeasible(argon2Mode) && !mediaMode) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${argon2Mode.label} 档位的内存需求超过应用堆，密钥派生将使用离堆内存（速度较慢）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
@@ -791,14 +1060,16 @@ fun EncryptScreen() {
                     // 档位自动选择（移动端不开放手动切换，始终取推荐的安全档位）
                     val autoProfile = remember(mediaFmt) { MediaCryptProfile.defaultFor(mediaFmt) }
                     val autoProfileLabel = when (autoProfile) {
-                        MediaCryptProfile.W_FULL -> "W-FULL  全加密"
-                        MediaCryptProfile.M_BODY -> "M-BODY  帧体加密"
-                        MediaCryptProfile.V_MDAT -> "V-MDAT  mdat加密"
+                        MediaCryptProfile.W_FULL -> "W-FULL 全加密"
+                        MediaCryptProfile.M_BODY -> "M-BODY 帧体加密"
+                        MediaCryptProfile.V_MDAT -> "V-MDAT mdat加密"
                         else -> autoProfile.name
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 预留 Checkbox 的 48dp 交互区宽度，使档位文本与下方选项标签左对齐
+                        Spacer(Modifier.width(48.dp))
                         Text("档位：$autoProfileLabel", style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary)
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
                         Spacer(Modifier.width(4.dp))
                         InfoTooltip("移动端自动选择推荐的安全档位，加密数据范围最大，安全性最强。")
                     }
@@ -806,14 +1077,14 @@ fun EncryptScreen() {
                     Spacer(Modifier.height(8.dp))
 
                     // 偏执模式 + 完整性校验（对齐桌面端 avParanoidCheck / avIntegrityCheck）
-                    Row {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = mediaParanoid, onCheckedChange = { mediaParanoid = it })
                         Text("偏执模式（Serpent + XChaCha20 双重加密）", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp).weight(1f))
                         InfoTooltip("启用后 Argon2 使用 8 passes + HMAC-SHA3-512，并叠加 Serpent-CTR 外层加密，提供与普通文件加密偏执模式相同的双重保护。")
                     }
-                    Row {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = mediaIntegrity, onCheckedChange = { mediaIntegrity = it })
-                        Text("存储完整性校验", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 4.dp).weight(1f))
+                        Text("存储完整性校验", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp).weight(1f))
                         InfoTooltip("加密时将明文 MAC 存入元数据，解密后自动校验文件是否被篡改。建议保持开启。")
                     }
                 }
@@ -845,9 +1116,15 @@ fun EncryptScreen() {
                         }
                     }
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaMode) {
+                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaMode && !keyfileLoading) {
                         Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text(" 添加")
                     }
+                }
+
+                // 密钥文件复制到安全区处理中：显示旋转圆圈提示
+                if (keyfileLoading) {
+                    Spacer(Modifier.height(4.dp))
+                    PickerLoadingIndicator(text = pickerLoadingText())
                 }
 
                 if (kfNames.isEmpty() || mediaMode) {
@@ -879,7 +1156,7 @@ fun EncryptScreen() {
 // ==================== 辅助组件 ====================
 
 /**
- * 选项行：Checkbox + 标签 + ⓘ 提示（提示图标在标签末尾对齐）。
+ * 选项行：Checkbox + 标签 + ⓘ 提示。
  *
  * @param enabled 是否可交互，false 时整行置灰
  */
@@ -894,7 +1171,7 @@ private fun OptionRow(label: String, checked: Boolean, onToggle: (Boolean) -> Un
 }
 
 /**
- * 归档格式下拉（紧凑样式，宽度更窄）。
+ * 归档格式下拉。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

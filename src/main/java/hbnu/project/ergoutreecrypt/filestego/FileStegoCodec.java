@@ -2,18 +2,17 @@ package hbnu.project.ergoutreecrypt.filestego;
 
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
 import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
-import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.filestego.api.CarrierException;
 import hbnu.project.ergoutreecrypt.filestego.api.EmbedOptions;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoException;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
 import hbnu.project.ergoutreecrypt.filestego.api.PayloadException;
+import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener;
 import hbnu.project.ergoutreecrypt.filestego.api.StegoEncodeOptions;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.AbstractCarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierRegistry;
-import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierResult;
 import hbnu.project.ergoutreecrypt.filestego.codec.PayloadCodec;
 
 import java.io.IOException;
@@ -66,7 +65,19 @@ public final class FileStegoCodec {
             "ErgouTree-stego-default-passphrase".getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
     /**
+     * 低内存模式下大文件护栏阈值（64 MiB）：超过此大小的载荷仅在
+     * 适配器支持流式嵌入/提取时才允许处理。
+     */
+    private static final long LARGE_PAYLOAD_THRESHOLD_BYTES = 64L << 20;
+
+    /**
      * 将文件加密后嵌入到载体文件中。
+     *
+     * <p>载荷以流式（1 MiB 分块）加密到临时文件，再经
+     * {@link CarrierAdapter#embedFromFile} 嵌入，全程内存占用恒定，
+     * 支持 1GB 级大文件。低内存模式下，载荷超过
+     * {@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式嵌入时，
+     * 提前抛出友好错误而非 OOM。
      *
      * @param carrierFile 载体文件（PNG/ZIP/PDF/WAV/FLAC/MP4...）
      * @param secretFile  待隐藏的文件
@@ -79,22 +90,62 @@ public final class FileStegoCodec {
     public void hide(final Path carrierFile, final Path secretFile, final Path output,
                       final byte[] password, final FileStegoOptions options)
             throws IOException, FileStegoException {
+        hide(carrierFile, secretFile, output, password, options, null);
+    }
+
+    /**
+     * 将文件加密后嵌入到载体文件中（带进度回调）。
+     *
+     * <p>与 {@link #hide} 相同，另按阶段加权回调总体进度：
+     * <ul>
+     *   <li>0.00~0.02：前置检查完成（让进度条在密钥派生前即离开 0）</li>
+     *   <li>0.02~0.60：Payload 流式加密（按已加密字节数）</li>
+     *   <li>0.60~0.95：载体流式嵌入（按已写入字节数；非流式适配器在完成时跳变）</li>
+     *   <li>0.95~1.00：文件大小混淆（可选）</li>
+     * </ul>
+     * 处理成功结束前必定回调 1.0。
+     *
+     * @param carrierFile 载体文件（PNG/ZIP/PDF/WAV/FLAC/MP4...）
+     * @param secretFile  待隐藏的文件
+     * @param output      输出路径
+     * @param password    密码（可为空，使用默认密码）
+     * @param options     文件隐写选项
+     * @param listener    进度监听器（可为 null）
+     * @throws IOException        文件读写失败
+     * @throws FileStegoException 不支持的格式、容量不足等
+     */
+    public void hide(final Path carrierFile, final Path secretFile, final Path output,
+                      final byte[] password, final FileStegoOptions options,
+                      final ProgressListener listener)
+            throws IOException, FileStegoException {
         // 步骤 1：查找匹配的适配器
         CarrierAdapter adapter = findAdapterForEmbed(carrierFile);
 
-        // 步骤 2：读取待隐藏文件
-        byte[] plaintext = Files.readAllBytes(secretFile);
+        // 步骤 2：容量检查——在读取文件之前用文件大小判断，避免大文件 OOM
         String fileName = secretFile.getFileName().toString();
-
-        // 步骤 2.5：容量检查——若载体有容量限制且待隐藏文件过大，提前失败
+        long plaintextSize = Files.size(secretFile);
         long capacity = adapter.capacity(carrierFile);
-        if (capacity != Long.MAX_VALUE && plaintext.length > capacity) {
+        if (capacity != Long.MAX_VALUE && plaintextSize > capacity) {
             throw new FileStegoException(String.format(
                     "载体容量不足：待隐藏文件 %s (%s) 过大，"
                             + "%s 载体最多可嵌入约 %s 数据。"
                             + " 建议：切换为 ZIP 或 PNG 等无容量限制的载体格式。",
-                    fileName, formatSize(plaintext.length),
+                    fileName, formatSize(plaintextSize),
                     adapter.displayName(), formatSize(capacity)));
+        }
+        // 低内存模式护栏：大载荷且适配器未实现流式嵌入 → 提前友好失败
+        long threshold = lowMemoryThreshold(options);
+        if (options.isLowMemoryMode()
+                && plaintextSize > threshold
+                && !adapter.supportsStreamingEmbed()) {
+            throw new FileStegoException(String.format(
+                    "该载体格式暂不支持大文件（>%s）流式嵌入，请改用 ZIP、PNG 或 MP4 载体。",
+                    formatSize(threshold)));
+        }
+
+        // 前置检查完成，推进到 0.02（密钥派生可能耗时数秒，进度条先离开 0）
+        if (listener != null) {
+            listener.onProgress(0.02);
         }
 
         // 步骤 3：生成密码学参数
@@ -106,50 +157,60 @@ public final class FileStegoCodec {
 
         byte[] effectivePwd = (password != null && password.length > 0) ? password : DEFAULT_PASSWORD;
 
-        // 步骤 4：加密为 STEG-V2 Payload
-        StegoEncodeOptions encodeOpts = options.toEncodeOptions();
-        byte[] payload = PayloadCodec.encode(plaintext, fileName, effectivePwd,
-                salt, hkdfSalt, nonce, serpentIv, encodeOpts);
-
+        // 步骤 4：流式加密为 STEG-V2 Payload（临时文件，恒定内存），阶段 0.02~0.60
+        Path payloadFile = Files.createTempFile("ergou-stego-payload-", ".tmp");
         try {
-            // 步骤 5：构建 CarrierMetadata
+            StegoEncodeOptions encodeOpts = options.toEncodeOptions();
+            ProgressListener encodeListener = listener == null ? null
+                    : f -> listener.onProgress(0.02 + 0.58 * f);
+            PayloadCodec.encodeToFile(secretFile, payloadFile, fileName, effectivePwd,
+                    salt, hkdfSalt, nonce, serpentIv, encodeOpts, encodeListener);
+            long payloadSize = Files.size(payloadFile);
+
+            // 步骤 5：构建 CarrierMetadata（含 Argon2 参数覆写）
             byte flags = CarrierMetadata.buildFlags(
                     options.isParanoid(), options.isStoreIntegrity(), options.isStealth());
-            CarrierMetadata meta = new CarrierMetadata(payload.length, flags,
-                    salt, hkdfSalt, nonce, serpentIv, stealthSalt);
+            CarrierMetadata meta = new CarrierMetadata(payloadSize, flags,
+                    salt, hkdfSalt, nonce, serpentIv, stealthSalt, options.argon2Params());
             byte[] metaBytes = meta.toBytes();
 
-            // 步骤 6：组装 meta + payload 一起传给适配器
-            byte[] combined = new byte[metaBytes.length + payload.length];
-            System.arraycopy(metaBytes, 0, combined, 0, metaBytes.length);
-            System.arraycopy(payload, 0, combined, metaBytes.length, payload.length);
-
-            // 确保组合后的数据不超过载体容量限制
-            if (capacity != Long.MAX_VALUE && combined.length > capacity) {
+            // 步骤 6：确保组合后的数据不超过载体容量限制
+            long combinedLen = metaBytes.length + payloadSize;
+            if (capacity != Long.MAX_VALUE && combinedLen > capacity) {
                 throw new FileStegoException(String.format(
                         "载体容量不足：加密后数据 (%s) 超过 %s 载体最大容量 (%s)。"
                                 + " 建议：切换为 ZIP 等无容量限制的载体格式。",
-                        formatSize(combined.length),
+                        formatSize(combinedLen),
                         adapter.displayName(), formatSize(capacity)));
             }
 
-            // 步骤 7：委托适配器嵌入
+            // 步骤 7：委托适配器嵌入（meta 与 payload 分离传递），阶段 0.60~0.95
             EmbedOptions embedOpts = options.toEmbedOptions();
-            adapter.embed(carrierFile, combined, output, effectivePwd, embedOpts);
+            ProgressListener embedListener = listener == null ? null
+                    : f -> listener.onProgress(0.60 + 0.35 * f);
+            adapter.embedFromFile(carrierFile, metaBytes, payloadFile, output,
+                    effectivePwd, embedOpts, embedListener);
         } catch (CarrierException e) {
             throw new FileStegoException("载体嵌入失败: " + e.getMessage(), e);
+        } catch (PayloadException e) {
+            throw new FileStegoException("Payload 加密失败: " + e.getMessage(), e);
         } finally {
-            SecureZero.zero(payload);
+            Files.deleteIfExists(payloadFile);
         }
 
-        // 步骤 8：文件大小混淆（可选）
+        // 步骤 8：文件大小混淆（可选），阶段 0.95~1.00
         if (options.isObfuscateSize() && options.targetSizeBytes() > 0) {
-            padToSize(output, options.targetSizeBytes());
+            ProgressListener padListener = listener == null ? null
+                    : f -> listener.onProgress(0.95 + 0.05 * f);
+            padToSize(output, options.targetSizeBytes(), padListener);
+        }
+        if (listener != null) {
+            listener.onProgress(1.0);
         }
     }
 
     /**
-     * 从载体文件中提取并解密隐藏的文件。
+     * 从载体文件中提取并解密隐藏的文件（默认选项，非低内存模式）。
      *
      * @param stegoFile 隐写载体文件
      * @param outputDir 输出目录
@@ -159,6 +220,55 @@ public final class FileStegoCodec {
      * @throws FileStegoException 格式不匹配、密码错误、MAC 失败等
      */
     public Path extract(final Path stegoFile, final Path outputDir, final byte[] password)
+            throws IOException, FileStegoException {
+        return extract(stegoFile, outputDir, password, FileStegoOptions.defaults());
+    }
+
+    /**
+     * 从载体文件中提取并解密隐藏的文件。
+     *
+     * <p>提取与解密全程流式（恒定内存）：Payload 提取到临时文件后经
+     * {@code PayloadCodec.decodeToFile} 解密写出。低内存模式下，载体文件超过
+     * {@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式提取时，
+     * 提前抛出友好错误而非 OOM。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param outputDir 输出目录
+     * @param password  密码（可为空）
+     * @param options   文件隐写选项（低内存模式与大文件护栏）
+     * @return 提取后的文件路径
+     * @throws IOException        文件读写失败
+     * @throws FileStegoException 格式不匹配、密码错误、MAC 失败等
+     */
+    public Path extract(final Path stegoFile, final Path outputDir, final byte[] password,
+                        final FileStegoOptions options)
+            throws IOException, FileStegoException {
+        return extract(stegoFile, outputDir, password, options, null);
+    }
+
+    /**
+     * 从载体文件中提取并解密隐藏的文件（带进度回调）。
+     *
+     * <p>与 {@link #extract} 相同，另按阶段加权回调总体进度：
+     * <ul>
+     *   <li>0.00~0.02：适配器定位与前置检查完成</li>
+     *   <li>0.02~0.50：Payload 从载体流式提取（按已提取字节数）</li>
+     *   <li>0.50~1.00：Payload 流式解密（按已解密字节数；密钥派生可能
+     *       使进度短暂停留在 0.50）</li>
+     * </ul>
+     * 处理成功结束前必定回调 1.0。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param outputDir 输出目录
+     * @param password  密码（可为空）
+     * @param options   文件隐写选项（低内存模式与大文件护栏）
+     * @param listener  进度监听器（可为 null）
+     * @return 提取后的文件路径
+     * @throws IOException        文件读写失败
+     * @throws FileStegoException 格式不匹配、密码错误、MAC 失败等
+     */
+    public Path extract(final Path stegoFile, final Path outputDir, final byte[] password,
+                        final FileStegoOptions options, final ProgressListener listener)
             throws IOException, FileStegoException {
         byte[] effectivePwd = (password != null && password.length > 0) ? password : DEFAULT_PASSWORD;
 
@@ -175,11 +285,23 @@ public final class FileStegoCodec {
         CarrierAdapter adapter = findAdapterForExtract(stegoFile);
 
         try {
-            // 步骤 3：提取完整结果（元数据 + Payload）
-            CarrierResult result;
-            if (adapter instanceof AbstractCarrierAdapter abstractAdapter) {
-                result = abstractAdapter.extractFull(stegoFile, effectivePwd);
-            } else {
+            // 低内存模式护栏：大载体且适配器未实现流式提取 → 提前友好失败
+            long threshold = lowMemoryThreshold(options);
+            if (options.isLowMemoryMode()
+                    && Files.size(stegoFile) > threshold
+                    && !adapter.supportsStreamingExtract()) {
+                throw new FileStegoException(String.format(
+                        "该载体格式暂不支持大文件（>%s）流式提取，请使用桌面端提取。",
+                        formatSize(threshold)));
+            }
+
+            // 前置检查完成，推进到 0.02
+            if (listener != null) {
+                listener.onProgress(0.02);
+            }
+
+            // 步骤 3：提取元数据与 Payload 到临时文件（恒定内存）
+            if (!(adapter instanceof AbstractCarrierAdapter abstractAdapter)) {
                 // 非标准适配器：先提取 Payload，再从 Payload 中读取 Header（有限信息）
                 byte[] payload = adapter.extract(stegoFile, effectivePwd);
                 PayloadCodec.PayloadHeader header = PayloadCodec.readHeader(payload);
@@ -188,22 +310,38 @@ public final class FileStegoCodec {
                         "适配器 " + adapter.id() + " 不支持返回密码学参数，无法解密");
             }
 
-            CarrierMetadata meta = result.metadata();
-            byte[] payload = result.payload();
+            Path payloadFile = Files.createTempFile("ergou-stego-extract-", ".tmp");
+            Path plaintextTmp = Files.createTempFile("ergou-stego-plain-", ".tmp");
+            try {
+                // 阶段 0.02~0.50：Payload 从载体流式提取
+                ProgressListener carrierListener = listener == null ? null
+                        : f -> listener.onProgress(0.02 + 0.48 * f);
+                CarrierMetadata meta = abstractAdapter.extractFullToFile(
+                        stegoFile, effectivePwd, payloadFile, carrierListener);
 
-            // 步骤 4：调用 PayloadCodec 解密
-            PayloadCodec.DecodeResult decoded = PayloadCodec.decode(
-                    payload, effectivePwd,
-                    meta.salt(), meta.hkdfSalt(), meta.nonce(),
-                    meta.serpentIv(), meta.isParanoid());
+                // 步骤 4：流式解密（Argon2 参数从载体元数据读取），阶段 0.50~1.00
+                ProgressListener decodeListener = listener == null ? null
+                        : f -> listener.onProgress(0.50 + 0.50 * f);
+                PayloadCodec.PayloadHeader header = PayloadCodec.decodeToFile(
+                        payloadFile, plaintextTmp, effectivePwd,
+                        meta.salt(), meta.hkdfSalt(), meta.nonce(),
+                        meta.serpentIv(), meta.isParanoid(), meta.argon2Params(),
+                        decodeListener);
 
-            // 步骤 5：写入输出文件
-            Path outputFile = outputDir.resolve(decoded.header().origName());
-            Files.createDirectories(outputDir);
-            Files.write(outputFile, decoded.plaintext());
+                // 步骤 5：移动明文到最终输出路径
+                Files.createDirectories(outputDir);
+                Path outputFile = outputDir.resolve(header.origName());
+                Files.move(plaintextTmp, outputFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-            guard.recordSuccess(filePath);
-            return outputFile;
+                if (listener != null) {
+                    listener.onProgress(1.0);
+                }
+                guard.recordSuccess(filePath);
+                return outputFile;
+            } finally {
+                Files.deleteIfExists(payloadFile);
+                Files.deleteIfExists(plaintextTmp);
+            }
         } catch (CarrierException e) {
             guard.recordFailure(filePath);
             throw new FileStegoException("载体提取失败: " + e.getMessage(), e);
@@ -305,9 +443,16 @@ public final class FileStegoCodec {
     }
 
     /**
-     * 在文件末尾追加密码学随机字节，直到达到目标大小。
+     * 在文件末尾追加密码学随机字节，直到达到目标大小，并按已追加字节数回调进度。
+     *
+     * @param file        待混淆的文件
+     * @param targetBytes 目标文件大小（字节）
+     * @param listener    进度监听器（可为 null）
+     * @throws IOException        文件读写失败
+     * @throws FileStegoException 目标大小不大于当前文件大小
      */
-    private static void padToSize(final Path file, final long targetBytes)
+    private static void padToSize(final Path file, final long targetBytes,
+                                  final ProgressListener listener)
             throws IOException, FileStegoException {
         long current = Files.size(file);
         if (current >= targetBytes) {
@@ -326,8 +471,28 @@ public final class FileStegoCodec {
                 sr.nextBytes(buf);
                 out.write(buf, 0, chunk);
                 remaining -= chunk;
+                if (listener != null) {
+                    listener.onProgress((double) (toAdd - remaining) / Math.max(toAdd, 1L));
+                }
+            }
+            if (listener != null && toAdd <= 0) {
+                listener.onProgress(1.0);
             }
         }
+    }
+
+    /**
+     * 解析低内存模式的大文件护栏阈值。
+     *
+     * <p>优先使用选项中的显式阈值（移动端按设备实际可用堆计算）；未设置时
+     * 回退到内置默认值 {@link #LARGE_PAYLOAD_THRESHOLD_BYTES}。
+     *
+     * @param options 文件隐写选项
+     * @return 生效的护栏阈值（字节）
+     */
+    private static long lowMemoryThreshold(final FileStegoOptions options) {
+        long custom = options.lowMemoryThresholdBytes();
+        return custom > 0 ? custom : LARGE_PAYLOAD_THRESHOLD_BYTES;
     }
 
     /**

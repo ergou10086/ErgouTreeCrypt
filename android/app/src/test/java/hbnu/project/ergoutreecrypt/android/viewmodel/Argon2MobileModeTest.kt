@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.android.viewmodel
 
+import hbnu.project.ergoutreecrypt.android.platform.Argon2MobileMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,6 +103,7 @@ class Argon2MobileModeTest {
 
         val modes = listOf(
             ModeParams(1 shl 20, 4, 4), // STANDARD
+            ModeParams(256 shl 10, 3, 4), // BALANCED
             ModeParams(64 shl 10, 2, 2) // LIGHT
         )
 
@@ -112,5 +114,39 @@ class Argon2MobileModeTest {
             // mem 必须是正数 KiB
             assertTrue("模式 $i: memKiB 应 ≥ 65536 (64 MiB)", mode.memKib >= 64 shl 10)
         }
+    }
+
+    /**
+     * 各档位估算所需堆应介于参数内存的 1~2 倍之间。
+     */
+    @Test
+    fun estimateRequiredHeapBytes_isWithinReasonableRange() {
+        for (mode in Argon2MobileMode.entries) {
+            val raw = mode.memoryKiB * 1024L
+            val estimated = mode.estimateRequiredHeapBytes()
+            assertTrue("${mode.key}: 估算值不应低于参数内存", estimated >= raw)
+            assertTrue("${mode.key}: 估算值不应超过参数内存的 2 倍", estimated <= raw * 2)
+        }
+    }
+
+    /**
+     * LIGHT 档需求（约 112 MiB）在正常测试 JVM 上应判定为堆内可行。
+     */
+    @Test
+    fun lightMode_isFeasibleInHeap() {
+        assertTrue("LIGHT 档应堆内可行", Argon2MobileMode.isFeasible(Argon2MobileMode.LIGHT))
+    }
+
+    /**
+     * 堆内可行性判定应与共享核心预检一致（预留 32 MiB 余量）。
+     */
+    @Test
+    fun feasibility_requiresMargin() {
+        val required = Argon2MobileMode.LIGHT.estimateRequiredHeapBytes() + (32L shl 20)
+        assertEquals(
+            "isFeasible 应与'需求 + 余量 ≤ 可用堆'一致",
+            required <= Runtime.getRuntime().maxMemory() - (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()),
+            Argon2MobileMode.isFeasible(Argon2MobileMode.LIGHT)
+        )
     }
 }

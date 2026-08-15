@@ -2,7 +2,10 @@ package hbnu.project.ergoutreecrypt.filestego.carrier.spi;
 
 import hbnu.project.ergoutreecrypt.filestego.api.CarrierException;
 import hbnu.project.ergoutreecrypt.filestego.api.EmbedOptions;
+import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -83,6 +86,62 @@ public abstract class AbstractCarrierAdapter implements CarrierAdapter {
         byte[] payload = readPayload(stegoFile, meta);
         return new CarrierResult(meta, payload);
     }
+
+    /**
+     * 从载体文件提取 Payload 到文件。
+     *
+     * <p>默认实现回退到 {@link #extractFull}（读入内存后写出）；支持大文件的
+     * 适配器应覆写为按 {@code meta.payloadSize()} 精确读取并流式写入。
+     *
+     * @param stegoFile  隐写载体文件
+     * @param password   密码（可为 null）
+     * @param payloadOut Payload 输出文件路径
+     * @return 解析后的载体元数据
+     * @throws CarrierException 提取失败
+     */
+    public CarrierMetadata extractFullToFile(final Path stegoFile, final byte[] password,
+                                             final Path payloadOut) throws CarrierException {
+        return extractFullToFile(stegoFile, password, payloadOut, null);
+    }
+
+    /**
+     * 从载体文件提取 Payload 到文件（带进度回调）。
+     *
+     * <p>默认实现回退到 {@link #extractFull}（读入内存后分块写出），写出阶段
+     * 按已写字节数回调进度 0~1.0；支持大文件的适配器应覆写为按
+     * {@code meta.payloadSize()} 精确读取并流式写入，同时逐块回调进度。
+     *
+     * @param stegoFile  隐写载体文件
+     * @param password   密码（可为 null）
+     * @param payloadOut Payload 输出文件路径
+     * @param listener   进度监听器（可为 null）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 提取失败
+     */
+    public CarrierMetadata extractFullToFile(final Path stegoFile, final byte[] password,
+                                             final Path payloadOut,
+                                             final ProgressListener listener)
+            throws CarrierException {
+        CarrierResult result = extractFull(stegoFile, password);
+        byte[] payload = result.payload();
+        try (OutputStream out = Files.newOutputStream(payloadOut)) {
+            int off = 0;
+            while (off < payload.length) {
+                int n = Math.min(WRITE_CHUNK_BYTES, payload.length - off);
+                out.write(payload, off, n);
+                off += n;
+                if (listener != null) {
+                    listener.onProgress((double) off / Math.max(payload.length, 1));
+                }
+            }
+        } catch (IOException e) {
+            throw new CarrierException("写入 Payload 文件失败: " + e.getMessage(), e);
+        }
+        return result.metadata();
+    }
+
+    /** 默认回退提取的写出分块大小（256 KiB）。 */
+    private static final int WRITE_CHUNK_BYTES = 1 << 18;
 
     // ---- 子类必须实现 ----
 

@@ -145,10 +145,13 @@ fun mapErrorToChineseMessage(error: String?): String {
 
         // Argon2 内存不足
         error.contains("OutOfMemory", ignoreCase = true) ||
-        error.contains("memory", ignoreCase = true) &&
-        (error.contains("argon", ignoreCase = true) ||
-         error.contains("Argon2", ignoreCase = true)) ->
-            "内存不足，Argon2 密钥派生失败。请尝试在设置中切换到\"省电模式\"（64 MiB）后重试。"
+        error.contains("内存不足", ignoreCase = true) ||
+        (error.contains("memory", ignoreCase = true) &&
+         (error.contains("argon", ignoreCase = true) ||
+          error.contains("Argon2", ignoreCase = true))) ->
+            "内存不足：操作所需内存超过设备可用堆。\n" +
+                "• 加密/隐写：请在设置中降低 Argon2 内存档位后重试（操作前会自动按设备内存降档）。\n" +
+                "• 解密/提取：文件创建时的 Argon2 内存参数已随文件固定，与当前档位无关，请改用桌面端处理。"
 
         // 文件不存在/无法读取
         error.contains("NoSuchFile", ignoreCase = true) ||

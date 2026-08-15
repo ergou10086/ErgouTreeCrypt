@@ -36,6 +36,23 @@ public final class FileStegoOptions {
     /** 是否优先使用自定义区域嵌入（如 PNG stEG chunk）。 */
     private final boolean preferChunk;
 
+    /**
+     * Argon2id 参数覆写（null 表示使用默认参数，如 Android 低内存档位）。
+     */
+    private final Argon2Params argon2Params;
+
+    /**
+     * 低内存模式（移动端）：大文件仅在适配器支持流式嵌入/提取时
+     * 才允许处理，否则提前抛出友好错误而非 OOM。
+     */
+    private final boolean lowMemoryMode;
+
+    /**
+     * 低内存模式的大文件护栏阈值（字节）。仅低内存模式生效；
+     * 0 表示使用默认阈值（64 MiB）。移动端应按设备实际可用堆设置。
+     */
+    private final long lowMemoryThresholdBytes;
+
     private FileStegoOptions(final Builder builder) {
         this.paranoid = builder.paranoid;
         this.compressed = builder.compressed;
@@ -45,6 +62,9 @@ public final class FileStegoOptions {
         this.targetSizeBytes = builder.targetSizeBytes;
         this.bruteForceGuard = builder.bruteForceGuard;
         this.preferChunk = builder.preferChunk;
+        this.argon2Params = builder.argon2Params;
+        this.lowMemoryMode = builder.lowMemoryMode;
+        this.lowMemoryThresholdBytes = builder.lowMemoryThresholdBytes;
     }
 
     /**
@@ -104,6 +124,27 @@ public final class FileStegoOptions {
     }
 
     /**
+     * @return Argon2id 参数覆写（null 表示使用默认参数）
+     */
+    public Argon2Params argon2Params() {
+        return argon2Params;
+    }
+
+    /**
+     * @return 是否低内存模式（移动端大文件护栏）
+     */
+    public boolean isLowMemoryMode() {
+        return lowMemoryMode;
+    }
+
+    /**
+     * @return 低内存模式大文件护栏阈值（字节），0 表示使用默认阈值
+     */
+    public long lowMemoryThresholdBytes() {
+        return lowMemoryThresholdBytes;
+    }
+
+    /**
      * 从当前选项构建 {@link StegoEncodeOptions}（Payload 层使用）。
      *
      * @return Payload 编码选项
@@ -114,6 +155,7 @@ public final class FileStegoOptions {
                 .compressed(compressed)
                 .hasIntegrity(storeIntegrity)
                 .hasHeaderMac(storeIntegrity)
+                .argon2Params(argon2Params)
                 .build();
     }
 
@@ -157,6 +199,9 @@ public final class FileStegoOptions {
         private long targetSizeBytes;
         private boolean bruteForceGuard = true;
         private boolean preferChunk = true;
+        private Argon2Params argon2Params;
+        private boolean lowMemoryMode;
+        private long lowMemoryThresholdBytes;
 
         /**
          * 设置 paranoid 模式。
@@ -243,6 +288,44 @@ public final class FileStegoOptions {
          */
         public Builder preferChunk(final boolean prefer) {
             this.preferChunk = prefer;
+            return this;
+        }
+
+        /**
+         * 设置 Argon2id 参数覆写（null 表示使用默认参数）。
+         *
+         * <p>移动端应传入低内存档位参数；解码侧须从载体元数据读取相同参数。
+         *
+         * @param params Argon2 参数覆写，可为 null
+         * @return this
+         */
+        public Builder argon2Params(final Argon2Params params) {
+            this.argon2Params = params;
+            return this;
+        }
+
+        /**
+         * 设置低内存模式（移动端大文件护栏）。
+         *
+         * @param lowMemory 是否启用
+         * @return this
+         */
+        public Builder lowMemoryMode(final boolean lowMemory) {
+            this.lowMemoryMode = lowMemory;
+            return this;
+        }
+
+        /**
+         * 设置低内存模式的大文件护栏阈值（字节）。
+         *
+         * <p>0（默认）表示使用内置阈值（64 MiB）。移动端应传入按设备实际
+         * 可用堆计算的阈值，使护栏与设备能力匹配而非固定值。
+         *
+         * @param bytes 护栏阈值字节数，0 表示默认
+         * @return this
+         */
+        public Builder lowMemoryThresholdBytes(final long bytes) {
+            this.lowMemoryThresholdBytes = bytes;
             return this;
         }
 

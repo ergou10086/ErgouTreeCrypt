@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.android.ui.screen
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
@@ -29,12 +30,12 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,7 +44,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -64,34 +65,43 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
+import hbnu.project.ergoutreecrypt.android.platform.PendingSafOutput
+import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
+import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
+import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordStrengthMeter
+import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultDialog
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
+import hbnu.project.ergoutreecrypt.android.ui.component.SUPPORTED_CARRIER_EXTENSIONS
 import hbnu.project.ergoutreecrypt.android.ui.component.extractFileName
 import hbnu.project.ergoutreecrypt.android.ui.component.formatFileSize
 import hbnu.project.ergoutreecrypt.android.ui.component.generateRandomPassword
+import hbnu.project.ergoutreecrypt.android.ui.component.isImageCarrier
+import hbnu.project.ergoutreecrypt.android.ui.component.isSupportedCarrier
 import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
+import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.android.platform.Argon2MobileMode
+import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.android.viewmodel.StegoViewModel
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
+import hbnu.project.ergoutreecrypt.history.HistoryService
+import hbnu.project.ergoutreecrypt.history.OperationType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-// ==================== 载体类型常量 ====================
-
-/** 支持的所有载体文件扩展名（含 "." 前缀，小写） */
-private val SUPPORTED_CARRIER_EXTENSIONS = setOf(
-    ".png", ".zip", ".pdf", ".wav", ".flac", ".mp4", ".m4a", ".m4v", ".mov"
-)
-
-/** 可显示图像预览的载体扩展名 */
-private val IMAGE_CARRIER_EXTENSIONS = setOf(".png")
+// ==================== 提示文本常量 ====================
 
 /** 提示文本 */
 private val TIP_STEGO_PARANOID = "启用后数据先经 Serpent 加密再经 XChaCha20 加密，提供双重保护。"
@@ -100,28 +110,6 @@ private val TIP_STEGO_INTEGRITY = "存储原文的完整性校验码（MAC），
 private val TIP_STEGO_STEALTH = "使用 HMAC 派生魔数替代固定魔数，避免通过魔数字符串检测隐写数据。"
 private val TIP_STEGO_OBFUSCATE = "在输出文件末尾追加随机字节，使文件大小达到指定目标，增加检测难度。"
 private val TIP_STEGO_PREFER_CHUNK = "对于 PNG 载体：优先使用 stEG 自定义块嵌入（更隐蔽）；关闭则在 IEND 后直接追加。"
-
-/**
- * 检测文件扩展名是否为支持的载体类型。
- *
- * @param fileName 文件名
- * @return 若为支持的载体类型返回 true
- */
-private fun isSupportedCarrier(fileName: String): Boolean {
-    val lower = fileName.lowercase()
-    return SUPPORTED_CARRIER_EXTENSIONS.any { lower.endsWith(it) }
-}
-
-/**
- * 检测文件扩展名是否可显示图像预览。
- *
- * @param fileName 文件名
- * @return 若为图像类型返回 true
- */
-private fun isImageCarrier(fileName: String): Boolean {
-    val lower = fileName.lowercase()
-    return IMAGE_CARRIER_EXTENSIONS.any { lower.endsWith(it) }
-}
 
 // ============================================================
 // StegoScreen — 统一隐写（隐藏）页面
@@ -141,20 +129,26 @@ private fun isImageCarrier(fileName: String): Boolean {
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun StegoScreen() {
+fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     val fileOps = remember { AndroidFileOps(ctx.applicationContext) }
+    val settings = remember { AndroidSettings(ctx.applicationContext) }
     val vm = remember { StegoViewModel(ctx.applicationContext) }
     val progress by vm.progress.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
+    val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
     // ---- 待隐藏文件 ----
     var secretUri by remember { mutableStateOf<Uri?>(null) }
     var secretPath by remember { mutableStateOf<String?>(null) }
     var secretName by remember { mutableStateOf<String?>(null) }
     var secretSize by remember { mutableStateOf<Long?>(null) }
+
+    // ---- 待隐藏文件选择加载状态 ----
+    var secretLoading by remember { mutableStateOf(false) }
+    var secretPickJob by remember { mutableStateOf<Job?>(null) }
 
     // ---- 载体文件 ----
     var carrierUri by remember { mutableStateOf<Uri?>(null) }
@@ -164,6 +158,10 @@ fun StegoScreen() {
     var carrierValid by remember { mutableStateOf(false) }
     // 图像预览
     var carrierBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // ---- 载体文件选择加载状态 ----
+    var carrierLoading by remember { mutableStateOf(false) }
+    var carrierPickJob by remember { mutableStateOf<Job?>(null) }
 
     // ---- 密码 ----
     var password by remember { mutableStateOf("") }
@@ -178,21 +176,57 @@ fun StegoScreen() {
     var targetSizeMB by remember { mutableStateOf(10) }
     var preferChunk by remember { mutableStateOf(true) }
 
+    // Argon2 移动模式档位（复用全局设置，映射为隐写 KDF 覆写参数）
+    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.BALANCED) }
+
+    // 从 DataStore 加载 Argon2 档位（仅首次组合）
+    LaunchedEffect(Unit) {
+        argon2Mode = Argon2MobileMode.fromKey(settings.argon2MobileMode.first())
+    }
+
     // ---- 输出 ----
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
+    var outDirUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingSafOut by remember { mutableStateOf<PendingSafOutput?>(null) }
+
+    // ---- 输出目录选择加载状态 ----
+    var outDirLoading by remember { mutableStateOf(false) }
+    var outDirPickJob by remember { mutableStateOf<Job?>(null) }
 
     // ---- 待隐藏文件选择器 ----
     val secretPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            secretUri = u
-            secretName = extractFileName(u)
-            secretPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (secretPath != null) {
-                val f = File(secretPath!!)
-                secretSize = if (f.exists()) f.length() else null
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理，允许用户换选新文件
+        secretPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        secretLoading = true
+        secretPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                if (path != null) {
+                    val (size, parent) = withContext(Dispatchers.IO) {
+                        val f = File(path)
+                        val sz = if (f.exists()) f.length() else null
+                        sz to f.parent
+                    }
+                    secretUri = u
+                    secretName = name
+                    secretPath = path
+                    secretSize = size
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (secretPickJob === myJob) {
+                    secretLoading = false
                 }
             }
         }
@@ -200,45 +234,67 @@ fun StegoScreen() {
 
     // ---- 载体文件选择器 ----
     val carrierPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            val name = extractFileName(u)
-            // UI 层校验：检查扩展名
-            if (!isSupportedCarrier(name)) {
-                val supported = SUPPORTED_CARRIER_EXTENSIONS.joinToString(", ")
-                Toast.makeText(
-                    ctx,
-                    "不支持的载体格式：${name.substringAfterLast('.', "未知")}。" +
-                            " 支持的格式：$supported",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
-            carrierUri = u
-            carrierName = name
-            carrierPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            carrierValid = carrierPath != null
-            if (carrierPath != null) {
-                val f = File(carrierPath!!)
-                carrierSize = if (f.exists()) f.length() else null
-                // 生成输出文件名
-                val dotIdx = name.lastIndexOf('.')
-                outName = if (dotIdx >= 0) {
-                    "${name.substring(0, dotIdx)}_stego${name.substring(dotIdx)}"
-                } else {
-                    "${name}_stego"
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理，允许用户换选新文件
+        carrierPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        carrierLoading = true
+        carrierPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询移入 IO 线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                // UI 层校验：检查扩展名
+                if (!isSupportedCarrier(name)) {
+                    val supported = SUPPORTED_CARRIER_EXTENSIONS.joinToString(", ")
+                    Toast.makeText(
+                        ctx,
+                        "不支持的载体格式：${name.substringAfterLast('.', "未知")}。" +
+                                " 支持的格式：$supported",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
                 }
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
-                }
-                // 回收旧预览图，防止 native 内存泄漏
+                // 回收旧预览图并清空，防止 native 内存泄漏与加载期间的旧预览残留
                 carrierBitmap?.recycle()
-                // 加载图像预览（仅 PNG）
-                carrierBitmap = if (isImageCarrier(name)) {
-                    withContext(Dispatchers.IO) {
-                        loadThumbnail(carrierPath!!, 360)
+                carrierBitmap = null
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                carrierUri = u
+                carrierName = name
+                carrierPath = path
+                carrierValid = path != null
+                if (path != null) {
+                    val (size, parent) = withContext(Dispatchers.IO) {
+                        val f = File(path)
+                        val sz = if (f.exists()) f.length() else null
+                        sz to f.parent
                     }
-                } else {
-                    null
+                    carrierSize = size
+                    // 生成输出文件名
+                    val dotIdx = name.lastIndexOf('.')
+                    outName = if (dotIdx >= 0) {
+                        "${name.substring(0, dotIdx)}_stego${name.substring(dotIdx)}"
+                    } else {
+                        "${name}_stego"
+                    }
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
+                    // 加载图像预览（仅 PNG，解码在 IO 线程）
+                    carrierBitmap = if (isImageCarrier(name)) {
+                        withContext(Dispatchers.IO) {
+                            loadThumbnail(path, 360)
+                        }
+                    } else {
+                        null
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (carrierPickJob === myJob) {
+                    carrierLoading = false
                 }
             }
         }
@@ -246,21 +302,54 @@ fun StegoScreen() {
 
     // ---- 输出目录选择器 ----
     val outDirPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
-        if (u != null) scope.launch {
-            val resolved = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (resolved != null) {
-                outDir = resolved
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        outDirPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        outDirLoading = true
+        outDirPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                val resolved = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                if (resolved != null) {
+                    outDir = resolved
+                    outDirUri = u
+                    // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
+                    try {
+                        ctx.contentResolver.takePersistableUriPermission(
+                            u,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                        // 个别文档提供者不支持持久授权，忽略即可
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (outDirPickJob === myJob) {
+                    outDirLoading = false
+                }
             }
         }
     }
 
     val hasSecret = secretPath != null
     val hasCarrier = carrierPath != null && carrierValid
-    val canStart = hasSecret && hasCarrier && !isRunning
+    val canStart = hasSecret && hasCarrier && !isRunning && !secretLoading && !carrierLoading
 
     // ---- 开始隐写 ----
     fun doHide() {
-        val outFile = "${outDir ?: secretPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath}/${outName ?: "stego_output"}"
+        val safUri = outDirUri
+        val writeDir = if (safUri != null) {
+            val tmp = fileOps.createOutputTempDir()
+            pendingSafOut = PendingSafOutput(safUri, tmp)
+            tmp.absolutePath
+        } else {
+            outDir ?: secretPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+        }
+        val outFile = "$writeDir/${outName ?: "stego_output"}"
         val opts = FileStegoOptions.builder()
             .paranoid(paranoid)
             .compressed(compressed)
@@ -269,6 +358,11 @@ fun StegoScreen() {
             .obfuscateSize(obfuscateSize)
             .targetSizeBytes(if (obfuscateSize) targetSizeMB * 1024L * 1024L else 0)
             .preferChunk(preferChunk)
+            // 移动端：低内存档位 Argon2 参数（写入载体元数据）+ 按设备可用堆设置的大文件护栏。
+            // 档位内存超过应用堆时，共享核心会自动回退到离堆（native 内存）派生
+            .argon2Params(argon2Mode.toArgon2Params())
+            .lowMemoryMode(true)
+            .lowMemoryThresholdBytes(DeviceMemory.lowMemoryThresholdBytes())
             .build()
         vm.hide(carrierPath!!, secretPath!!, outFile, password, opts)
     }
@@ -280,13 +374,49 @@ fun StegoScreen() {
     var resultDetail by remember { mutableStateOf<String?>(null) }
     var resultType by remember { mutableStateOf(ResultType.INFO) }
 
+    // 提交 SAF 输出：将暂存临时文件复制到用户选择的 SAF 目录并清理。返回 null 表示非 SAF 输出
+    suspend fun commitSafOutput(): Boolean? {
+        val pending = pendingSafOut
+        if (pending == null) {
+            return null
+        }
+        val ok = withContext(Dispatchers.IO) { fileOps.copyDirectoryToTree(pending.treeUri, pending.tempDir) }
+        withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
+        pendingSafOut = null
+        return ok
+    }
+
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                resultTitle = "隐写完成"
-                resultMessage = "文件已成功隐藏到载体中。\n输出文件：${outName ?: ""}"
-                resultDetail = null
-                resultType = ResultType.SUCCESS
+                val committed = commitSafOutput()
+                when (committed) {
+                    null, true -> {
+                        resultTitle = "隐写完成"
+                        resultMessage = "文件已成功隐藏到载体中。\n输出文件：${outName ?: ""}"
+                        resultDetail = null
+                        resultType = ResultType.SUCCESS
+                        // 记录操作历史（隐写加密）
+                        val outNameNow = outName ?: "stego_output"
+                        val resolvedOutDir = outDir
+                            ?: secretPath?.let { File(it).parent }
+                            ?: ctx.filesDir.absolutePath
+                        withContext(Dispatchers.IO) {
+                            HistoryService.record(
+                                OperationType.STEGO_ENCODE,
+                                outNameNow,
+                                "$resolvedOutDir/$outNameNow",
+                                outDirUri?.toString()
+                            )
+                        }
+                    }
+                    false -> {
+                        resultTitle = "隐写完成但保存失败"
+                        resultMessage = "隐写已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                        resultDetail = null
+                        resultType = ResultType.ERROR
+                    }
+                }
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
@@ -327,8 +457,17 @@ fun StegoScreen() {
     }
 
     Scaffold(
+        // 容器透明，避免遮住全局背景图层
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(title = { Text("隐写") })
+            CompactTopBar(
+                title = "隐写",
+                actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
+                    }
+                }
+            )
         },
         bottomBar = {
             if (isRunning) {
@@ -358,6 +497,23 @@ fun StegoScreen() {
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
+            // 低调的内存使用指示器（可在设置中关闭）
+            if (showMemoryIndicator) {
+                MemoryIndicator()
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            // 所选档位超过应用堆时提示将使用离堆内存派生（速度较慢）
+            if (!Argon2MobileMode.isFeasible(argon2Mode)) {
+                Text(
+                    "${argon2Mode.label} 档位的内存需求超过应用堆，密钥派生将使用离堆内存（速度较慢）",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
             // ============================================================
             // 一、待隐藏文件选择区
             // ============================================================
@@ -370,30 +526,49 @@ fun StegoScreen() {
             if (!hasSecret) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                     onClick = { secretPicker.launch(arrayOf("*/*")) }
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.InsertDriveFile, null,
-                            Modifier.size(40.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "点击选择待隐藏文件",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "任意类型文件均可作为隐藏内容",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
+                    if (secretLoading) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            PickerLoadingIndicator(
+                                text = pickerLoadingText(),
+                                iconSize = 40.dp,
+                                vertical = true
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                pickerLoadingHint(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.InsertDriveFile, null,
+                                Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "点击选择待隐藏文件",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "任意类型文件均可作为隐藏内容",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             } else {
@@ -401,22 +576,18 @@ fun StegoScreen() {
                     fileName = secretName,
                     fileSize = secretSize,
                     onClick = { secretPicker.launch(arrayOf("*/*")) },
-                    label = "点击更换待隐藏文件"
+                    label = "点击更换待隐藏文件",
+                    loading = secretLoading,
+                    loadingText = pickerLoadingText(),
+                    loadingHint = pickerLoadingHint()
                 )
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilledTonalButton(
-                        onClick = { secretPicker.launch(arrayOf("*/*")) },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text("  换文件") }
-                    Spacer(Modifier.width(6.dp))
-                    FilledTonalButton(
-                        onClick = {
-                            secretUri = null; secretPath = null
-                            secretName = null; secretSize = null
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)); Text("  移除") }
-                }
+                FileActionRow(
+                    onPickFile = { secretPicker.launch(arrayOf("*/*")) },
+                    onRemove = {
+                        secretUri = null; secretPath = null
+                        secretName = null; secretSize = null
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -433,39 +604,65 @@ fun StegoScreen() {
             if (!hasCarrier) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                     onClick = { carrierPicker.launch(arrayOf("*/*")) }
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.Visibility, null,
-                            Modifier.size(40.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "点击选择载体文件",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "支持格式：PNG / ZIP / PDF / WAV / FLAC / MP4",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
+                    if (carrierLoading) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            PickerLoadingIndicator(
+                                text = pickerLoadingText(),
+                                iconSize = 40.dp,
+                                vertical = true
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                pickerLoadingHint(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Visibility, null,
+                                Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "点击选择载体文件",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "支持格式：PNG / ZIP / PDF / WAV / FLAC / MP4 / M4A / M4V",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
             } else {
                 // 载体信息卡片
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        // 换选载体处理中：显示旋转圆圈提示
+                        if (carrierLoading) {
+                            PickerLoadingIndicator(
+                                text = pickerLoadingText(),
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 Icons.AutoMirrored.Filled.InsertDriveFile, null,
@@ -522,21 +719,15 @@ fun StegoScreen() {
                 }
 
                 // 更换/移除按钮行
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilledTonalButton(
-                        onClick = { carrierPicker.launch(arrayOf("*/*")) },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text("  换载体") }
-                    Spacer(Modifier.width(6.dp))
-                    FilledTonalButton(
-                        onClick = {
-                            carrierBitmap?.recycle()
-                            carrierUri = null; carrierPath = null; carrierName = null
-                            carrierSize = null; carrierValid = false; carrierBitmap = null
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)); Text("  移除") }
-                }
+                FileActionRow(
+                    onPickFile = { carrierPicker.launch(arrayOf("*/*")) },
+                    pickFileLabel = "换载体",
+                    onRemove = {
+                        carrierBitmap?.recycle()
+                        carrierUri = null; carrierPath = null; carrierName = null
+                        carrierSize = null; carrierValid = false; carrierBitmap = null
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -561,26 +752,33 @@ fun StegoScreen() {
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                 onClick = { outDirPicker.launch(null) }
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "输出目录",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = displayText,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                if (outDirLoading) {
+                    PickerLoadingIndicator(
+                        text = pickerLoadingText(),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "输出目录",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 

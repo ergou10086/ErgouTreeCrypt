@@ -35,17 +35,27 @@ val syncTests by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("sync-test"))
 }
 
+// 同步 i18n 资源，供共享核心的 Messages 在测试类路径下加载
+val syncTestResources by tasks.registering(Copy::class) {
+    from("../../src/main/resources") {
+        include("hbnu/project/ergoutreecrypt/i18n/messages*.properties")
+    }
+    into(layout.buildDirectory.dir("sync-test-resources"))
+}
+
 sourceSets {
     main {
         java.srcDirs(layout.buildDirectory.dir("sync-core"))
     }
     test {
         java.srcDirs(layout.buildDirectory.dir("sync-test"))
+        resources.srcDirs(layout.buildDirectory.dir("sync-test-resources"))
     }
 }
 
 tasks.named("compileJava") { dependsOn(syncCoreLibs) }
 tasks.named("compileTestJava") { dependsOn(syncTests) }
+tasks.named("processTestResources") { dependsOn(syncTestResources) }
 
 dependencies {
     // 共享核心依赖（与桌面端一致）

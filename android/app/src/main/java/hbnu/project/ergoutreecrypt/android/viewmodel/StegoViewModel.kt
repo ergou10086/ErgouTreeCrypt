@@ -3,9 +3,11 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
+import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +49,23 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
     }
 
     /**
+     * 创建进度监听器：将核心库按已处理字节数回调的进度写入 StateFlow。
+     *
+     * <p>回调在工作线程（Dispatchers.IO）执行，{@link MutableStateFlow#update}
+     * 本身线程安全，无需额外切换调度器。
+     *
+     * @return 进度监听器
+     */
+    private fun createProgressListener(): ProgressListener = ProgressListener { fraction ->
+        _progress.update {
+            it.copy(
+                state = ProgressState.State.RUNNING,
+                progress = fraction.toFloat().coerceIn(0f, 1f)
+            )
+        }
+    }
+
+    /**
      * 将文件加密后嵌入到载体文件中。
      *
      * @param carrierPath 载体文件路径（PNG/ZIP/PDF/WAV/FLAC/MP4 等）
@@ -77,10 +96,19 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     ByteArray(0)
                 }
 
-                codec.hide(carrierFile, secretFile, output, pwdBytes, options)
+                codec.hide(carrierFile, secretFile, output, pwdBytes, options,
+                    createProgressListener())
 
                 _progress.update {
                     it.copy(state = ProgressState.State.DONE, progress = 1f)
+                }
+            } catch (e: OutOfMemoryError) {
+                // OOM 后堆状态不可靠，仅上报错误提示；正常情况由核心层预检提前拦截
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = "内存不足：操作所需内存超过设备可用堆，请降低 Argon2 档位后重试。"
+                    )
                 }
             } catch (e: Exception) {
                 _progress.update {
@@ -119,13 +147,31 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     ByteArray(0)
                 }
 
-                val resultFile = codec.extract(stegoFile, outDir, pwdBytes)
+                // 移动端提取：低内存模式（大文件护栏 + 流式提取）
+                // 护栏阈值按设备当前可用堆计算，而非固定 64 MiB；
+                // Argon2 参数取自载体元数据，核心层会按可用堆预检并给出准确错误
+                val opts = FileStegoOptions.builder()
+                    .lowMemoryMode(true)
+                    .lowMemoryThresholdBytes(DeviceMemory.lowMemoryThresholdBytes())
+                    .build()
+                val resultFile = codec.extract(stegoFile, outDir, pwdBytes, opts,
+                    createProgressListener())
 
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.DONE,
                         progress = 1f,
                         info = resultFile.fileName.toString()
+                    )
+                }
+            } catch (e: OutOfMemoryError) {
+                // OOM 后堆状态不可靠，仅上报错误提示；正常情况由核心层预检提前拦截
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = "内存不足：提取所需内存超过设备可用堆。" +
+                                "该文件的 Argon2 参数在创建时已固定，与当前档位设置无关；" +
+                                "请改用桌面端提取。"
                     )
                 }
             } catch (e: Exception) {

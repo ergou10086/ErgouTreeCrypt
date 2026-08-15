@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.filestego.carrier.mp4;
 
 import hbnu.project.ergoutreecrypt.filestego.api.CarrierException;
 import hbnu.project.ergoutreecrypt.filestego.api.EmbedOptions;
+import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.AbstractCarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptException;
@@ -9,6 +10,8 @@ import hbnu.project.ergoutreecrypt.mediacrypt.mp4.BoxParser;
 import hbnu.project.ergoutreecrypt.mediacrypt.mp4.Mp4Box;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -49,6 +52,12 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
 
     /** 普通 box 头长度（size + type）。 */
     private static final int BOX_HEADER_LEN = 8;
+
+    /** 流式复制分块大小（1 MiB）。 */
+    private static final int STREAM_CHUNK_BYTES = 1 << 20;
+
+    /** 元数据探测上限（≥ paranoid+stealth 组合下的最大 126 字节）。 */
+    private static final int META_PROBE_LEN = 128;
 
     @Override
     public String id() {
@@ -107,20 +116,179 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
         if (combined.length < metaLen) {
             throw new CarrierException("MP4 隐写数据不完整：组合块短于元数据长度");
         }
-        return Arrays.copyOfRange(combined, metaLen, combined.length);
+        // 按 meta.payloadSize() 精确截断，防止 obfuscateSize 追加的 padding 混入
+        long payloadSize = meta.payloadSize();
+        int end = Math.min(combined.length, (int) Math.min(Integer.MAX_VALUE,
+                metaLen + payloadSize));
+        return Arrays.copyOfRange(combined, metaLen, end);
     }
 
     @Override
     public boolean detect(final Path file) {
         try {
             Mp4Box box = findStegUuidBox(file);
-            if (box == null) {
+            if (box == null || box.payloadSize() < STEG_UUID.length + 4) {
                 return false;
             }
-            byte[] combined = readUuidPayload(file, box);
-            return CarrierMetadata.startsWithMagic(combined);
+            // 只读取 usertype 之后的 4 字节魔数，避免将整个 Payload 读入内存
+            try (FileChannel ch = FileChannel.open(file, StandardOpenOption.READ)) {
+                ByteBuffer magic = readAt(ch, box.payloadOffset() + STEG_UUID.length, 4);
+                byte[] magicBytes = new byte[4];
+                magic.get(magicBytes);
+                return CarrierMetadata.startsWithMagic(magicBytes);
+            }
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    // ---- 流式嵌入 / 提取（大文件，恒定内存） ----
+
+    @Override
+    public boolean supportsStreamingEmbed() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsStreamingExtract() {
+        return true;
+    }
+
+    /**
+     * 流式嵌入：复制载体后，在文件末尾追加隐写 uuid box（box 头 + usertype +
+     * 元数据 + Payload 文件分块写入），不将 Payload 读入内存。
+     *
+     * @param carrierFile 原始载体文件路径
+     * @param meta        序列化后的 CarrierMetadata 字节数组
+     * @param payloadFile STEG-V2 Payload 文件路径
+     * @param output      输出文件路径
+     * @param password    密码（MP4 uuid box 方案不使用）
+     * @param options     嵌入选项
+     * @throws CarrierException 嵌入失败
+     */
+    @Override
+    public void embedFromFile(final Path carrierFile, final byte[] meta,
+                              final Path payloadFile, final Path output,
+                              final byte[] password, final EmbedOptions options)
+            throws CarrierException {
+        embedFromFile(carrierFile, meta, payloadFile, output, password, options, null);
+    }
+
+    /**
+     * 流式嵌入（带进度回调）：分块复制载体后，在文件末尾追加隐写 uuid box
+     * （box 头 + usertype + 元数据 + Payload 分块写入），并按已复制字节数占
+     * 载体与 Payload 总字节数的比例逐块回调进度。
+     *
+     * @param carrierFile 原始载体文件路径
+     * @param meta        序列化后的 CarrierMetadata 字节数组
+     * @param payloadFile STEG-V2 Payload 文件路径
+     * @param output      输出文件路径
+     * @param password    密码（MP4 uuid box 方案不使用）
+     * @param options     嵌入选项
+     * @param listener    进度监听器（可为 null）
+     * @throws CarrierException 嵌入失败
+     */
+    @Override
+    public void embedFromFile(final Path carrierFile, final byte[] meta,
+                              final Path payloadFile, final Path output,
+                              final byte[] password, final EmbedOptions options,
+                              final ProgressListener listener)
+            throws CarrierException {
+        try {
+            long carrierSize = Files.size(carrierFile);
+            long total = carrierSize + Files.size(payloadFile);
+            // 先分块复制载体（保持原 box 偏移不变），再在末尾追加隐写 uuid box
+            long done = 0;
+            byte[] buf = new byte[STREAM_CHUNK_BYTES];
+            try (InputStream in = Files.newInputStream(carrierFile);
+                 OutputStream out = Files.newOutputStream(output,
+                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                    done += n;
+                    if (listener != null) {
+                        listener.onProgress((double) done / Math.max(total, 1L));
+                    }
+                }
+            }
+            appendStegUuidBoxFromFile(output, meta, payloadFile, listener, done, total);
+            if (listener != null) {
+                listener.onProgress(1.0);
+            }
+        } catch (IOException e) {
+            throw new CarrierException("MP4 嵌入失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 流式提取：定位隐写 uuid box，定点读取元数据，再按
+     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
+     *
+     * @param stegoFile  隐写载体文件
+     * @param password   密码（MP4 uuid box 方案不使用）
+     * @param payloadOut Payload 输出文件路径
+     * @return 解析后的载体元数据
+     * @throws CarrierException 提取失败
+     */
+    @Override
+    public CarrierMetadata extractFullToFile(final Path stegoFile, final byte[] password,
+                                             final Path payloadOut) throws CarrierException {
+        return extractFullToFile(stegoFile, password, payloadOut, null);
+    }
+
+    /**
+     * 流式提取（带进度回调）：定位隐写 uuid box，定点读取元数据，再按
+     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝
+     * 字节数逐块回调进度。
+     *
+     * @param stegoFile  隐写载体文件
+     * @param password   密码（MP4 uuid box 方案不使用）
+     * @param payloadOut Payload 输出文件路径
+     * @param listener   进度监听器（可为 null）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 提取失败
+     */
+    @Override
+    public CarrierMetadata extractFullToFile(final Path stegoFile, final byte[] password,
+                                             final Path payloadOut,
+                                             final ProgressListener listener)
+            throws CarrierException {
+        try {
+            Mp4Box box = findStegUuidBox(stegoFile);
+            if (box == null) {
+                throw new CarrierException("MP4 中未找到隐写数据（uuid/EGTC-STEGO-MP401）");
+            }
+            if (box.payloadSize() < STEG_UUID.length) {
+                throw new CarrierException("MP4 隐写 uuid box 过小");
+            }
+            long metaOffset = box.payloadOffset() + STEG_UUID.length;
+            long combinedLen = box.payloadSize() - STEG_UUID.length;
+            CarrierMetadata meta;
+            try (FileChannel ch = FileChannel.open(stegoFile, StandardOpenOption.READ)) {
+                // 定点读取并解析元数据（最多 126 字节）
+                int metaProbe = (int) Math.min(META_PROBE_LEN, combinedLen);
+                ByteBuffer metaRaw = readAt(ch, metaOffset, metaProbe);
+                byte[] metaBytes = new byte[metaProbe];
+                metaRaw.get(metaBytes);
+                meta = CarrierMetadata.fromBytes(metaBytes);
+                int metaLen = CarrierMetadata.totalSize(meta.isParanoid(), meta.isStealth());
+                long payloadStart = metaOffset + metaLen;
+                long payloadSize = meta.payloadSize();
+                if (payloadSize < 0 || metaLen + payloadSize > combinedLen) {
+                    throw new CarrierException("MP4 隐写数据不完整：Payload 超出 box 范围");
+                }
+                // 定点流式拷贝 payloadSize 字节
+                try (OutputStream out = Files.newOutputStream(payloadOut,
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                    copyRange(ch, payloadStart, payloadSize, out, listener);
+                }
+            }
+            return meta;
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 MP4 隐写数据失败: " + e.getMessage(), e);
         }
     }
 
@@ -339,6 +507,107 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
             while (bb.hasRemaining()) {
                 end += ch.write(bb, end);
             }
+        }
+    }
+
+    /**
+     * 流式追加隐写 uuid box：box 头 + usertype + 元数据 + Payload 文件分块写入。
+     *
+     * <p>与 {@link #appendStegUuidBox} 产出相同的 box 布局，但 Payload 从文件
+     * 分块读入，不分配整块内存。box size 在写入前可预知
+     * （8 + 16 + metaLen + payloadFileSize），须满足 32-bit size 上限。
+     *
+     * @param file        目标文件（通常为已复制的载体）
+     * @param meta        序列化后的 CarrierMetadata 字节数组
+     * @param payloadFile STEG-V2 Payload 文件路径
+     * @param listener    进度监听器（可为 null），按已写入字节数回调
+     * @param done        box 写入前已完成的字节数
+     * @param total       进度分母（整体总字节数）
+     * @throws IOException      写入失败
+     * @throws CarrierException box 过大无法用 32-bit size 表示
+     */
+    private static void appendStegUuidBoxFromFile(final Path file, final byte[] meta,
+                                                  final Path payloadFile,
+                                                  final ProgressListener listener,
+                                                  final long done, final long total)
+            throws IOException, CarrierException {
+        long payloadLen = STEG_UUID.length + meta.length + Files.size(payloadFile);
+        long boxSize = BOX_HEADER_LEN + payloadLen;
+        if (boxSize > 0xFFFFFFFFL) {
+            throw new CarrierException("MP4 隐写 uuid box 超过 32-bit size 上限");
+        }
+        try (FileChannel ch = FileChannel.open(file, StandardOpenOption.WRITE)) {
+            long pos = ch.size();
+            // box 头 + usertype
+            ByteBuffer head = ByteBuffer.allocate(BOX_HEADER_LEN + STEG_UUID.length)
+                    .order(ByteOrder.BIG_ENDIAN);
+            head.putInt((int) boxSize);
+            head.put(UUID_TYPE.getBytes(StandardCharsets.US_ASCII));
+            head.put(STEG_UUID);
+            head.flip();
+            pos += ch.write(head, pos);
+            // 元数据
+            ByteBuffer metaBuf = ByteBuffer.wrap(meta);
+            while (metaBuf.hasRemaining()) {
+                pos += ch.write(metaBuf, pos);
+            }
+            // Payload 分块追加
+            ByteBuffer buf = ByteBuffer.allocate(STREAM_CHUNK_BYTES);
+            byte[] tmp = buf.array();
+            long copied = done;
+            try (InputStream in = Files.newInputStream(payloadFile)) {
+                int n;
+                while ((n = in.read(tmp)) > 0) {
+                    buf.clear();
+                    buf.limit(n);
+                    pos += ch.write(buf, pos);
+                    copied += n;
+                    if (listener != null) {
+                        listener.onProgress((double) copied / Math.max(total, 1L));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 从通道定点分块拷贝指定字节数到输出流，并按已拷贝字节数回调进度。
+     *
+     * @param ch       文件通道
+     * @param pos      起始偏移
+     * @param length   待拷贝字节数
+     * @param out      输出流
+     * @param listener 进度监听器（可为 null）
+     * @throws IOException 读写失败
+     */
+    private static void copyRange(final FileChannel ch, final long pos, final long length,
+                                  final OutputStream out, final ProgressListener listener)
+            throws IOException {
+        ByteBuffer buf = ByteBuffer.allocate(STREAM_CHUNK_BYTES);
+        byte[] tmp = buf.array();
+        long remaining = length;
+        long cur = pos;
+        while (remaining > 0) {
+            int want = (int) Math.min(remaining, tmp.length);
+            buf.clear();
+            buf.limit(want);
+            int read = 0;
+            while (read < want) {
+                int n = ch.read(buf, cur + read);
+                if (n < 0) {
+                    throw new IOException("读取 MP4 时遇到意外文件结束，位置 " + cur);
+                }
+                read += n;
+            }
+            out.write(tmp, 0, want);
+            cur += want;
+            remaining -= want;
+            if (listener != null) {
+                listener.onProgress((double) (length - remaining) / Math.max(length, 1L));
+            }
+        }
+        if (listener != null && length <= 0) {
+            listener.onProgress(1.0);
         }
     }
 

@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,19 +18,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,13 +44,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
+import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.i18n.Messages
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
@@ -61,12 +71,12 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = remember { AndroidSettings(context.applicationContext) }
 
-    val argon2Mode by settings.argon2MobileMode.collectAsState(initial = "STANDARD")
+    val argon2Mode by settings.argon2MobileMode.collectAsState(initial = "BALANCED")
     val themeMode by settings.themeMode.collectAsState(initial = "SYSTEM")
     val languageCode by settings.languageCode.collectAsState(initial = "zh_CN")
     val threadCount by settings.threadCount.collectAsState(initial = 4)
@@ -78,12 +88,27 @@ fun SettingsScreen() {
     val bgOpacity by settings.backgroundOpacity.collectAsState(initial = 30)
     var bgFileName by remember { mutableStateOf<String?>(null) }
 
-    // 图片选择器（支持常见图片格式）
+    // ---- 背景图片选择加载状态 ----
+    var imageLoading by remember { mutableStateOf(false) }
+    var imagePickJob by remember { mutableStateOf<Job?>(null) }
+
+    // 内存指示器开关
+    val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
+
+    // 图片选择器（OpenDocument 返回的 URI 支持持久化授权，重启后背景仍可加载）
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        if (uri != null) {
-            scope.launch {
+        if (uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        imagePickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        imageLoading = true
+        imagePickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
                 // 获取持久化权限
                 try {
                     context.contentResolver.takePersistableUriPermission(
@@ -94,26 +119,40 @@ fun SettingsScreen() {
                     // 某些 URI 不支持持久化权限，仍可临时使用
                 }
                 settings.setBackgroundImageUri(uri.toString())
-                // 尝试提取文件名作为显示标签
-                bgFileName = try {
-                    val cursor = context.contentResolver.query(uri, null, null, null, null)
-                    cursor?.use {
-                        if (it.moveToFirst()) {
-                            val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (idx >= 0) it.getString(idx) else "已选择图片"
-                        } else "已选择图片"
-                    } ?: "已选择图片"
-                } catch (_: Exception) {
-                    "已选择图片"
+                // 尝试提取文件名作为显示标签（查询移入 IO 线程）
+                bgFileName = withContext(Dispatchers.IO) {
+                    try {
+                        val cursor = context.contentResolver.query(uri, null, null, null, null)
+                        cursor?.use {
+                            if (it.moveToFirst()) {
+                                val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                if (idx >= 0) it.getString(idx) else "已选择图片"
+                            } else "已选择图片"
+                        } ?: "已选择图片"
+                    } catch (_: Exception) {
+                        "已选择图片"
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (imagePickJob === myJob) {
+                    imageLoading = false
                 }
             }
         }
     }
 
     Scaffold(
+        // 容器透明，避免遮住全局背景图层
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("设置") }
+            CompactTopBar(
+                title = "设置",
+                actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
+                    }
+                }
             )
         }
     ) { padding ->
@@ -130,26 +169,30 @@ fun SettingsScreen() {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "标准模式 (1 GiB) 与桌面端完全兼容。省电模式 (64 MiB) 适合低端设备，但文件可能无法在旧版桌面端解密。",
+                text = "均衡模式 (256 MiB) 为推荐默认档，兼顾内存占用与速度。标准模式 (1 GiB) 与桌面端完全兼容但内存占用大。省电模式 (64 MiB) 适合低端设备。较低档位加密的文件可能无法在旧版桌面端解密。若所选档位超过设备可用内存，加解密操作会自动降档并提示。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Row {
+            // 三个档位平分整行宽度，小字号保证单行内放下
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 FilterChip(
                     selected = argon2Mode == "STANDARD",
-                    onClick = {
-                        scope.launch { settings.setArgon2MobileMode("STANDARD") }
-                    },
-                    label = { Text("标准 1 GiB") }
+                    onClick = { scope.launch { settings.setArgon2MobileMode("STANDARD") } },
+                    label = { Text("标准 1 GiB", style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.padding(horizontal = 8.dp))
                 FilterChip(
-                    selected = argon2Mode != "STANDARD",
-                    onClick = {
-                        scope.launch { settings.setArgon2MobileMode("LIGHT") }
-                    },
-                    label = { Text("省电 64 MiB") }
+                    selected = argon2Mode == "BALANCED",
+                    onClick = { scope.launch { settings.setArgon2MobileMode("BALANCED") } },
+                    label = { Text("均衡 256 MiB", style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = argon2Mode == "LIGHT",
+                    onClick = { scope.launch { settings.setArgon2MobileMode("LIGHT") } },
+                    label = { Text("省电 64 MiB", style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -242,6 +285,13 @@ fun SettingsScreen() {
                 onCheckedChange = { scope.launch { settings.setDefaultReedSolomon(it) } }
             )
 
+            SettingSwitch(
+                title = "内存指示器",
+                description = "在加密、解密、隐写与提取页面顶部显示低调的内存占用信息（系统空闲内存与应用堆占用）",
+                checked = showMemoryIndicator,
+                onCheckedChange = { scope.launch { settings.setShowMemoryIndicator(it) } }
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
 
             // === 线程数 ===
@@ -328,8 +378,9 @@ fun SettingsScreen() {
             // 选择 + 移除按钮行
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { imagePicker.launch("image/*") },
-                    modifier = Modifier.weight(1f)
+                    onClick = { imagePicker.launch(arrayOf("image/*")) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !imageLoading
                 ) {
                     Icon(Icons.Default.Image, null, Modifier.size(16.dp))
                     Text(" 选择图片")
@@ -352,6 +403,12 @@ fun SettingsScreen() {
                         Text(" 移除背景")
                     }
                 }
+            }
+
+            // 背景图片处理中：显示旋转圆圈提示
+            if (imageLoading) {
+                Spacer(Modifier.height(8.dp))
+                PickerLoadingIndicator(text = pickerLoadingText())
             }
 
             // 透明度滑块（仅在有背景时完全可交互）
@@ -399,7 +456,7 @@ fun SettingsScreen() {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "ErgouTreeCrypt Android v1.4.7\n核心版本：v2.15（对应桌面版 v2.0.9）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
+                text = "ErgouTreeCrypt Android v1.8.7\n核心版本：v2.15（对应桌面版 v2.2.5）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

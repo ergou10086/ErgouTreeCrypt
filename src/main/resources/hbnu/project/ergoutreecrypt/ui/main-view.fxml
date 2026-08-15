@@ -29,6 +29,9 @@
 
         <!-- ===== 菜单栏 ===== -->
         <MenuBar fx:id="menuBar" styleClass="app-menu" VBox.vgrow="NEVER">
+            <Menu fx:id="historyMenu">
+                <MenuItem fx:id="historyMenuItem" onAction="#onOpenHistory"/>
+            </Menu>
             <Menu fx:id="settingsMenu">
                 <MenuItem fx:id="settingsMenuItem" onAction="#onOpenSettings"/>
                 <SeparatorMenuItem/>
@@ -51,7 +54,7 @@
                                 </padding>
 
                                 <!-- 模式分段切换 -->
-                                <HBox styleClass="segmented" alignment="CENTER" fx:id="segmented">
+                                <HBox styleClass="segmented" alignment="CENTER_LEFT" fx:id="segmented">
                                     <ToggleButton fx:id="encryptTab" styleClass="seg-btn" selected="true">
                                         <toggleGroup>
                                             <ToggleGroup fx:id="modeGroup"/>

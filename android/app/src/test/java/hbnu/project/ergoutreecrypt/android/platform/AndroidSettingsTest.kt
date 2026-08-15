@@ -34,11 +34,11 @@ class AndroidSettingsTest {
     }
 
     /**
-     * 默认 Argon2 模式为 STANDARD。
+     * 默认 Argon2 模式为 BALANCED（256 MiB，兼顾内存与速度）。
      */
     @Test
-    fun defaultArgon2Mode_isStandard() {
-        assertEquals("STANDARD", DEFAULT_ARGON2_MODE)
+    fun defaultArgon2Mode_isBalanced() {
+        assertEquals("BALANCED", DEFAULT_ARGON2_MODE)
     }
 
     /**
@@ -108,7 +108,7 @@ class AndroidSettingsTest {
         private const val MIN_THREAD_COUNT = 1
         private const val MAX_THREAD_COUNT = 8
         private const val DEFAULT_THEME_MODE = "SYSTEM"
-        private const val DEFAULT_ARGON2_MODE = "STANDARD"
+        private const val DEFAULT_ARGON2_MODE = "BALANCED"
         private const val DEFAULT_BIOMETRIC = false
     }
 }

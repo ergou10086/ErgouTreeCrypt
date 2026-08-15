@@ -4,6 +4,8 @@ import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierRegistry;
+import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
@@ -523,6 +525,9 @@ public class FileStegoController {
                     showProgress(false, null);
                     toast.success(Messages.format("fileStego.status.success.hide",
                             outputPath.getFileName()));
+                    // 隐写成功后记录历史
+                    HistoryService.record(OperationType.STEGO_ENCODE,
+                            outputPath.getFileName().toString(), outputPath.toString(), null);
                 },
                 ex -> {
                     showProgress(false, null);
@@ -557,6 +562,10 @@ public class FileStegoController {
                     Path extracted = extractedHolder[0];
                     toast.success(Messages.format("fileStego.status.success.extract",
                             extracted != null ? extracted.getFileName() : ""));
+                    // 提取成功后记录历史（提取产物未知时退化为输出目录）
+                    Path recordPath = extracted != null ? extracted : outDirPath;
+                    HistoryService.record(OperationType.STEGO_EXTRACT,
+                            recordPath.getFileName().toString(), recordPath.toString(), null);
                 },
                 ex -> {
                     showProgress(false, null);

@@ -25,3 +25,6 @@ android/.cxx/
 # --- Docs ---
 docs
 CLAUDE.md
+"*.apk" 
+"**/build/" 
+"**/shared-test/build/" 

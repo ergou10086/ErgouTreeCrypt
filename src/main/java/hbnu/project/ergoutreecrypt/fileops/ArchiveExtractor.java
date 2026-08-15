@@ -21,9 +21,11 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -63,6 +65,11 @@ public final class ArchiveExtractor {
      * PBKDF2-HMAC-SHA256 迭代次数。
      */
     private static final int PBKDF2_ITERATIONS = 100_000;
+
+    /**
+     * 解压进度上报步长（字节）：约每完成 1 MiB 上报一次，避免回调过于频繁。
+     */
+    private static final long PROGRESS_STEP_BYTES = 1L << 20;
 
     private ArchiveExtractor() {
     }
@@ -264,37 +271,54 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 解压归档到目标目录（带进度反馈）。
+     * 解压归档到目标目录（带字节级进度反馈）。
+     *
+     * <p>进度映射：整体加密包裹文件的解密阶段占 0→0.3，随后的解压阶段占
+     * 0.3→1；无整体加密时解压阶段占 0→1。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码（可为 null/空）
+     * @param reporter 进度回调（可为 null）
+     * @return 解压后的文件路径列表
+     * @throws IOException             I/O 错误或密码错误
+     * @throws PasswordNeededException 若遇到加密文件但未提供密码
      */
     public static List<Path> extractPreserving(Path archive, Path destDir, String password,
                                                ProgressReporter reporter) throws IOException {
         Files.createDirectories(destDir);
 
-        // 检测整体加密包裹（GZ / TAR.GZ）
+        // 检测整体加密包裹（GZ / TAR.GZ / 7Z）
         Path actualArchive = archive;
         Path tempDecrypted = null;
+        float extractionFrom = 0f;
         if (isEncryptedFile(archive)) {
             if (password == null || password.isEmpty()) {
                 throw PasswordNeededException.of(archive);
             }
             tempDecrypted = Files.createTempFile("ergou-outer-dec-", archiveExt(archive));
-            decryptFileTo(archive, tempDecrypted, password);
+            // 整体解密占 0→0.3，随后的解压占 0.3→1
+            decryptFileTo(archive, tempDecrypted, password, reporter, 0f, 0.3f);
             actualArchive = tempDecrypted;
+            extractionFrom = 0.3f;
         }
 
         try {
             String name = actualArchive.getFileName().toString().toLowerCase();
             List<Path> rawFiles;
             if (name.endsWith(".zip")) {
-                rawFiles = extractZip(actualArchive, destDir, password, reporter);
+                rawFiles = extractZip(actualArchive, destDir, password, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
-                rawFiles = extractTarGz(actualArchive, destDir, reporter);
+                rawFiles = extractTarGz(actualArchive, destDir, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".7z")) {
-                rawFiles = extract7z(actualArchive, destDir, password, reporter);
+                rawFiles = extract7z(actualArchive, destDir, password, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".gz")) {
-                rawFiles = extractGz(actualArchive, destDir, reporter);
+                rawFiles = extractGz(actualArchive, destDir, reporter, extractionFrom, 1f);
             } else {
                 throw new IOException("Unsupported archive format: " + name);
+            }
+            if (reporter != null) {
+                reportArchive(reporter, 1f, Messages.get("status.extracting"));
             }
 
             // 对旧版 .enc 逐条目加密进行解密（向后兼容）
@@ -369,21 +393,31 @@ public final class ArchiveExtractor {
      * 解压 ZIP 归档（无进度）。
      */
     private static List<Path> extractZip(Path archive, Path destDir, String password) throws IOException {
-        return extractZip(archive, destDir, password, null);
+        return extractZip(archive, destDir, password, null, 0f, 1f);
     }
 
     /**
-     * 解压 ZIP 归档（带进度）。
+     * 解压 ZIP 归档（带进度，进度映射到 [from, to] 区间）。
      *
      * <p>有密码时优先使用 zip4j 解压（支持原生 AES-256 加密 ZIP）；
      * 无密码时使用 commons-compress 流式解压。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码（可为 null/空）
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
      */
     private static List<Path> extractZip(Path archive, Path destDir, String password,
-                                         ProgressReporter reporter) throws IOException {
+                                         ProgressReporter reporter, float from, float to)
+            throws IOException {
         boolean hasPwd = password != null && !password.isEmpty();
         if (hasPwd) {
             try {
-                return extractZipWithZip4j(archive, destDir, password, reporter);
+                return extractZipWithZip4j(archive, destDir, password, reporter, from, to);
             } catch (Exception e) {
                 // zip4j 失败（可能是旧版 .enc 格式或损坏），回退到 commons-compress
                 if (e instanceof IOException ioe) {
@@ -391,19 +425,39 @@ public final class ArchiveExtractor {
                 }
             }
         }
-        return extractZipWithCompress(archive, destDir, reporter);
+        return extractZipWithCompress(archive, destDir, reporter, from, to);
     }
 
     /**
-     * 使用 zip4j 解压 ZIP（支持原生 AES-256 加密）。
+     * 使用 zip4j 解压 ZIP（支持原生 AES-256 加密），并按字节级粒度回调进度。
+     *
+     * <p>总字节数取各条目未压缩大小之和，进度为已解压字节数占总字节数的比例；
+     * 总字节数不可知时退回按条目数上报。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
      */
     private static List<Path> extractZipWithZip4j(Path archive, Path destDir, String password,
-                                                   ProgressReporter reporter) throws IOException {
+                                                   ProgressReporter reporter, float from, float to)
+            throws IOException {
         List<Path> files = new ArrayList<>();
         try (ZipFile zipFile = new ZipFile(archive.toFile(), password.toCharArray())) {
             List<FileHeader> headers = zipFile.getFileHeaders();
             int total = headers.size();
+            long totalBytes = 0;
+            for (FileHeader header : headers) {
+                if (!header.isDirectory()) {
+                    totalBytes += Math.max(0, header.getUncompressedSize());
+                }
+            }
             int extracted = 0;
+            long doneBytes = 0;
             for (FileHeader header : headers) {
                 if (header.isDirectory()) {
                     Files.createDirectories(destDir.resolve(header.getFileName()));
@@ -417,48 +471,64 @@ public final class ArchiveExtractor {
                 Files.createDirectories(outPath.getParent());
                 try (InputStream in = zipFile.getInputStream(header);
                      OutputStream fos = Files.newOutputStream(outPath)) {
-                    in.transferTo(fos);
+                    copyWithProgress(in, fos, doneBytes, totalBytes, reporter,
+                            Messages.get("status.extracting"), from, to);
                 }
                 files.add(outPath);
+                doneBytes += Math.max(0, header.getUncompressedSize());
                 extracted++;
-                if (reporter != null && total > 0) {
-                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, total),
-                            ProgressPhase.ARCHIVE);
-                    reporter.setProgress((float) extracted / total, "", ProgressPhase.ARCHIVE);
-                }
+                reportEntryProgress(reporter, extracted, total, totalBytes, from, to);
             }
         }
         return files;
     }
 
     /**
-     * 使用 commons-compress 流式解压 ZIP（无加密）。
+     * 使用 commons-compress 流式解压 ZIP（无加密），并按字节级粒度回调进度。
+     *
+     * <p>总字节数取中央目录中各条目未压缩大小之和；不可知时退回按条目数上报。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
      */
     private static List<Path> extractZipWithCompress(Path archive, Path destDir,
-                                                      ProgressReporter reporter) throws IOException {
+                                                      ProgressReporter reporter, float from, float to)
+            throws IOException {
         List<Path> files = new ArrayList<>();
         int totalEntries = 0;
+        long totalBytes = 0;
         try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(archive.toFile())) {
             totalEntries = zf.size();
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zf.entries();
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry e = entries.nextElement();
+                if (!e.isDirectory()) {
+                    totalBytes += Math.max(0, e.getSize());
+                }
+            }
         }
         int extracted = 0;
+        long doneBytes = 0;
         try (InputStream fin = Files.newInputStream(archive);
              BufferedInputStream bis = new BufferedInputStream(fin);
              ArchiveInputStream<?> ais = new ZipArchiveInputStream(bis, "UTF-8", false, true)) {
             ArchiveEntry entry;
             while ((entry = ais.getNextEntry()) != null) {
                 if (ais.canReadEntryData(entry)) {
-                    Path outPath = extractSingleEntry(ais, entry, destDir);
+                    Path outPath = extractSingleEntry(ais, entry, destDir, doneBytes, totalBytes,
+                            reporter, from, to);
                     if (outPath != null) {
                         files.add(outPath);
                     }
                 }
+                doneBytes += Math.max(0, entry.getSize());
                 extracted++;
-                if (reporter != null && totalEntries > 0) {
-                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, totalEntries),
-                            ProgressPhase.ARCHIVE);
-                    reporter.setProgress((float) extracted / totalEntries, "", ProgressPhase.ARCHIVE);
-                }
+                reportEntryProgress(reporter, extracted, totalEntries, totalBytes, from, to);
             }
         }
         return files;
@@ -467,19 +537,37 @@ public final class ArchiveExtractor {
     // ==================== TAR.GZ 解压 ====================
 
     private static List<Path> extractTarGz(Path archive, Path destDir) throws IOException {
-        return extractTarGz(archive, destDir, null);
+        return extractTarGz(archive, destDir, null, 0f, 1f);
     }
 
-    private static List<Path> extractTarGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
+    /**
+     * 解压 TAR.GZ 归档（带进度，进度映射到 [from, to] 区间）。
+     *
+     * <p>总字节数取 GZIP 尾部 ISIZE 字段（未压缩总字节数，4 GiB 内精确），
+     * 通过对解压流计数实现包含 tar 头在内的字节级进度；ISIZE 不可得时仅上报条目数。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
+     */
+    private static List<Path> extractTarGz(Path archive, Path destDir, ProgressReporter reporter,
+                                           float from, float to) throws IOException {
         List<Path> files = new ArrayList<>();
+        long totalBytes = gzipUncompressedSize(archive);
         try (InputStream fin = Files.newInputStream(archive);
              GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
-             TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
+             CountingInputStream counter = new CountingInputStream(gzis);
+             TarArchiveInputStream tais = new TarArchiveInputStream(counter)) {
             ArchiveEntry entry;
             int extracted = 0;
             while ((entry = tais.getNextEntry()) != null) {
                 if (tais.canReadEntryData(entry)) {
-                    Path outPath = extractSingleEntry(tais, entry, destDir);
+                    Path outPath = extractSingleEntryCounted(tais, entry, destDir, counter, totalBytes,
+                            reporter, from, to);
                     if (outPath != null) {
                         files.add(outPath);
                     }
@@ -497,24 +585,40 @@ public final class ArchiveExtractor {
     // ==================== GZ 解压 ====================
 
     private static List<Path> extractGz(Path archive, Path destDir) throws IOException {
-        return extractGz(archive, destDir, null);
+        return extractGz(archive, destDir, null, 0f, 1f);
     }
 
-    private static List<Path> extractGz(Path archive, Path destDir, ProgressReporter reporter) throws IOException {
+    /**
+     * 解压单文件 GZ 归档（带进度，进度映射到 [from, to] 区间）。
+     *
+     * <p>总字节数取 GZIP 尾部 ISIZE 字段（未压缩总字节数，4 GiB 内精确），
+     * 与解压流实际输出字节数精确对应；ISIZE 不可得时仅上报状态。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
+     */
+    private static List<Path> extractGz(Path archive, Path destDir, ProgressReporter reporter,
+                                        float from, float to) throws IOException {
         List<Path> files = new ArrayList<>();
         String outName = archive.getFileName().toString();
         if (outName.endsWith(".gz")) {
             outName = outName.substring(0, outName.length() - 3);
         }
         Path outFile = destDir.resolve(outName);
+        long totalBytes = gzipUncompressedSize(archive);
         if (reporter != null) {
-            reporter.setStatus(Messages.get("status.extracting"), ProgressPhase.ARCHIVE);
-            reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
+            reportArchive(reporter, from, Messages.get("status.extracting"));
         }
         try (InputStream fin = Files.newInputStream(archive);
              GzipCompressorInputStream gzis = new GzipCompressorInputStream(fin);
              OutputStream fos = Files.newOutputStream(outFile)) {
-            gzis.transferTo(fos);
+            copyWithProgress(gzis, fos, 0, totalBytes, reporter,
+                    Messages.get("status.extracting"), from, to);
         }
         files.add(outFile);
         return files;
@@ -523,11 +627,26 @@ public final class ArchiveExtractor {
     // ==================== 7Z 解压 ====================
 
     private static List<Path> extract7z(Path archive, Path destDir, String password) throws IOException {
-        return extract7z(archive, destDir, password, null);
+        return extract7z(archive, destDir, password, null, 0f, 1f);
     }
 
+    /**
+     * 解压 7Z 归档（带进度，进度映射到 [from, to] 区间）。
+     *
+     * <p>总字节数取各条目大小之和；总字节数不可知时退回按条目数上报。
+     *
+     * @param archive  归档文件路径
+     * @param destDir  解压目标目录
+     * @param password 解密密码（可为 null/空）
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 解压后的文件路径列表
+     * @throws IOException 解压失败
+     */
     private static List<Path> extract7z(Path archive, Path destDir, String password,
-                                        ProgressReporter reporter) throws IOException {
+                                        ProgressReporter reporter, float from, float to)
+            throws IOException {
         List<Path> files = new ArrayList<>();
         SevenZFile.Builder builder = SevenZFile.builder().setFile(archive.toFile());
         if (password != null && !password.isEmpty()) {
@@ -539,7 +658,14 @@ public final class ArchiveExtractor {
                 entries.add(e);
             }
             int total = entries.size();
+            long totalBytes = 0;
+            for (SevenZArchiveEntry e : entries) {
+                if (!e.isDirectory()) {
+                    totalBytes += Math.max(0, e.getSize());
+                }
+            }
             int extracted = 0;
+            long doneBytes = 0;
             for (SevenZArchiveEntry entry : entries) {
                 if (entry.isDirectory()) {
                     Files.createDirectories(destDir.resolve(entry.getName()));
@@ -553,15 +679,13 @@ public final class ArchiveExtractor {
                 Files.createDirectories(outPath.getParent());
                 try (InputStream in = szf.getInputStream(entry);
                      OutputStream fos = Files.newOutputStream(outPath)) {
-                    in.transferTo(fos);
+                    copyWithProgress(in, fos, doneBytes, totalBytes, reporter,
+                            Messages.get("status.extracting"), from, to);
                 }
                 files.add(outPath);
+                doneBytes += Math.max(0, entry.getSize());
                 extracted++;
-                if (reporter != null && total > 0) {
-                    reporter.setStatus(Messages.format("status.extracting.progress", extracted, total),
-                            ProgressPhase.ARCHIVE);
-                    reporter.setProgress((float) extracted / total, "", ProgressPhase.ARCHIVE);
-                }
+                reportEntryProgress(reporter, extracted, total, totalBytes, from, to);
             }
         }
         return files;
@@ -646,6 +770,25 @@ public final class ArchiveExtractor {
     }
 
     private static void decryptFileTo(Path file, Path output, String password) throws IOException {
+        decryptFileTo(file, output, password, null, 0f, 1f);
+    }
+
+    /**
+     * 解密整体包裹文件到指定路径，并按字节级粒度回调进度。
+     *
+     * <p>密文长度为文件总长减去 MAGIC(12) + salt(16) + IV(16) 头，进度为
+     * 已解密字节数占密文总长的比例。
+     *
+     * @param file     加密文件路径
+     * @param output   输出路径
+     * @param password 密码
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @throws IOException 解密失败或密码错误
+     */
+    private static void decryptFileTo(Path file, Path output, String password,
+                                      ProgressReporter reporter, float from, float to) throws IOException {
         try (InputStream fin = Files.newInputStream(file)) {
             byte[] magic = new byte[MAGIC.length];
             fin.readNBytes(magic, 0, MAGIC.length);
@@ -664,9 +807,11 @@ public final class ArchiveExtractor {
             Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
 
+            long totalBytes = Math.max(0, Files.size(file) - MAGIC.length - 32);
             try (CipherInputStream cis = new CipherInputStream(fin, cipher);
                  OutputStream fos = Files.newOutputStream(output)) {
-                cis.transferTo(fos);
+                copyWithProgress(cis, fos, 0, totalBytes, reporter,
+                        Messages.get("status.decrypting"), from, to);
             }
         } catch (IOException e) {
             throw e;
@@ -678,10 +823,23 @@ public final class ArchiveExtractor {
     // ==================== 工具方法 ====================
 
     /**
-     * 提取单个归档条目到目标目录，防护 Zip-Slip 路径穿越。
+     * 提取单个归档条目到目标目录（带字节级进度），防护 Zip-Slip 路径穿越。
+     *
+     * @param ais      归档输入流
+     * @param entry    当前条目
+     * @param destDir  解压目标目录
+     * @param done     本次提取前已完成的累计字节数
+     * @param total    全程总字节数（<=0 时不上报）
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 提取出的文件路径；目录条目返回 null
+     * @throws IOException 读写失败
      */
     private static Path extractSingleEntry(ArchiveInputStream<?> ais, ArchiveEntry entry,
-                                           Path destDir) throws IOException {
+                                           Path destDir, long done, long total,
+                                           ProgressReporter reporter, float from, float to)
+            throws IOException {
         String entryName = entry.getName();
         Path outPath = destDir.resolve(entryName).normalize();
         if (!outPath.startsWith(destDir)) {
@@ -693,7 +851,47 @@ public final class ArchiveExtractor {
         }
         Files.createDirectories(outPath.getParent());
         try (OutputStream fos = Files.newOutputStream(outPath)) {
-            ais.transferTo(fos);
+            copyWithProgress(ais, fos, done, total, reporter,
+                    Messages.get("status.extracting"), from, to);
+        }
+        return outPath;
+    }
+
+    /**
+     * 提取单个归档条目到目标目录（带字节级进度，以外部计数流为进度基准），
+     * 防护 Zip-Slip 路径穿越。
+     *
+     * <p>用于 TAR.GZ：tar 头与填充字节同样计入总进度，进度基准为包裹 GZIP
+     * 解压流的 {@link CountingInputStream}，与 ISIZE 总量精确对应。
+     *
+     * @param ais      归档输入流
+     * @param entry    当前条目
+     * @param destDir  解压目标目录
+     * @param counter  计数流（位于 GZIP 解压流与 tar 流之间）
+     * @param total    全程总字节数（<=0 时不上报）
+     * @param reporter 进度回调（可为 null）
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 提取出的文件路径；目录条目返回 null
+     * @throws IOException 读写失败
+     */
+    private static Path extractSingleEntryCounted(ArchiveInputStream<?> ais, ArchiveEntry entry,
+                                                  Path destDir, CountingInputStream counter, long total,
+                                                  ProgressReporter reporter, float from, float to)
+            throws IOException {
+        String entryName = entry.getName();
+        Path outPath = destDir.resolve(entryName).normalize();
+        if (!outPath.startsWith(destDir)) {
+            throw new IOException("Bad archive entry (zip-slip): " + entryName);
+        }
+        if (entry.isDirectory()) {
+            Files.createDirectories(outPath);
+            return null;
+        }
+        Files.createDirectories(outPath.getParent());
+        try (OutputStream fos = Files.newOutputStream(outPath)) {
+            copyWithProgressCounted(ais, fos, counter, total, reporter,
+                    Messages.get("status.extracting"), from, to);
         }
         return outPath;
     }
@@ -713,6 +911,201 @@ public final class ArchiveExtractor {
             return ".7z";
         }
         return ".tmp";
+    }
+
+    // ==================== 进度上报工具 ====================
+
+    /**
+     * 上报解压阶段进度。
+     *
+     * @param reporter 进度回调，可为 null
+     * @param fraction 完成比例
+     * @param status   状态文案
+     */
+    private static void reportArchive(ProgressReporter reporter, float fraction, String status) {
+        if (reporter == null) {
+            return;
+        }
+        reporter.setStatus(status, ProgressPhase.ARCHIVE);
+        reporter.setProgress(fraction, "", ProgressPhase.ARCHIVE);
+    }
+
+    /**
+     * 将已处理字节数映射为区间 [from, to] 内的进度比例并上报。
+     *
+     * @param done     已处理字节数
+     * @param total    全程总字节数（<=0 时不上报）
+     * @param reporter 进度回调，可为 null
+     * @param status   状态文案
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     */
+    private static void reportScaledProgress(long done, long total, ProgressReporter reporter,
+                                             String status, float from, float to) {
+        if (reporter != null && total > 0) {
+            float fraction = Math.min(from + (to - from) * (float) done / total, to);
+            reportArchive(reporter, fraction, status);
+        }
+    }
+
+    /**
+     * 上报按条目计数的解压状态；总字节数未知时同时以条目比例更新进度。
+     *
+     * @param reporter   进度回调（可为 null）
+     * @param extracted  已完成条目数
+     * @param total      总条目数
+     * @param totalBytes 总字节数（<=0 表示不可知）
+     * @param from       进度映射起点
+     * @param to         进度映射终点
+     */
+    private static void reportEntryProgress(ProgressReporter reporter, int extracted, int total,
+                                            long totalBytes, float from, float to) {
+        if (reporter == null || total <= 0) {
+            return;
+        }
+        if (totalBytes <= 0) {
+            reporter.setProgress(from + (to - from) * (float) extracted / total, "",
+                    ProgressPhase.ARCHIVE);
+        }
+        reporter.setStatus(Messages.format("status.extracting.progress", extracted, total),
+                ProgressPhase.ARCHIVE);
+    }
+
+    /**
+     * 带字节级进度回调的流式拷贝，约每完成 1 MiB 上报一次。
+     *
+     * @param in       输入流
+     * @param out      输出流
+     * @param done     本次拷贝前已完成的累计字节数
+     * @param total    全程总字节数（<=0 时不上报）
+     * @param reporter 进度回调，可为 null
+     * @param status   状态文案
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 本次拷贝的字节数
+     * @throws IOException 读写失败
+     */
+    private static long copyWithProgress(InputStream in, OutputStream out, long done, long total,
+                                         ProgressReporter reporter, String status,
+                                         float from, float to) throws IOException {
+        byte[] buf = new byte[8192];
+        long copied = 0;
+        long nextReport = done + PROGRESS_STEP_BYTES;
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            copied += n;
+            if (done + copied >= nextReport) {
+                reportScaledProgress(done + copied, total, reporter, status, from, to);
+                nextReport += PROGRESS_STEP_BYTES;
+            }
+        }
+        return copied;
+    }
+
+    /**
+     * 以外部计数流为进度基准的流式拷贝，约每完成 1 MiB 上报一次。
+     *
+     * <p>与 {@link #copyWithProgress} 的区别：进度取自计数流的当前位置而非
+     * 本循环的拷贝计数，适用于 tar 头等不在拷贝循环内的字节同样计入进度的场景。
+     *
+     * @param in       输入流
+     * @param out      输出流
+     * @param counter  进度计数流（当前位置即已完成字节数）
+     * @param total    全程总字节数（<=0 时不上报）
+     * @param reporter 进度回调，可为 null
+     * @param status   状态文案
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @throws IOException 读写失败
+     */
+    private static void copyWithProgressCounted(InputStream in, OutputStream out,
+                                                CountingInputStream counter, long total,
+                                                ProgressReporter reporter, String status,
+                                                float from, float to) throws IOException {
+        byte[] buf = new byte[8192];
+        long nextReport = PROGRESS_STEP_BYTES;
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            long done = counter.getCount();
+            if (done >= nextReport) {
+                reportScaledProgress(done, total, reporter, status, from, to);
+                nextReport = done + PROGRESS_STEP_BYTES;
+            }
+        }
+    }
+
+    /**
+     * 读取 GZIP 尾部 ISIZE 字段得到未压缩总字节数。
+     *
+     * <p>ISIZE 为 32 位小端无符号整数：4 GiB 内精确，超出时按 2^32 回绕，
+     * 此时进度在尾部会被钳制在终点（见 {@link #reportScaledProgress}）。
+     *
+     * @param archive GZIP 文件路径
+     * @return 未压缩字节数；读取失败或文件过小返回 -1
+     */
+    private static long gzipUncompressedSize(Path archive) {
+        try (RandomAccessFile raf = new RandomAccessFile(archive.toFile(), "r")) {
+            if (raf.length() < 4) {
+                return -1;
+            }
+            raf.seek(raf.length() - 4);
+            long isize = raf.read() & 0xFFL;
+            isize |= (raf.read() & 0xFFL) << 8;
+            isize |= (raf.read() & 0xFFL) << 16;
+            isize |= (raf.read() & 0xFFL) << 24;
+            return isize;
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * 计数输入流：统计实际流经的字节数（用于 TAR.GZ 字节级进度）。
+     */
+    private static final class CountingInputStream extends FilterInputStream {
+
+        /**
+         * 已流经的字节数。
+         */
+        private long count;
+
+        /**
+         * 包装底层输入流。
+         *
+         * @param in 底层输入流
+         */
+        CountingInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public int read() throws IOException {
+            int b = super.read();
+            if (b >= 0) {
+                count++;
+            }
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            int n = super.read(b, off, len);
+            if (n > 0) {
+                count += n;
+            }
+            return n;
+        }
+
+        /**
+         * 返回已流经的字节数。
+         *
+         * @return 已流经的字节数
+         */
+        long getCount() {
+            return count;
+        }
     }
 
     // ==================== 密码需求异常 ====================

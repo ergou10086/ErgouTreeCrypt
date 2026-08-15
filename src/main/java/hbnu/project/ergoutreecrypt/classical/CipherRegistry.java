@@ -1,5 +1,13 @@
 package hbnu.project.ergoutreecrypt.classical;
 
+import hbnu.project.ergoutreecrypt.classical.modern.AesCipher;
+import hbnu.project.ergoutreecrypt.classical.modern.BlowfishCipher;
+import hbnu.project.ergoutreecrypt.classical.modern.ChaCha20Cipher;
+import hbnu.project.ergoutreecrypt.classical.modern.DesCipher;
+import hbnu.project.ergoutreecrypt.classical.modern.Sm4Cipher;
+import hbnu.project.ergoutreecrypt.classical.modern.TripleDesCipher;
+import hbnu.project.ergoutreecrypt.classical.modern.TwofishCipher;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +25,13 @@ public final class CipherRegistry {
     private static final Map<String, ClassicalCipher> CIPHERS = new LinkedHashMap<>();
 
     static {
+        register(new AesCipher());
+        register(new ChaCha20Cipher());
+        register(new Sm4Cipher());
+        register(new BlowfishCipher());
+        register(new TwofishCipher());
+        register(new DesCipher());
+        register(new TripleDesCipher());
         register(new CaesarCipher());
         register(new AtbashCipher());
         register(new Rot13Cipher());

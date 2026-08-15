@@ -65,6 +65,12 @@ public class ClassicalCryptController {
     private Label ccKeyLabel;
     @FXML
     private TextField ccKeyField;
+    @FXML
+    private VBox ccPasswordBox;
+    @FXML
+    private Label ccPasswordLabel;
+    @FXML
+    private PasswordField ccPasswordField;
 
     // ---- 文本区域 ----
     @FXML
@@ -168,6 +174,10 @@ public class ClassicalCryptController {
                     setVisibility(ccKeyBox, true);
                     ccKeyField.setText(param.defaultValue());
                 }
+                case "password" -> {
+                    setVisibility(ccPasswordBox, true);
+                    ccPasswordField.setText(param.defaultValue());
+                }
                 default -> {
                     // 未知参数类型，忽略
                 }
@@ -183,6 +193,7 @@ public class ClassicalCryptController {
         setVisibility(ccKeywordBox, false);
         setVisibility(ccRailsBox, false);
         setVisibility(ccKeyBox, false);
+        setVisibility(ccPasswordBox, false);
     }
 
     /**
@@ -278,6 +289,9 @@ public class ClassicalCryptController {
         if (ccKeyBox.isVisible()) {
             params.put("key", ccKeyField.getText());
         }
+        if (ccPasswordBox.isVisible()) {
+            params.put("password", ccPasswordField.getText());
+        }
         return params;
     }
 
@@ -304,6 +318,7 @@ public class ClassicalCryptController {
         ccKeywordLabel.setText(Messages.get("cc.param.keyword"));
         ccRailsLabel.setText(Messages.get("cc.param.rails"));
         ccKeyLabel.setText(Messages.get("cc.param.key"));
+        ccPasswordLabel.setText(Messages.get("cc.param.password"));
         ccPlaintextLabel.setText(Messages.get("cc.plaintext"));
         ccCiphertextLabel.setText(Messages.get("cc.ciphertext"));
         ccEncryptBtn.setText(Messages.get("cc.btn.encrypt"));

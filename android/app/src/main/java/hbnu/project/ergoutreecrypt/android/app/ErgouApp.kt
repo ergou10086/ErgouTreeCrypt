@@ -3,6 +3,8 @@ package hbnu.project.ergoutreecrypt.android.app
 import android.app.Application
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.platform.NotificationHelper
+import hbnu.project.ergoutreecrypt.history.FileHistoryStore
+import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.i18n.Messages
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +57,10 @@ class ErgouApp : Application() {
         // 2. 创建通知渠道（前台 Service 依赖）
         NotificationHelper.createChannel(this)
 
-        // 3. 同步设置到共享核心并持续监听关键变更
+        // 3. 注册操作历史存储（应用私有 filesDir 下），供全应用记录加解密历史
+        HistoryService.register(FileHistoryStore(filesDir.resolve("history").toPath()))
+
+        // 4. 同步设置到共享核心并持续监听关键变更
         appScope.launch {
             // 首次批量同步
             settings.syncToSettingsManager()

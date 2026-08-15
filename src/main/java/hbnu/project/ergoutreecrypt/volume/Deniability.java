@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.crypto.XChaCha20;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -167,58 +168,58 @@ public final class Deniability {
         }
         outputPath += ".tmp";
 
-        // 读取 salt + nonce + probe + 剩余 payload
+        // 读取 salt + nonce + probe，随后以流式处理剩余 payload，避免一次性整包读入内存
         byte[] salt = new byte[SALT_SIZE];
         byte[] nonce = new byte[NONCE_SIZE];
         byte[] probe = new byte[HeaderLayout.VERSION_ENC_SIZE];
-        byte[] payload;
 
         try (InputStream fin = Files.newInputStream(Path.of(volumePath))) {
             readFullExact(fin, salt);
             readFullExact(fin, nonce);
             readFullExact(fin, probe);
-            payload = new byte[(int) payloadLen - probe.length];
-            readFullExactAll(fin, payload);
-        }
 
-        // 通过探测 version 字段选择正确密钥
-        byte[] key = selectDeniabilityKey(password, salt, nonce, probe, rs);
+            // 通过探测 version 字段选择正确密钥
+            byte[] key = selectDeniabilityKey(password, salt, nonce, probe, rs);
 
-        try (OutputStream fout = Files.newOutputStream(Path.of(outputPath))) {
-            byte[] buf = new byte[CryptoConstants.MIB];
-            long done = 0;
-            long counter = 0;
-            ChaChaState state = new ChaChaState(key, nonce);
+            try (OutputStream fout = Files.newOutputStream(Path.of(outputPath))) {
+                byte[] buf = new byte[CryptoConstants.MIB];
+                byte[] dst = new byte[CryptoConstants.MIB];
+                long done = 0;
+                long counter = 0;
+                ChaChaState state = new ChaChaState(key, nonce);
 
-            // keystream 从位置 0 开始（salt+nonce 直接写入，不经 XOR）
-            byte[] allData = new byte[probe.length + payload.length];
-            System.arraycopy(probe, 0, allData, 0, probe.length);
-            System.arraycopy(payload, 0, allData, probe.length, payload.length);
+                // keystream 从位置 0 开始（salt+nonce 不经 XOR）：probe 与 payload 连续消费 keystream
+                state.xor(dst, probe, probe.length);
+                fout.write(dst, 0, probe.length);
+                done += probe.length;
+                counter += probe.length;
 
-            int offset = 0;
-            while (offset < allData.length) {
-                int chunk = Math.min(buf.length, allData.length - offset);
-                state.xor(buf, allData, offset, chunk);
-                fout.write(buf, 0, chunk);
-                offset += chunk;
-                done += chunk;
-                counter += chunk;
+                while (true) {
+                    int n = readFull(fin, buf);
+                    if (n <= 0) {
+                        break;
+                    }
+                    state.xor(dst, buf, n);
+                    fout.write(dst, 0, n);
+                    done += n;
+                    counter += n;
 
-                if (reporter != null && payloadLen > 0) {
-                    reporter.setProgress((float) done / payloadLen, "");
+                    if (reporter != null && payloadLen > 0) {
+                        reporter.setProgress((float) done / payloadLen, "");
+                    }
+                    if (counter >= CryptoConstants.REKEY_THRESHOLD) {
+                        nonce = deniabilityRekey(nonce);
+                        state = new ChaChaState(key, nonce);
+                        counter = 0;
+                    }
                 }
-                if (counter >= CryptoConstants.REKEY_THRESHOLD) {
-                    nonce = deniabilityRekey(nonce);
-                    state = new ChaChaState(key, nonce);
-                    counter = 0;
-                }
+            } finally {
+                SecureZero.zero(key);
             }
         } catch (Exception e) {
-            SecureZero.zero(key);
             Files.deleteIfExists(Path.of(outputPath));
             throw e;
         }
-        SecureZero.zero(key);
 
         // 验证解密后的文件含有效的 version 字段
         try (InputStream verifyIn = Files.newInputStream(Path.of(outputPath))) {
@@ -270,6 +271,10 @@ public final class Deniability {
      */
     public static boolean isDeniable(String volumePath, RsCodecs rs) {
         try {
+            // 归档文件（ZIP/7z/GZ/TAR.GZ/RAR）不可能以可否认卷头开始，直接短路，避免误判为可否认卷
+            if (ArchiveExtractor.isArchive(Path.of(volumePath))) {
+                return false;
+            }
             long size = Files.size(Path.of(volumePath));
             if (size < MIN_DENIABLE_SIZE) {
                 return false;
@@ -411,12 +416,5 @@ public final class Deniability {
             }
             offset += n;
         }
-    }
-
-    /**
-     * 从输入流中精确读取全部字节（委托 {@link #readFullExact}）。
-     */
-    static void readFullExactAll(InputStream in, byte[] buf) throws IOException {
-        readFullExact(in, buf);
     }
 }

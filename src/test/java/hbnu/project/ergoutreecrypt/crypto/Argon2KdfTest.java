@@ -1,7 +1,10 @@
 package hbnu.project.ergoutreecrypt.crypto;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.security.Security;
 
@@ -67,5 +70,37 @@ class Argon2KdfTest {
         byte[] k2 = Argon2Kdf.deriveKey(pwd, salt, false);
         assertEquals(32, k1.length);
         assertArrayEquals(k1, k2);
+    }
+
+    /**
+     * 估算所需堆应不低于参数内存本身且不高于其 2 倍（Block 对象头与安全系数）。
+     */
+    @Test
+    void estimateRequiredHeapBytes_isWithinReasonableRange() {
+        long raw = 65536L * 1024;
+        long estimated = Argon2Kdf.estimateRequiredHeapBytes(65536);
+        assertTrue(estimated >= raw, "估算值不应低于参数内存");
+        assertTrue(estimated <= raw * 2, "估算值不应超过参数内存的 2 倍");
+    }
+
+    /**
+     * 小内存参数（8 KiB）的预检应通过，超大参数应抛出 IllegalStateException
+     * 而非触发真实的内存分配失败。
+     */
+    @Test
+    void assertMemoryAvailable_rejectsInfeasibleParams() {
+        assertDoesNotThrow(() -> Argon2Kdf.assertMemoryAvailable(8));
+        assertThrows(IllegalStateException.class,
+                () -> Argon2Kdf.assertMemoryAvailable(Integer.MAX_VALUE));
+    }
+
+    /**
+     * 可用堆估算值应为非负且不超过堆上限。
+     */
+    @Test
+    void availableHeapBytes_isWithinBounds() {
+        long available = Argon2Kdf.availableHeapBytes();
+        assertTrue(available >= 0, "可用堆不应为负");
+        assertTrue(available <= Runtime.getRuntime().maxMemory(), "可用堆不应超过堆上限");
     }
 }

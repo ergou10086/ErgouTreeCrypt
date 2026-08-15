@@ -85,6 +85,13 @@ class EncryptViewModel : ViewModel() {
                         error = e.localizedMessage ?: e.javaClass.simpleName
                     )
                 }
+            } catch (e: OutOfMemoryError) {
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = e.toString()
+                    )
+                }
             }
         }
     }

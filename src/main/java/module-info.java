@@ -12,6 +12,7 @@ module hbnu.project.ergoutreecrypt {
     requires zip4j;
     requires java.prefs;
     requires java.desktop;
+    requires jdk.unsupported;
 
     opens hbnu.project.ergoutreecrypt to javafx.fxml;
     opens hbnu.project.ergoutreecrypt.ui to javafx.fxml;
@@ -27,6 +28,7 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.keyfile;
     exports hbnu.project.ergoutreecrypt.password;
     exports hbnu.project.ergoutreecrypt.settings;
+    exports hbnu.project.ergoutreecrypt.history;
     exports hbnu.project.ergoutreecrypt.volume;
     exports hbnu.project.ergoutreecrypt.mediacrypt;
     exports hbnu.project.ergoutreecrypt.mediacrypt.wav;

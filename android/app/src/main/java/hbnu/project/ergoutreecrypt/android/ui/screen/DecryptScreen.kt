@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.android.ui.screen
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,7 +47,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -64,23 +66,35 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
+import hbnu.project.ergoutreecrypt.android.platform.PendingSafOutput
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
+import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
+import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultDialog
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
 import hbnu.project.ergoutreecrypt.android.ui.component.buildSuccessMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.extractFileName
 import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
+import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.android.viewmodel.DecryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.MediaCryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor
+import hbnu.project.ergoutreecrypt.history.HistoryService
+import hbnu.project.ergoutreecrypt.history.OperationType
+import hbnu.project.ergoutreecrypt.fileops.Splitter
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -119,7 +133,7 @@ private fun detectMediaFormat(fileName: String?): hbnu.project.ergoutreecrypt.me
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DecryptScreen() {
+fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
@@ -131,6 +145,7 @@ fun DecryptScreen() {
     val mediaProgress by mediaVm.progress.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
             || mediaProgress.state == ProgressState.State.RUNNING
+    val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
     // ---- 文件 ----
     var inUri by remember { mutableStateOf<Uri?>(null) }
@@ -140,6 +155,20 @@ fun DecryptScreen() {
     var isFolder by remember { mutableStateOf(false) }
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
+    var outDirUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingSafOut by remember { mutableStateOf<PendingSafOutput?>(null) }
+
+    // ---- 输入文件选择加载状态 ----
+    var fileLoading by remember { mutableStateOf(false) }
+    var filePickJob by remember { mutableStateOf<Job?>(null) }
+
+    // ---- 文件夹选择加载状态 ----
+    var folderLoading by remember { mutableStateOf(false) }
+    var folderPickJob by remember { mutableStateOf<Job?>(null) }
+
+    // ---- 输出目录选择加载状态 ----
+    var outDirLoading by remember { mutableStateOf(false) }
+    var outDirPickJob by remember { mutableStateOf<Job?>(null) }
 
     // ---- 密码 ----
     var password by remember { mutableStateOf("") }
@@ -171,24 +200,51 @@ fun DecryptScreen() {
     var kfNames by remember { mutableStateOf(listOf<String>()) }
     var kfOrdered by remember { mutableStateOf(false) }
 
+    // ---- 密钥文件选择加载状态 ----
+    var keyfileLoading by remember { mutableStateOf(false) }
+    var keyfilePickJob by remember { mutableStateOf<Job?>(null) }
+
     // ---- 单文件选择器 ----
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            isFolder = false
-            inUri = u; inName = extractFileName(u)
-            inPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (inPath != null) {
-                val f = File(inPath!!)
-                inSize = if (f.exists()) f.length() else null
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理，允许用户换选新文件
+        filePickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        fileLoading = true
+        filePickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                isFolder = false
+                inUri = u
+                inName = name
+                inPath = path
+                if (path != null) {
+                    val (size, parent) = withContext(Dispatchers.IO) {
+                        val f = File(path)
+                        val sz = if (f.exists()) f.length() else null
+                        sz to f.parent
+                    }
+                    inSize = size
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
                 }
-            }
-            inName?.let { n ->
-                outName = when {
-                    n.endsWith(".ergou", true) -> n.removeSuffix(".ergou").removeSuffix(".ERGOU")
-                    n.endsWith(".pcv", true) -> n.removeSuffix(".pcv").removeSuffix(".PCV")
-                    else -> "$n.decrypted"
+                name.let { n ->
+                    outName = when {
+                        n.endsWith(".ergou", true) -> n.removeSuffix(".ergou").removeSuffix(".ERGOU")
+                        n.endsWith(".pcv", true) -> n.removeSuffix(".pcv").removeSuffix(".PCV")
+                        else -> "$n.decrypted"
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (filePickJob === myJob) {
+                    fileLoading = false
                 }
             }
         }
@@ -196,45 +252,105 @@ fun DecryptScreen() {
 
     // ---- 文件夹选择器（支持选择包含加密文件的文件夹） ----
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
-        if (u != null) scope.launch {
-            isFolder = true
-            inUri = u
-            val name = extractFileName(u)
-            inName = if (name == "未知文件") "选择的文件夹" else name
-            inPath = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (inPath != null) {
-                val f = File(inPath!!)
-                inSize = null
-                if (outDir == null) {
-                    outDir = f.parent ?: ctx.filesDir.absolutePath
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        folderPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        folderLoading = true
+        folderPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                // 名称查询与目录解析全部移入 IO 线程
+                val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                isFolder = true
+                inUri = u
+                inName = if (name == "未知文件") "选择的文件夹" else name
+                inPath = path
+                if (path != null) {
+                    val parent = withContext(Dispatchers.IO) { File(path).parent }
+                    inSize = null
+                    if (outDir == null) {
+                        outDir = parent ?: ctx.filesDir.absolutePath
+                    }
+                }
+                outName = "${inName}_decrypted"
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (folderPickJob === myJob) {
+                    folderLoading = false
                 }
             }
-            outName = "${inName}_decrypted"
         }
     }
 
     // ---- 输出目录选择器 ----
     val outDirPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
-        if (u != null) scope.launch {
-            val resolved = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
-            if (resolved != null) {
-                outDir = resolved
+        if (u == null) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        outDirPickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        outDirLoading = true
+        outDirPickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                val resolved = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                if (resolved != null) {
+                    outDir = resolved
+                    outDirUri = u
+                    // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
+                    try {
+                        ctx.contentResolver.takePersistableUriPermission(
+                            u,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                        // 个别文档提供者不支持持久授权，忽略即可
+                    }
+                }
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (outDirPickJob === myJob) {
+                    outDirLoading = false
+                }
             }
         }
     }
 
     val keyfilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) scope.launch {
-            val nu = kfUris.toMutableList(); val np = kfPaths.toMutableList(); val nn = kfNames.toMutableList()
-            for (u in uris) {
-                if (u !in nu) {
-                    nu.add(u); nn.add(extractFileName(u))
-                    // 拷贝到安全区域，避免直接使用原始路径
-                    val securePath = withContext(Dispatchers.IO) { fileOps.copyKeyfileToSecureArea(u) }
-                    if (securePath != null) np.add(securePath)
+        if (uris.isEmpty()) {
+            return@rememberLauncherForActivityResult
+        }
+        // 取消上一次仍在进行的处理
+        keyfilePickJob?.cancel()
+        // 同步置位加载状态，确保当帧即显示旋转圆圈
+        keyfileLoading = true
+        keyfilePickJob = scope.launch {
+            val myJob = coroutineContext[Job]
+            try {
+                val nu = kfUris.toMutableList(); val np = kfPaths.toMutableList(); val nn = kfNames.toMutableList()
+                for (u in uris) {
+                    if (u !in nu) {
+                        // 名称查询与安全区拷贝全部移入 IO 线程
+                        val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                        val securePath = withContext(Dispatchers.IO) { fileOps.copyKeyfileToSecureArea(u) }
+                        nu.add(u); nn.add(name)
+                        if (securePath != null) {
+                            np.add(securePath)
+                        }
+                    }
+                }
+                kfUris = nu; kfPaths = np; kfNames = nn
+            } finally {
+                // 仅当自身仍是最新一次选择时才复位加载状态
+                if (keyfilePickJob === myJob) {
+                    keyfileLoading = false
                 }
             }
-            kfUris = nu; kfPaths = np; kfNames = nn
         }
     }
 
@@ -243,9 +359,37 @@ fun DecryptScreen() {
     // ---- 开始解密 ----
     fun doDecrypt() {
         scope.launch {
+            // 若选择 SAF 输出目录，先写入内部临时目录，完成后再复制到 SAF 目录
+            val safUri = outDirUri
+            val writeDir = if (safUri != null) {
+                val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                pendingSafOut = PendingSafOutput(safUri, tmp)
+                tmp.absolutePath
+            } else {
+                outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+            }
+
+            // 压缩包 / 文件夹 / 分卷碎片：走 FolderCrypt 自动识别并流式解压解密，
+            // 避免把归档文件误当作单卷送入 Decryptor 导致整包读入内存
+            val input = inPath
+            if (input != null && (isFolder
+                    || ArchiveExtractor.isArchive(File(input).toPath())
+                    || Splitter.isSplitChunkPath(input))) {
+                vm.startAutoDecrypt(
+                    input = input,
+                    outputDir = writeDir,
+                    password = password,
+                    archivePassword = archivePassword.ifEmpty { null },
+                    forceDecrypt = force,
+                    recursiveExtract = recursive,
+                    keyfiles = kfPaths.toList()
+                )
+                return@launch
+            }
+
             val req = DecryptRequest()
             req.inputFile = inPath
-            val outFile = "${outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath}/${outName ?: "decrypted_output"}"
+            val outFile = "$writeDir/${outName ?: "decrypted_output"}"
             req.outputFile = outFile
             req.password = password
             req.setForceDecrypt(force)
@@ -260,7 +404,15 @@ fun DecryptScreen() {
 
     /** 格式保持解密入口。噪音检测 + 完整性校验 + 解密。 */
     fun doMediaDecrypt() {
-        val outFile = "${outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath}/${outName ?: "decrypted_${inName?.substringAfterLast('.') ?: "media"}"}"
+        val safUri = outDirUri
+        val writeDir = if (safUri != null) {
+            val tmp = fileOps.createOutputTempDir()
+            pendingSafOut = PendingSafOutput(safUri, tmp)
+            tmp.absolutePath
+        } else {
+            outDir ?: inPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+        }
+        val outFile = "$writeDir/${outName ?: "decrypted_${inName?.substringAfterLast('.') ?: "media"}"}"
         mediaVm.startDecrypt(
             input = inPath!!,
             output = outFile,
@@ -300,14 +452,50 @@ fun DecryptScreen() {
     var resultDetail by remember { mutableStateOf<String?>(null) }
     var resultType by remember { mutableStateOf(ResultType.INFO) }
 
+    // 提交 SAF 输出：将暂存临时文件复制到用户选择的 SAF 目录并清理。返回 null 表示非 SAF 输出
+    suspend fun commitSafOutput(): Boolean? {
+        val pending = pendingSafOut
+        if (pending == null) {
+            return null
+        }
+        val ok = withContext(Dispatchers.IO) { fileOps.copyDirectoryToTree(pending.treeUri, pending.tempDir) }
+        withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
+        pendingSafOut = null
+        return ok
+    }
+
     // 监听解密完成/失败状态，触发结果弹窗
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                resultTitle = "解密完成"
-                resultMessage = buildSuccessMessage("解密", outName)
-                resultDetail = null
-                resultType = ResultType.SUCCESS
+                val committed = commitSafOutput()
+                when (committed) {
+                    null, true -> {
+                        resultTitle = "解密完成"
+                        resultMessage = buildSuccessMessage("解密", outName)
+                        resultDetail = null
+                        resultType = ResultType.SUCCESS
+                        // 记录操作历史：输出目录取写路径同款回退，SAF 输出同时保存树 URI
+                        val outNameNow = outName ?: "decrypted_output"
+                        val resolvedOutDir = outDir
+                            ?: inPath?.let { File(it).parent }
+                            ?: ctx.filesDir.absolutePath
+                        withContext(Dispatchers.IO) {
+                            HistoryService.record(
+                                OperationType.GENERIC_DECRYPT,
+                                outNameNow,
+                                "$resolvedOutDir/$outNameNow",
+                                outDirUri?.toString()
+                            )
+                        }
+                    }
+                    false -> {
+                        resultTitle = "解密完成但保存失败"
+                        resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                        resultDetail = null
+                        resultType = ResultType.ERROR
+                    }
+                }
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
@@ -332,10 +520,34 @@ fun DecryptScreen() {
     LaunchedEffect(mediaProgress.state) {
         when (mediaProgress.state) {
             ProgressState.State.DONE -> {
-                resultTitle = "格式保持解密完成"
-                resultMessage = buildSuccessMessage("解密", outName)
-                resultDetail = null
-                resultType = ResultType.SUCCESS
+                val committed = commitSafOutput()
+                when (committed) {
+                    null, true -> {
+                        resultTitle = "格式保持解密完成"
+                        resultMessage = buildSuccessMessage("解密", outName)
+                        resultDetail = null
+                        resultType = ResultType.SUCCESS
+                        // 记录操作历史（格式保持解密）
+                        val outNameNow = outName ?: "decrypted_media"
+                        val resolvedOutDir = outDir
+                            ?: inPath?.let { File(it).parent }
+                            ?: ctx.filesDir.absolutePath
+                        withContext(Dispatchers.IO) {
+                            HistoryService.record(
+                                OperationType.FPE_DECRYPT,
+                                outNameNow,
+                                "$resolvedOutDir/$outNameNow",
+                                outDirUri?.toString()
+                            )
+                        }
+                    }
+                    false -> {
+                        resultTitle = "格式保持解密完成但保存失败"
+                        resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                        resultDetail = null
+                        resultType = ResultType.ERROR
+                    }
+                }
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
@@ -377,9 +589,16 @@ fun DecryptScreen() {
     }
 
     Scaffold(
+        // 容器透明，避免遮住全局背景图层
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("文件解密") }
+            CompactTopBar(
+                title = "文件解密",
+                actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
+                    }
+                }
             )
         },
         bottomBar = {
@@ -396,7 +615,8 @@ fun DecryptScreen() {
                     Button(
                         onClick = { if (mediaDecryptMode) doMediaDecrypt() else doDecrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = hasFile
+                        // 选择处理中禁用，避免复制未完成即开始解密
+                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading
                     ) {
                         Icon(Icons.Default.LockOpen, null)
                         Text(if (mediaDecryptMode) "  格式保持解密" else "  解密")
@@ -408,6 +628,12 @@ fun DecryptScreen() {
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).verticalScroll(scroll)) {
             Spacer(Modifier.height(8.dp))
 
+            // 低调的内存使用指示器（可在设置中关闭）
+            if (showMemoryIndicator) {
+                MemoryIndicator()
+                Spacer(Modifier.height(6.dp))
+            }
+
             // ============================================================
             // 一、文件选择区（单文件或单文件夹）
             // ============================================================
@@ -415,14 +641,22 @@ fun DecryptScreen() {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                         onClick = { filePicker.launch(arrayOf("*/*")) }
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Text("点击选择要解密的文件", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(if (mediaDecryptMode) "MP3 / MP4 / WAV 加密媒体文件" else ".ergou / .pcv / 分卷碎片 / 压缩包", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        if (fileLoading) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                PickerLoadingIndicator(text = pickerLoadingText(), iconSize = 40.dp, vertical = true)
+                                Spacer(Modifier.height(4.dp))
+                                Text(pickerLoadingHint(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        } else {
+                            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                                Text("点击选择要解密的文件", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(if (mediaDecryptMode) "MP3 / MP4 / WAV 加密媒体文件" else ".ergou / .pcv / 分卷碎片 / 压缩包", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            }
                         }
                     }
                     // 格式保持解密仅支持单文件，隐藏文件夹选择
@@ -433,34 +667,37 @@ fun DecryptScreen() {
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                             onClick = { folderPicker.launch(null) }
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("或选择包含加密文件的文件夹", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            if (folderLoading) {
+                                PickerLoadingIndicator(
+                                    text = pickerLoadingText(),
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                                )
+                            } else {
+                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("或选择包含加密文件的文件夹", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                }
                             }
                         }
                     }
                 }
             } else {
                 // 已选文件卡片
-                FilePickerCard(fileName = inName, fileSize = inSize, onClick = { filePicker.launch(arrayOf("*/*")) }, label = "点击更换文件")
+                FilePickerCard(
+                    fileName = inName,
+                    fileSize = inSize,
+                    onClick = { filePicker.launch(arrayOf("*/*")) },
+                    label = "点击更换文件",
+                    loading = fileLoading,
+                    loadingText = pickerLoadingText(),
+                    loadingHint = pickerLoadingHint()
+                )
 
-                // 更换/移除按钮行
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilledTonalButton(onClick = { filePicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text("  换文件")
-                    }
-                    // 格式保持解密仅支持单文件，隐藏文件夹切换
-                    if (!mediaDecryptMode) {
-                        Spacer(Modifier.width(6.dp))
-                        FilledTonalButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.weight(1f)) {
-                            Text("📁 换文件夹")
-                        }
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    FilledTonalButton(
-                        onClick = { inUri = null; inPath = null; inName = null; inSize = null; outName = null },
-                        modifier = Modifier.weight(1f)
-                    ) { Icon(Icons.Default.Delete, null, Modifier.size(16.dp)); Text("  移除") }
-                }
+                // 更换/移除按钮行（格式保持解密仅支持单文件，隐藏文件夹切换）
+                FileActionRow(
+                    onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                    onPickFolder = if (mediaDecryptMode) null else { { folderPicker.launch(null) } },
+                    onRemove = { inUri = null; inPath = null; inName = null; inSize = null; outName = null }
+                )
 
                 Spacer(Modifier.height(8.dp))
 
@@ -483,26 +720,33 @@ fun DecryptScreen() {
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                     onClick = { outDirPicker.launch(null) }
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "输出目录",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = displayText,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                    if (outDirLoading) {
+                        PickerLoadingIndicator(
+                            text = pickerLoadingText(),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "输出目录",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = displayText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.FolderOpen, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -669,10 +913,17 @@ fun DecryptScreen() {
                         }
                     }
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaDecryptMode) {
+                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaDecryptMode && !keyfileLoading) {
                         Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text(" 添加")
                     }
                 }
+
+                // 密钥文件复制到安全区处理中：显示旋转圆圈提示
+                if (keyfileLoading) {
+                    Spacer(Modifier.height(4.dp))
+                    PickerLoadingIndicator(text = pickerLoadingText())
+                }
+
                 if (kfNames.isEmpty() || mediaDecryptMode) {
                     Spacer(Modifier.height(4.dp))
                     Text(if (mediaDecryptMode) "格式保持解密不支持密钥文件" else "未添加密钥文件",

@@ -27,7 +27,7 @@
                     <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
 
                     <!-- 加密/解密分段切换 -->
-                    <HBox styleClass="segmented" alignment="CENTER">
+                    <HBox styleClass="segmented" alignment="CENTER_LEFT">
                         <ToggleButton fx:id="avEncryptTab" styleClass="seg-btn" selected="true">
                             <toggleGroup><ToggleGroup fx:id="avModeGroup"/></toggleGroup>
                         </ToggleButton>

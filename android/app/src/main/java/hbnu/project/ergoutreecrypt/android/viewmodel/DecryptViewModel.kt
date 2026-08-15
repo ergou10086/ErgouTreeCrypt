@@ -2,7 +2,9 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
+import hbnu.project.ergoutreecrypt.volume.FolderCrypt
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.nio.file.Paths
 
 /**
  * 文件解密 ViewModel。
@@ -62,6 +65,81 @@ class DecryptViewModel : ViewModel() {
                     it.copy(
                         state = ProgressState.State.ERROR,
                         error = e.localizedMessage ?: e.javaClass.simpleName
+                    )
+                }
+            } catch (e: OutOfMemoryError) {
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = e.toString()
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 自动解密入口：对压缩包 / 文件夹 / 分卷碎片先流式解压再逐文件解密。
+     *
+     * <p>与桌面端 {@code MainController.startAutoDecrypt} 对齐，桥接共享核心
+     * {@link FolderCrypt#decryptAuto}，避免把归档文件误当作单卷送入 {@link hbnu.project.ergoutreecrypt.volume.Decryptor}。
+     *
+     * @param input            输入路径（归档 / 目录 / 分卷碎片）
+     * @param outputDir        输出目录
+     * @param password         加密密码
+     * @param archivePassword  归档密码（可为 null/空）
+     * @param forceDecrypt     是否强制解密
+     * @param recursiveExtract 是否递归解压嵌套压缩包
+     * @param keyfiles         密钥文件路径列表
+     */
+    fun startAutoDecrypt(
+        input: String,
+        outputDir: String,
+        password: String,
+        archivePassword: String?,
+        forceDecrypt: Boolean,
+        recursiveExtract: Boolean,
+        keyfiles: List<String>
+    ) {
+        currentJob?.cancel()
+        _progress.update { it.copy(state = ProgressState.State.RUNNING) }
+
+        currentJob = viewModelScope.launch(Dispatchers.IO) {
+            val reporter = createProgressReporter()
+            val opts = FolderCrypt.DecryptOptions()
+            opts.password = password
+            opts.archivePassword = archivePassword
+            opts.forceDecrypt = forceDecrypt
+            opts.recursiveExtract = recursiveExtract
+            opts.autoUnzip = true
+            opts.rsCodecs = RsCodecs()
+            if (keyfiles.isNotEmpty()) {
+                opts.keyfiles = keyfiles
+            }
+            opts.reporter = reporter
+            opts.threadCount = 1
+
+            try {
+                FolderCrypt.decryptAuto(Paths.get(input), Paths.get(outputDir), opts)
+                _progress.update {
+                    it.copy(state = ProgressState.State.DONE, progress = 1f)
+                }
+            } catch (e: InterruptedException) {
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: Exception) {
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = e.localizedMessage ?: e.javaClass.simpleName
+                    )
+                }
+            } catch (e: OutOfMemoryError) {
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = e.toString()
                     )
                 }
             }

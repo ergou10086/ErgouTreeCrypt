@@ -24,13 +24,19 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import hbnu.project.ergoutreecrypt.android.ui.component.BackgroundOverlay
 import hbnu.project.ergoutreecrypt.android.ui.screen.ClassicalScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.DecryptScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.EncryptScreen
+import hbnu.project.ergoutreecrypt.android.ui.screen.HistoryScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.SettingsScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.StegoExtractScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.StegoScreen
@@ -78,6 +84,8 @@ data class BottomNavItem(
 fun ErgouNavGraph() {
     val pagerState = rememberPagerState(pageCount = { 6 })
     val scope = rememberCoroutineScope()
+    // 操作历史全屏覆盖页开关（由各页右上角时钟图标触发）
+    var showHistory by remember { mutableStateOf(false) }
 
     val bottomNavItems = listOf(
         BottomNavItem(Routes.ENCRYPT_PAGE, "加密", Icons.Filled.Lock, Icons.Outlined.Lock),
@@ -88,12 +96,20 @@ fun ErgouNavGraph() {
         BottomNavItem(Routes.SETTINGS_PAGE, "设置", Icons.Filled.Settings, Icons.Outlined.Settings)
     )
 
+    if (showHistory) {
+        // 操作历史覆盖页：整屏替换主导航
+        HistoryScreen(onBack = { showHistory = false })
+        return
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景图片层（置于最底层）
         BackgroundOverlay(modifier = Modifier.fillMaxSize())
 
         // 应用主体内容
+        // Scaffold 默认容器色为不透明背景色，会遮住下层 BackgroundOverlay，故设为透明
         Scaffold(
+            containerColor = Color.Transparent,
             bottomBar = {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
@@ -125,12 +141,12 @@ fun ErgouNavGraph() {
                     .padding(innerPadding)
             ) { page ->
                 when (page) {
-                    Routes.ENCRYPT_PAGE -> EncryptScreen()
-                    Routes.DECRYPT_PAGE -> DecryptScreen()
-                    Routes.TEXT_CRYPTO_PAGE -> ClassicalScreen()
-                    Routes.STEGO_PAGE -> StegoScreen()
-                    Routes.STEGO_EXTRACT_PAGE -> StegoExtractScreen()
-                    Routes.SETTINGS_PAGE -> SettingsScreen()
+                    Routes.ENCRYPT_PAGE -> EncryptScreen(onOpenHistory = { showHistory = true })
+                    Routes.DECRYPT_PAGE -> DecryptScreen(onOpenHistory = { showHistory = true })
+                    Routes.TEXT_CRYPTO_PAGE -> ClassicalScreen(onOpenHistory = { showHistory = true })
+                    Routes.STEGO_PAGE -> StegoScreen(onOpenHistory = { showHistory = true })
+                    Routes.STEGO_EXTRACT_PAGE -> StegoExtractScreen(onOpenHistory = { showHistory = true })
+                    Routes.SETTINGS_PAGE -> SettingsScreen(onOpenHistory = { showHistory = true })
                 }
             }
         }

@@ -4,6 +4,8 @@ import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.*;
@@ -63,6 +65,10 @@ public class MainController {
     private MenuItem settingsMenuItem;
     @FXML
     private MenuItem aboutMenuItem;
+    @FXML
+    private Menu historyMenu;
+    @FXML
+    private MenuItem historyMenuItem;
 
     // ---- 标签页 ----
     @FXML
@@ -531,6 +537,8 @@ public class MainController {
         settingsMenu.setText(Messages.get("menu.settings"));
         settingsMenuItem.setText(Messages.get("menu.settings.open"));
         aboutMenuItem.setText(Messages.get("menu.about"));
+        historyMenu.setText(Messages.get("menu.history"));
+        historyMenuItem.setText(Messages.get("menu.history.open"));
         splitCheck.setText(Messages.get("options.split"));
         splitUnitLabel.setText(Messages.get("options.split.size"));
         encryptDepthLabel.setText(Messages.get("options.encryptDepth"));
@@ -653,6 +661,14 @@ public class MainController {
         SettingsDialog.show(stage(), themeManager);
         // 设置变更后刷新占位符与 tip（如归档密码回退开关）
         applyTexts();
+    }
+
+    /**
+     * 打开操作历史对话框。
+     */
+    @FXML
+    private void onOpenHistory() {
+        HistoryDialog.show(stage());
     }
 
     @FXML
@@ -1062,9 +1078,12 @@ public class MainController {
             opts.encryptDepth = encryptDepthSpinner.getValue();
             FxProgressReporter reporter = newReporter();
             opts.reporter = reporter;
-            runTask(() -> FolderCrypt.encryptFolder(
-                            selectedFile.toPath(), Path.of(outputDir), opts),
-                    Messages.get("status.success.encrypt"));
+            runTask(() -> {
+                FolderCrypt.encryptFolder(selectedFile.toPath(), Path.of(outputDir), opts);
+                // 文件夹加密结果位于 outputDir 下（内部工作目录归档后会被删除，故记录 outputDir）
+                HistoryService.record(OperationType.GENERIC_ENCRYPT, selectedFile.getName(),
+                        outputDir, null);
+            }, Messages.get("status.success.encrypt"));
             return;
         }
 
@@ -1103,7 +1122,13 @@ public class MainController {
 
         FxProgressReporter reporter = newReporter();
         req.setReporter(reporter);
-        runTask(() -> Encryptor.encrypt(req), Messages.get("status.success.encrypt"));
+        runTask(() -> {
+            Encryptor.encrypt(req);
+            // 分卷 / 归档等场景下核心会改写 req.outputFile，此处取最终输出路径
+            Path finalOut = Path.of(req.getOutputFile());
+            HistoryService.record(OperationType.GENERIC_ENCRYPT,
+                    finalOut.getFileName().toString(), finalOut.toString(), null);
+        }, Messages.get("status.success.encrypt"));
     }
 
     private void startDecrypt(String pwd) {
@@ -1135,7 +1160,12 @@ public class MainController {
 
         FxProgressReporter reporter = newReporter();
         req.setReporter(reporter);
-        runTask(() -> Decryptor.decrypt(req), Messages.get("status.success.decrypt"));
+        runTask(() -> {
+            Decryptor.decrypt(req);
+            Path finalOut = Path.of(req.getOutputFile());
+            HistoryService.record(OperationType.GENERIC_DECRYPT,
+                    finalOut.getFileName().toString(), finalOut.toString(), null);
+        }, Messages.get("status.success.decrypt"));
     }
 
     private void startAutoDecrypt(String pwd) {
@@ -1224,6 +1254,8 @@ public class MainController {
             progressBar.setProgress(1);
             statusLabel.setText(Messages.get("status.success.decrypt"));
             toast.success(Messages.get("status.success.decrypt"));
+            HistoryService.record(OperationType.GENERIC_DECRYPT,
+                    input.getFileName().toString(), finalOutDir.toString(), null);
             setRunning(false);
         }, err -> {
             String msg = err.getMessage() == null ? err.toString() : err.getMessage();

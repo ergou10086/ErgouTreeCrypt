@@ -5,6 +5,7 @@ import net.lingala.zip4j.model.ZipParameters;
 import net.lingala.zip4j.model.enums.AesKeyStrength;
 import net.lingala.zip4j.model.enums.CompressionMethod;
 import net.lingala.zip4j.model.enums.EncryptionMethod;
+import net.lingala.zip4j.progress.ProgressMonitor;
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
 import org.apache.commons.compress.archivers.sevenz.SevenZMethod;
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile;
@@ -30,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 归档打包工具。
@@ -76,6 +78,11 @@ public final class ArchivePacker {
      * PBKDF2-HMAC-SHA256 迭代次数。
      */
     private static final int PBKDF2_ITERATIONS = 100_000;
+
+    /**
+     * 归档进度上报步长（字节）：约每完成 1 MiB 上报一次，避免回调过于频繁。
+     */
+    private static final long PROGRESS_STEP_BYTES = 1L << 20;
 
     /**
      * 解析实际用于归档保护的密码（不区分格式，兼容旧调用）。
@@ -193,23 +200,24 @@ public final class ArchivePacker {
         boolean hasPwd = password != null && !password.isEmpty();
         // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
         if (hasPwd && format == Format.ZIP) {
-            packZipNative(output, input, password);
+            packZipNative(output, input, password, reporter);
             reportArchive(reporter, 1f, Messages.get("status.archiving"));
             return;
         }
-        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
+        // 明文归档阶段占 0→plainEnd，整体 AES 包裹阶段占 plainEnd→1
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
+        float plainEnd = hasPwd ? 0.7f : 1f;
         try {
             switch (format) {
-                case ZIP -> packZipPlain(workOutput, input);
-                case GZ -> packGz(workOutput, input);
-                case TAR_GZ -> packTarGz(workOutput, input);
-                case _7Z -> pack7z(workOutput, input);
+                case ZIP -> packZipPlain(workOutput, input, reporter, 0f, plainEnd);
+                case GZ -> packGz(workOutput, input, reporter, 0f, plainEnd);
+                case TAR_GZ -> packTarGz(workOutput, input, reporter, 0f, plainEnd);
+                case _7Z -> pack7z(workOutput, input, reporter, 0f, plainEnd);
                 default -> throw new IllegalArgumentException("Unsupported format: " + format);
             }
-            reportArchive(reporter, hasPwd ? 0.7f : 0.95f, Messages.get("status.archiving"));
             if (hasPwd) {
-                wrapEncrypted(workOutput, output, password);
+                wrapEncrypted(workOutput, output, password, reporter, plainEnd, 1f);
             }
             reportArchive(reporter, 1f, Messages.get("status.archiving"));
         } catch (IOException e) {
@@ -268,21 +276,20 @@ public final class ArchivePacker {
             packZipEntriesNative(output, baseDir, entries, password, reporter);
             return;
         }
-        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
+        // 明文归档阶段占 0→plainEnd，整体 AES 包裹阶段占 plainEnd→1
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
+        float plainEnd = hasPwd ? 0.7f : 1f;
         try {
             switch (effective) {
-                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries, reporter);
-                case GZ -> {
-                    packGz(workOutput, entries.getFirst());
-                    reportArchive(reporter, hasPwd ? 0.7f : 1f, Messages.get("status.archiving"));
-                }
-                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, reporter);
-                case _7Z -> pack7zEntries(workOutput, baseDir, entries, reporter);
+                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries, reporter, 0f, plainEnd);
+                case GZ -> packGz(workOutput, entries.getFirst(), reporter, 0f, plainEnd);
+                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, reporter, 0f, plainEnd);
+                case _7Z -> pack7zEntries(workOutput, baseDir, entries, reporter, 0f, plainEnd);
                 default -> throw new IllegalArgumentException("Unsupported format: " + effective);
             }
             if (hasPwd) {
-                wrapEncrypted(workOutput, output, password);
+                wrapEncrypted(workOutput, output, password, reporter, plainEnd, 1f);
             }
             reportArchive(reporter, 1f, Messages.get("status.archiving"));
         } catch (IOException e) {
@@ -326,11 +333,19 @@ public final class ArchivePacker {
     // ==================== 整体加密包裹（GZ / TAR.GZ） ====================
 
     /**
-     * 将明文文件整体 AES-256-CTR 加密，写入目标路径。
+     * 将明文文件整体 AES-256-CTR 加密，写入目标路径，并按字节级粒度回调进度。
      *
      * <p>输出格式：MAGIC(12) + salt(16) + IV(16) + ciphertext。
+     *
+     * @param input    明文输入
+     * @param output   加密输出
+     * @param password 密码
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      */
-    private static void wrapEncrypted(Path input, Path output, String password) throws Exception {
+    private static void wrapEncrypted(Path input, Path output, String password,
+                                      ProgressReporter reporter, float from, float to) throws Exception {
         byte[] salt = new byte[SALT_SIZE];
         new SecureRandom().nextBytes(salt);
         byte[] iv = new byte[IV_SIZE];
@@ -347,9 +362,11 @@ public final class ArchivePacker {
             fos.write(MAGIC);
             fos.write(salt);
             fos.write(iv);
+            long total = Files.size(input);
             try (CipherOutputStream cos = new CipherOutputStream(fos, cipher);
                  InputStream fin = Files.newInputStream(input)) {
-                fin.transferTo(cos);
+                copyWithProgress(fin, cos, 0, total, reporter,
+                        Messages.get("status.archiving"), from, to);
             }
         }
     }
@@ -357,16 +374,29 @@ public final class ArchivePacker {
     // ==================== ZIP 原生加密（zip4j） ====================
 
     /**
-     * 使用 zip4j 创建 AES-256 原生加密 ZIP（单文件）。
+     * 使用 zip4j 创建 AES-256 原生加密 ZIP（单文件/目录），并按字节级粒度回调进度。
+     *
+     * @param output   输出路径
+     * @param input    输入文件或目录
+     * @param password 密码
+     * @param reporter 进度回调，可为 null
+     * @throws IOException 打包失败
      */
-    private static void packZipNative(Path output, Path input, String password) throws IOException {
+    private static void packZipNative(Path output, Path input, String password,
+                                      ProgressReporter reporter) throws IOException {
         ZipParameters params = newZipAesParameters();
         try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
-            if (Files.isDirectory(input)) {
+            // zip4j 2.11+ 的进度监控为轮询式：runInThread 模式下 addFile 立即返回，
+            // 由后台线程执行压缩/加密，本线程轮询 ProgressMonitor 上报字节级进度
+            zipFile.setRunInThread(true);
+            ProgressMonitor monitor = zipFile.getProgressMonitor();
+            boolean isDir = Files.isDirectory(input);
+            if (isDir) {
                 zipFile.addFolder(input.toFile(), params);
             } else {
                 zipFile.addFile(input.toFile(), params);
             }
+            awaitZip4jProgress(monitor, reporter, 0f, 1f, !isDir);
         }
         assertZipNativelyEncrypted(output);
     }
@@ -386,17 +416,29 @@ public final class ArchivePacker {
             throws IOException {
         int total = entries.size();
         int done = 0;
+        long grandTotal = entries.stream().mapToLong(ArchivePacker::safeSize).sum();
+        long doneBytes = 0;
         try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
+            zipFile.setRunInThread(true);
             for (Path file : entries) {
+                long entrySize = safeSize(file);
                 ZipParameters params = newZipAesParameters();
                 params.setFileNameInZip(entryName(baseDir, file));
-                if (Files.isDirectory(file)) {
+                ProgressMonitor monitor = zipFile.getProgressMonitor();
+                boolean isDir = Files.isDirectory(file);
+                if (isDir) {
                     zipFile.addFolder(file.toFile(), params);
                 } else {
                     zipFile.addFile(file.toFile(), params);
                 }
+                // 每个条目的 zip4j 进度映射到整体字节区间内，实现跨条目连续进度
+                awaitZip4jProgress(monitor, reporter,
+                        grandTotal > 0 ? (float) doneBytes / grandTotal : 0f,
+                        grandTotal > 0 ? (float) (doneBytes + entrySize) / grandTotal : 1f,
+                        !isDir);
+                doneBytes += entrySize;
                 done++;
-                reportArchive(reporter, (float) done / total,
+                reportArchive(reporter, grandTotal > 0 ? (float) doneBytes / grandTotal : (float) done / total,
                         Messages.format("status.archiving.progress", done, total));
             }
         }
@@ -404,13 +446,16 @@ public final class ArchivePacker {
     }
 
     /**
-     * 构造 WinZip-AES-256 加密参数（DEFLATE，兼容 7-Zip / Bandizip）。
+     * 构造 WinZip-AES-256 加密参数（STORE，兼容 7-Zip / Bandizip）。
+     *
+     * <p>归档对象是已加密的 .ergou 密文（高熵、不可压缩）：DEFLATE 不产生体积收益，
+     * 却要付出完整压缩 CPU 开销，故使用 STORE 只做 AES 加密。
      *
      * @return zip4j 参数
      */
     private static ZipParameters newZipAesParameters() {
         ZipParameters params = new ZipParameters();
-        params.setCompressionMethod(CompressionMethod.DEFLATE);
+        params.setCompressionMethod(CompressionMethod.STORE);
         params.setEncryptFiles(true);
         params.setEncryptionMethod(EncryptionMethod.AES);
         params.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
@@ -438,9 +483,16 @@ public final class ArchivePacker {
     // ==================== ZIP 明文（commons-compress） ====================
 
     /**
-     * 使用 commons-compress 创建明文 ZIP（STORED 模式，无加密）。
+     * 使用 commons-compress 创建明文 ZIP（STORED 模式，无加密），并按字节级粒度回调进度。
+     *
+     * @param output   输出路径
+     * @param input    输入文件
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      */
-    private static void packZipPlain(Path output, Path input) throws IOException {
+    private static void packZipPlain(Path output, Path input, ProgressReporter reporter,
+                                     float from, float to) throws IOException {
         try (OutputStream fos = Files.newOutputStream(output);
              org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zos =
                      new org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream(fos)) {
@@ -451,26 +503,37 @@ public final class ArchivePacker {
             long size = Files.size(input);
             entry.setSize(size);
             entry.setCompressedSize(size);
-            entry.setCrc(computeCrc32(input));
+            // STORED 需要预知 CRC：CRC 预读 + 内容拷贝共两遍 IO，均纳入字节级进度
+            long grandTotal = size * 2;
+            entry.setCrc(computeCrc32(input, reporter, 0, grandTotal, from, to));
             zos.putArchiveEntry(entry);
-            Files.copy(input, zos);
+            try (InputStream fin = Files.newInputStream(input)) {
+                copyWithProgress(fin, zos, size, grandTotal, reporter,
+                        Messages.get("status.archiving"), from, to);
+            }
             zos.closeArchiveEntry();
         }
     }
 
     /**
-     * 使用 commons-compress 创建明文 ZIP（多文件），并上报进度。
+     * 使用 commons-compress 创建明文 ZIP（多文件），并按字节级粒度回调进度。
      *
      * @param output   输出路径
      * @param baseDir  相对路径基准
      * @param entries  条目列表
      * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      * @throws Exception 打包失败
      */
     private static void packZipEntriesPlain(Path output, Path baseDir, List<Path> entries,
-                                            ProgressReporter reporter) throws Exception {
+                                            ProgressReporter reporter, float from, float to)
+            throws Exception {
         int total = entries.size();
         int done = 0;
+        // STORED 模式每个条目都要 CRC 预读一遍：CRC 预读 + 内容拷贝共两遍 IO，均纳入字节级进度
+        long grandTotal = entries.stream().mapToLong(ArchivePacker::safeSize).sum() * 2;
+        long doneBytes = 0;
         try (OutputStream fos = Files.newOutputStream(output);
              org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zos =
                      new org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream(fos)) {
@@ -478,15 +541,22 @@ public final class ArchivePacker {
                 org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry =
                         new org.apache.commons.compress.archivers.zip.ZipArchiveEntry(entryName(baseDir, file));
                 entry.setMethod(org.apache.commons.compress.archivers.zip.ZipArchiveEntry.STORED);
-                long size = Files.size(file);
+                long size = safeSize(file);
                 entry.setSize(size);
                 entry.setCompressedSize(size);
-                entry.setCrc(computeCrc32(file));
+                entry.setCrc(computeCrc32(file, reporter, doneBytes, grandTotal, from, to));
+                doneBytes += size;
                 zos.putArchiveEntry(entry);
-                Files.copy(file, zos);
+                try (InputStream fin = Files.newInputStream(file)) {
+                    copyWithProgress(fin, zos, doneBytes, grandTotal, reporter,
+                            Messages.get("status.archiving"), from, to);
+                }
                 zos.closeArchiveEntry();
+                doneBytes += size;
                 done++;
-                reportArchive(reporter, (float) done / total,
+                float fraction = grandTotal > 0
+                        ? from + (to - from) * (float) doneBytes / grandTotal : to;
+                reportArchive(reporter, fraction,
                         Messages.format("status.archiving.progress", done, total));
             }
         }
@@ -495,60 +565,91 @@ public final class ArchivePacker {
     // ==================== GZ / TAR.GZ 明文 ====================
 
     /**
-     * 打包单文件为 GZ 压缩（明文）。
+     * 打包单文件为 GZ 压缩（明文），并按字节级粒度回调进度。
+     *
+     * @param output   输出路径
+     * @param input    输入文件
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      */
-    private static void packGz(Path output, Path input) throws IOException {
+    private static void packGz(Path output, Path input, ProgressReporter reporter,
+                               float from, float to) throws IOException {
         try (OutputStream fos = Files.newOutputStream(output);
              org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream gzos =
                      new org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream(fos);
              InputStream fin = Files.newInputStream(input)) {
-            fin.transferTo(gzos);
+            copyWithProgress(fin, gzos, 0, Files.size(input), reporter,
+                    Messages.get("status.archiving"), from, to);
             gzos.finish();
         }
     }
 
     /**
-     * 打包单文件为 TAR.GZ 归档（明文）。
+     * 打包单文件为 TAR.GZ 归档（明文），并按字节级粒度回调进度。
+     *
+     * @param output   输出路径
+     * @param input    输入文件
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      */
-    private static void packTarGz(Path output, Path input) throws IOException {
+    private static void packTarGz(Path output, Path input, ProgressReporter reporter,
+                                  float from, float to) throws IOException {
         try (OutputStream fos = Files.newOutputStream(output);
              GzipCompressorOutputStream gzos = new GzipCompressorOutputStream(fos);
              TarArchiveOutputStream tos = new TarArchiveOutputStream(gzos)) {
             tos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+            long size = Files.size(input);
             TarArchiveEntry entry = new TarArchiveEntry(input, input.getFileName().toString());
-            entry.setSize(Files.size(input));
+            entry.setSize(size);
             tos.putArchiveEntry(entry);
-            Files.copy(input, tos);
+            try (InputStream fin = Files.newInputStream(input)) {
+                copyWithProgress(fin, tos, 0, size, reporter,
+                        Messages.get("status.archiving"), from, to);
+            }
             tos.closeArchiveEntry();
             tos.finish();
         }
     }
 
     /**
-     * 将多个文件条目写入 TAR.GZ 归档，并上报进度。
+     * 将多个文件条目写入 TAR.GZ 归档，并按字节级粒度回调进度。
      *
      * @param output   输出路径
      * @param baseDir  相对路径基准
      * @param entries  条目列表
      * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      * @throws Exception 打包失败
      */
     private static void packTarGzEntries(Path output, Path baseDir, List<Path> entries,
-                                         ProgressReporter reporter) throws Exception {
+                                         ProgressReporter reporter, float from, float to)
+            throws Exception {
         int total = entries.size();
         int done = 0;
+        long grandTotal = entries.stream().mapToLong(ArchivePacker::safeSize).sum();
+        long doneBytes = 0;
         try (OutputStream fos = Files.newOutputStream(output);
              GzipCompressorOutputStream gzos = new GzipCompressorOutputStream(fos);
              TarArchiveOutputStream tos = new TarArchiveOutputStream(gzos)) {
             tos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
             for (Path file : entries) {
+                long size = safeSize(file);
                 TarArchiveEntry entry = new TarArchiveEntry(file, entryName(baseDir, file));
-                entry.setSize(Files.size(file));
+                entry.setSize(size);
                 tos.putArchiveEntry(entry);
-                Files.copy(file, tos);
+                try (InputStream fin = Files.newInputStream(file)) {
+                    copyWithProgress(fin, tos, doneBytes, grandTotal, reporter,
+                            Messages.get("status.archiving"), from, to);
+                }
                 tos.closeArchiveEntry();
+                doneBytes += size;
                 done++;
-                reportArchive(reporter, (float) done / total,
+                float fraction = grandTotal > 0
+                        ? from + (to - from) * (float) doneBytes / grandTotal : to;
+                reportArchive(reporter, fraction,
                         Messages.format("status.archiving.progress", done, total));
             }
             tos.finish();
@@ -558,28 +659,29 @@ public final class ArchivePacker {
     // ==================== 7Z 明文打包 ====================
 
     /**
-     * 打包单文件为 7z 归档（明文，不含原生密码）。
+     * 打包单文件为 7z 归档（明文，不含原生密码），并按字节级粒度回调进度。
      *
      * <p>7Z 已放弃原生 AES：若需要密码，由外层 {@link #wrapEncrypted} 整体包裹。
      * 内容方法用 COPY，避免对已加密载荷再做 LZMA2 造成极慢/膨胀。
      *
-     * @param output 输出路径
-     * @param input  输入文件
+     * @param output   输出路径
+     * @param input    输入文件
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      * @throws IOException 打包失败
      */
-    private static void pack7z(Path output, Path input) throws IOException {
+    private static void pack7z(Path output, Path input, ProgressReporter reporter,
+                               float from, float to) throws IOException {
         try (SevenZOutputFile szos = new SevenZOutputFile(output.toFile())) {
             szos.setContentCompression(SevenZMethod.COPY);
             SevenZArchiveEntry entry = new SevenZArchiveEntry();
             entry.setName(input.getFileName().toString());
-            entry.setSize(Files.size(input));
+            long size = Files.size(input);
+            entry.setSize(size);
             szos.putArchiveEntry(entry);
-            byte[] buf = new byte[8192];
             try (InputStream in = Files.newInputStream(input)) {
-                int n;
-                while ((n = in.read(buf)) > 0) {
-                    szos.write(buf, 0, n);
-                }
+                write7zWithProgress(szos, in, 0, size, reporter, from, to);
             }
             szos.closeArchiveEntry();
             szos.finish();
@@ -587,35 +689,40 @@ public final class ArchivePacker {
     }
 
     /**
-     * 将多个文件条目写入 7z 归档（明文），并上报进度。
+     * 将多个文件条目写入 7z 归档（明文），并按字节级粒度回调进度。
      *
      * @param output   输出路径
      * @param baseDir  相对路径基准
      * @param entries  条目列表
      * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
      * @throws IOException 打包失败
      */
     private static void pack7zEntries(Path output, Path baseDir, List<Path> entries,
-                                      ProgressReporter reporter) throws IOException {
+                                      ProgressReporter reporter, float from, float to)
+            throws IOException {
         int total = entries.size();
         int done = 0;
+        long grandTotal = entries.stream().mapToLong(ArchivePacker::safeSize).sum();
+        long doneBytes = 0;
         try (SevenZOutputFile szos = new SevenZOutputFile(output.toFile())) {
             szos.setContentCompression(SevenZMethod.COPY);
             for (Path file : entries) {
                 SevenZArchiveEntry entry = new SevenZArchiveEntry();
                 entry.setName(entryName(baseDir, file));
-                entry.setSize(Files.size(file));
+                long size = safeSize(file);
+                entry.setSize(size);
                 szos.putArchiveEntry(entry);
-                byte[] buf = new byte[8192];
                 try (InputStream in = Files.newInputStream(file)) {
-                    int n;
-                    while ((n = in.read(buf)) > 0) {
-                        szos.write(buf, 0, n);
-                    }
+                    write7zWithProgress(szos, in, doneBytes, grandTotal, reporter, from, to);
                 }
                 szos.closeArchiveEntry();
+                doneBytes += size;
                 done++;
-                reportArchive(reporter, (float) done / total,
+                float fraction = grandTotal > 0
+                        ? from + (to - from) * (float) doneBytes / grandTotal : to;
+                reportArchive(reporter, fraction,
                         Messages.format("status.archiving.progress", done, total));
             }
             szos.finish();
@@ -625,18 +732,210 @@ public final class ArchivePacker {
     // ==================== 工具方法 ====================
 
     /**
-     * 计算文件的 CRC-32 校验值（用于 ZIP STORED 模式）。
+     * 计算文件的 CRC-32 校验值（用于 ZIP STORED 模式），并按字节级粒度回调进度。
+     *
+     * @param file     待计算的文件
+     * @param reporter 进度回调，可为 null
+     * @param done     本次计算前已完成的累计字节数
+     * @param total    全程总字节数
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return CRC-32 值
+     * @throws IOException 读取失败
      */
-    private static long computeCrc32(Path file) throws IOException {
+    private static long computeCrc32(Path file, ProgressReporter reporter, long done, long total,
+                                     float from, float to) throws IOException {
         java.util.zip.CRC32 crc = new java.util.zip.CRC32();
-        byte[] buf = new byte[8192];
-        try (InputStream in = Files.newInputStream(file)) {
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                crc.update(buf, 0, n);
+        // 通过 OutputStream 适配器复用 copyWithProgress 的节流上报逻辑
+        OutputStream crcSink = new OutputStream() {
+            @Override
+            public void write(int b) {
+                crc.update(b);
             }
+
+            @Override
+            public void write(byte[] b, int off, int len) {
+                crc.update(b, off, len);
+            }
+        };
+        try (InputStream in = Files.newInputStream(file)) {
+            copyWithProgress(in, crcSink, done, total, reporter,
+                    Messages.get("status.archiving"), from, to);
         }
         return crc.getValue();
+    }
+
+    /**
+     * 带字节级进度回调的流式拷贝，约每完成 1 MiB 上报一次。
+     *
+     * @param in       输入流
+     * @param out      输出流
+     * @param done     本次拷贝前已完成的累计字节数
+     * @param total    全程总字节数
+     * @param reporter 进度回调，可为 null
+     * @param status   状态文案
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @return 本次拷贝的字节数
+     * @throws IOException 读写失败
+     */
+    private static long copyWithProgress(InputStream in, OutputStream out, long done, long total,
+                                         ProgressReporter reporter, String status,
+                                         float from, float to) throws IOException {
+        byte[] buf = new byte[8192];
+        long copied = 0;
+        long nextReport = done + PROGRESS_STEP_BYTES;
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            copied += n;
+            if (done + copied >= nextReport) {
+                reportScaledProgress(done + copied, total, reporter, status, from, to);
+                nextReport += PROGRESS_STEP_BYTES;
+            }
+        }
+        return copied;
+    }
+
+    /**
+     * 将输入流按 8 KiB 块写入 7z 归档，并按字节级粒度回调进度。
+     *
+     * @param szos     7z 输出文件
+     * @param in       输入流
+     * @param done     本次写入前已完成的累计字节数
+     * @param total    全程总字节数
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @throws IOException 读写失败
+     */
+    private static void write7zWithProgress(SevenZOutputFile szos, InputStream in, long done,
+                                            long total, ProgressReporter reporter,
+                                            float from, float to) throws IOException {
+        byte[] buf = new byte[8192];
+        long copied = 0;
+        long nextReport = done + PROGRESS_STEP_BYTES;
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            szos.write(buf, 0, n);
+            copied += n;
+            if (done + copied >= nextReport) {
+                reportScaledProgress(done + copied, total, reporter,
+                        Messages.get("status.archiving"), from, to);
+                nextReport += PROGRESS_STEP_BYTES;
+            }
+        }
+    }
+
+    /**
+     * 将已处理字节数映射为区间 [from, to] 内的进度比例并上报。
+     *
+     * @param done     已处理字节数
+     * @param total    全程总字节数
+     * @param reporter 进度回调，可为 null
+     * @param status   状态文案
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     */
+    private static void reportScaledProgress(long done, long total, ProgressReporter reporter,
+                                             String status, float from, float to) {
+        if (reporter != null && total > 0) {
+            reportArchive(reporter, from + (to - from) * (float) done / total, status);
+        }
+    }
+
+    /**
+     * 轮询 zip4j 进度监控器直至任务完成，并把字节级进度桥接给上层 reporter。
+     *
+     * <p>zip4j 2.11+ 的 ProgressMonitor 为轮询式状态机：{@code setRunInThread(true)} 后
+     * addFile/addFolder 立即返回，由后台线程执行，本线程每 50ms 轮询一次。
+     *
+     * @param monitor  zip4j 进度监控器
+     * @param reporter 进度回调，可为 null
+     * @param from     进度映射起点
+     * @param to       进度映射终点
+     * @param twoPass  单文件添加时为 true（zip4j 会先完整预读一遍计算 CRC，再写入一遍，
+     *                 两遍 IO 各映射为一半进度；目录添加时为 false，直接用百分比）
+     * @throws IOException 任务失败或等待被中断
+     */
+    private static void awaitZip4jProgress(ProgressMonitor monitor, ProgressReporter reporter,
+                                           float from, float to, boolean twoPass)
+            throws IOException {
+        float lastFraction = -1f;
+        while (monitor.getState() == ProgressMonitor.State.BUSY) {
+            float fraction = twoPass
+                    ? twoPassFraction(monitor, from, to)
+                    : from + (to - from) * monitor.getPercentDone() / 100f;
+            // 每 0.5% 上报一次，避免回调过频
+            if (reporter != null && fraction - lastFraction >= 0.005f) {
+                reportArchive(reporter, fraction, Messages.get("status.archiving"));
+                lastFraction = fraction;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Archive interrupted", e);
+            }
+        }
+        if (monitor.getResult() == ProgressMonitor.Result.ERROR) {
+            Exception cause = monitor.getException();
+            throw new IOException("ZIP native add failed"
+                    + (cause == null ? "" : ": " + cause.getMessage()), cause);
+        }
+    }
+
+    /**
+     * 计算 zip4j 双遍 IO 模式下的进度比例。
+     *
+     * <p>zip4j 的 totalWork 只统计写入阶段的字节数，但 CRC 预读阶段同样累加
+     * workCompleted；因此按当前任务类型（CALCULATE_CRC / ADD_ENTRY）把两遍 IO
+     * 各映射为一半进度，避免进度条在 CRC 预读结束时提前顶到 100%。
+     *
+     * @param monitor zip4j 进度监控器
+     * @param from    进度映射起点
+     * @param to      进度映射终点
+     * @return [from, to] 内的进度比例
+     */
+    private static float twoPassFraction(ProgressMonitor monitor, float from, float to) {
+        long total = monitor.getTotalWork();
+        long completed = monitor.getWorkCompleted();
+        float half = (to - from) / 2f;
+        if (total <= 0) {
+            return to;
+        }
+        if (monitor.getCurrentTask() == ProgressMonitor.Task.CALCULATE_CRC) {
+            // CRC 预读阶段：workCompleted 从 0 增长到 total
+            return from + half * Math.min(completed, total) / (float) total;
+        }
+        // 写入阶段：workCompleted 从 total 增长到 2*total
+        return from + half
+                + half * Math.max(0, Math.min(completed - total, total)) / (float) total;
+    }
+
+    /**
+     * 计算路径的内容大小（字节）：文件取自身大小，目录递归求和；统计失败时返回 0。
+     *
+     * @param p 文件或目录路径
+     * @return 内容字节数
+     */
+    private static long safeSize(Path p) {
+        try {
+            if (!Files.isDirectory(p)) {
+                return Files.size(p);
+            }
+            try (Stream<Path> walk = Files.walk(p)) {
+                return walk.filter(Files::isRegularFile).mapToLong(f -> {
+                    try {
+                        return Files.size(f);
+                    } catch (IOException e) {
+                        return 0L;
+                    }
+                }).sum();
+            }
+        } catch (IOException e) {
+            return 0L;
+        }
     }
 
     /**

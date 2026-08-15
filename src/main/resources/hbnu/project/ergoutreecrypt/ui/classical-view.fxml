@@ -4,6 +4,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
@@ -48,6 +49,11 @@
                         <VBox fx:id="ccKeyBox" spacing="4" managed="false" visible="false">
                             <Label fx:id="ccKeyLabel" styleClass="card-title"/>
                             <TextField fx:id="ccKeyField" styleClass="text-input"/>
+                        </VBox>
+                        <!-- 密码口令（现代密码算法） -->
+                        <VBox fx:id="ccPasswordBox" spacing="4" managed="false" visible="false">
+                            <Label fx:id="ccPasswordLabel" styleClass="card-title"/>
+                            <PasswordField fx:id="ccPasswordField" styleClass="text-input"/>
                         </VBox>
                     </VBox>
 

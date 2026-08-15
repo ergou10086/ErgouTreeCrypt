@@ -1,6 +1,8 @@
 package hbnu.project.ergoutreecrypt.ui;
 
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
+import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.stego.ImageStegoCodec;
 import hbnu.project.ergoutreecrypt.stego.ImageStegoException;
@@ -535,6 +537,9 @@ public class ImageStegoController {
         taskRunner.submit(() -> {
             codec.hide(selectedImageFile.toPath(), selectedSecretFile.toPath(),
                     outputPath, pwd, options);
+            // 图像隐写成功后记录历史
+            HistoryService.record(OperationType.STEGO_ENCODE,
+                    outputPath.getFileName().toString(), outputPath.toString(), null);
             Platform.runLater(() -> {
                 showProgress(false);
                 toast.success(Messages.format("stego.status.success.hide",
@@ -560,6 +565,9 @@ public class ImageStegoController {
         showProgress(true);
         taskRunner.submit(() -> {
             Path extracted = codec.extract(selectedImageFile.toPath(), outDir.toPath(), pwd);
+            // 提取成功后记录历史
+            HistoryService.record(OperationType.STEGO_EXTRACT,
+                    extracted.getFileName().toString(), extracted.toString(), null);
             Platform.runLater(() -> {
                 showProgress(false);
                 toast.success(Messages.format("stego.status.success.extract",
@@ -613,6 +621,9 @@ public class ImageStegoController {
         taskRunner.submit(() -> {
             codec.hideChunk(chunkImageFile.toPath(), chunkSecretFile.toPath(),
                     outputPath, pwd, opts);
+            // Chunk 隐写成功后记录历史
+            HistoryService.record(OperationType.STEGO_ENCODE,
+                    outputPath.getFileName().toString(), outputPath.toString(), null);
             Platform.runLater(() -> {
                 showProgress(false);
                 toast.success(Messages.format("stego.status.success.hide",
@@ -638,6 +649,9 @@ public class ImageStegoController {
         showProgress(true);
         taskRunner.submit(() -> {
             Path extracted = codec.extractChunk(chunkImageFile.toPath(), outDir.toPath(), pwd);
+            // Chunk 提取成功后记录历史
+            HistoryService.record(OperationType.STEGO_EXTRACT,
+                    extracted.getFileName().toString(), extracted.toString(), null);
             Platform.runLater(() -> {
                 showProgress(false);
                 toast.success(Messages.format("stego.status.success.extract",

@@ -83,7 +83,7 @@ class AndroidSettings(context: Context) {
     // ==================== Android 专属键 ====================
 
     val argon2MobileMode: Flow<String> = dataStore.data.map {
-        it[KEY_ARGON2_MODE] ?: "STANDARD"
+        it[KEY_ARGON2_MODE] ?: "BALANCED"
     }
 
     val useBiometric: Flow<Boolean> = dataStore.data.map {
@@ -105,6 +105,11 @@ class AndroidSettings(context: Context) {
     /** 界面语言代码（"zh_CN" 或 "en"），默认中文 */
     val languageCode: Flow<String> = dataStore.data.map {
         it[KEY_LANGUAGE] ?: "zh_CN"
+    }
+
+    /** 是否在加解密操作页面显示低调的内存使用指示器，默认开启 */
+    val showMemoryIndicator: Flow<Boolean> = dataStore.data.map {
+        it[KEY_MEMORY_INDICATOR] ?: true
     }
 
     // ==================== 初始化：将 DataStore 值同步到 SettingsManager ====================
@@ -214,6 +219,15 @@ class AndroidSettings(context: Context) {
         dataStore.edit { it[KEY_LANGUAGE] = code }
     }
 
+    /**
+     * 设置是否在加解密操作页面显示内存使用指示器。
+     *
+     * @param v true 显示，false 隐藏
+     */
+    suspend fun setShowMemoryIndicator(v: Boolean) {
+        dataStore.edit { it[KEY_MEMORY_INDICATOR] = v }
+    }
+
     suspend fun setDefaultSplitSize(v: Int) {
         dataStore.edit { it[KEY_DEFAULT_SPLIT_SIZE] = v.coerceIn(1, 4096) }
         SettingsManager.setDefaultSplitSize(v)
@@ -260,6 +274,9 @@ class AndroidSettings(context: Context) {
 
         // --- 语言键 ---
         private val KEY_LANGUAGE = stringPreferencesKey("ui.language")
+
+        // --- 内存指示器键 ---
+        private val KEY_MEMORY_INDICATOR = booleanPreferencesKey("ui.memory.indicator")
 
         // --- 默认值 ---
         private const val DEF_AUTO_DECOMPRESS = true

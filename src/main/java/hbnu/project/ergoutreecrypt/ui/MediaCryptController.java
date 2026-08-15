@@ -10,6 +10,8 @@ import java.util.stream.Stream;
 
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException;
@@ -616,6 +618,9 @@ public class MediaCryptController {
                         archiveReporter);
                 java.nio.file.Files.deleteIfExists(output);
             }
+            // 格式保持加密成功后记录历史（归档时记录归档产物路径）
+            HistoryService.record(OperationType.FPE_ENCRYPT,
+                    archivePath.getFileName().toString(), archivePath.toString(), null);
         }, Messages.format("av.status.success.encrypt", finalOutput.getFileName()));
     }
 
@@ -773,6 +778,9 @@ public class MediaCryptController {
 
                 // 阶段 3：真正的媒体解密（progress 回调由 codec 通过 MediaProgress 驱动）
                 codec.decrypt(actualInput, output, pwdBytes, progress);
+                // 格式保持解密成功后记录历史
+                HistoryService.record(OperationType.FPE_DECRYPT,
+                        output.getFileName().toString(), output.toString(), null);
             } finally {
                 if (tempDir != null) {
                     deleteRecursively(tempDir);

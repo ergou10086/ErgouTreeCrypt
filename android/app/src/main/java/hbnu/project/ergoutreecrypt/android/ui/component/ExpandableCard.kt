@@ -26,8 +26,6 @@ import androidx.compose.ui.unit.dp
 /**
  * 可折叠卡片组件。
  *
- * <p>带标题行（含折叠/展开箭头图标）和可动画展开的内容区域。
- *
  * @param title      卡片标题
  * @param expanded   初始是否展开，默认 false
  * @param modifier   修饰符

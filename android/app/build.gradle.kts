@@ -32,30 +32,51 @@ val syncI18n by tasks.registering(Copy::class) {
     into("src/main/resources/hbnu/project/ergoutreecrypt/i18n")
 }
 
+// ============================================================
+// 版本号：文件级变量，供 android 块和 APK 重命名任务共用
+// ============================================================
+val appVersionName = "1.8.7"
+val appVersionCode = 87
+
 android {
     namespace = "hbnu.project.ergoutreecrypt.android"
     compileSdk = 36
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "hbnu.project.ergoutreecrypt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 47
-        versionName = "1.4.7"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 将版本名注入 BuildConfig，供运行时显示
+        buildConfigField("String", "APP_VERSION_NAME", "\"${appVersionName}\"")
+        buildConfigField("int", "APP_VERSION_CODE", "${appVersionCode}")
     }
 
     buildTypes {
+        // 调试版本：不混淆，可调试，应用名含 Debug 后缀
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
+        // 发布版本：开启混淆和资源缩减
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        debug {
-            isMinifyEnabled = false
         }
     }
 
@@ -84,6 +105,28 @@ android {
 
 // 编译前自动同步共享核心代码
 tasks.named("preBuild") { dependsOn(syncCoreLibs) }
+
+// ============================================================
+// 自定义 APK 输出文件名：ErgouTreeCrypt-v1.8.7-release.apk
+// 原理：在所有 assemble 任务完成后，扫描 outputs/apk 目录并复制一份重命名后的 APK
+// ============================================================
+val renameApks by tasks.registering {
+    doLast {
+        layout.buildDirectory.get().asFile
+            .resolve("outputs/apk")
+            .walkTopDown()
+            // 跳过上一次构建已重命名的 APK，避免把文件复制到自身（overwrite 会先删源文件导致 FileNotFoundException）
+            .filter { it.extension == "apk" && !it.name.startsWith("ErgouTreeCrypt-v") }
+            .forEach { apk ->
+                val dirName = apk.parentFile.name
+                val newName = "ErgouTreeCrypt-v${appVersionName}-${dirName}.apk"
+                apk.copyTo(apk.parentFile.resolve(newName), overwrite = true)
+            }
+    }
+}
+tasks.matching { it.name.startsWith("assemble") }.configureEach {
+    finalizedBy(renameApks)
+}
 
 dependencies {
     // ============================================================

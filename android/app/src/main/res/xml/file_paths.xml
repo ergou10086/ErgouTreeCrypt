@@ -16,4 +16,14 @@
     <cache-path
         name="cache"
         path="." />
+
+    <!-- 设备外部存储（用于从操作历史打开输出文件夹，如 /storage/emulated/0/...） -->
+    <external-path
+        name="external_root"
+        path="." />
+
+    <!-- 设备根路径（覆盖 SD 卡等次级存储卷，如 /storage/XXXX-XXXX/...） -->
+    <root-path
+        name="root"
+        path="." />
 </paths>

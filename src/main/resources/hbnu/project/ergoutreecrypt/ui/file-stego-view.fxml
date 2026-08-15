@@ -26,7 +26,7 @@
                     <padding><Insets top="18" right="24" bottom="18" left="24"/></padding>
 
                     <!-- 模式切换：隐藏 / 提取 -->
-                    <HBox styleClass="segmented" alignment="CENTER">
+                    <HBox styleClass="segmented" alignment="CENTER_LEFT">
                         <ToggleButton fx:id="fsHideTab" styleClass="seg-btn" selected="true">
                             <toggleGroup><ToggleGroup fx:id="fsModeGroup"/></toggleGroup>
                         </ToggleButton>

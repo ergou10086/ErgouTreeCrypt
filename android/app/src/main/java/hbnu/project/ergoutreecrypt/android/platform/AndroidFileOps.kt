@@ -1,16 +1,20 @@
 package hbnu.project.ergoutreecrypt.android.platform
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import hbnu.project.ergoutreecrypt.history.OperationRecord
 import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.util.UUID
 
@@ -21,12 +25,28 @@ private const val EXTERNAL_STORAGE_PROVIDER_AUTHORITY = "com.android.externalsto
 private const val COPY_BUFFER_SIZE = 64 * 1024
 
 /**
- * 待复制到 SAF 目录的输出暂存信息。
- *
- * @property treeUri 目标目录树 URI
- * @property tempDir 后端写入输出的临时目录
+ * 待提交的输出暂存信息（后端先写入内部临时目录，完成后经对应渠道提交）。
  */
-data class PendingSafOutput(val treeUri: Uri, val tempDir: File)
+sealed class PendingOutput {
+
+    /** 暂存输出文件的内部临时目录。 */
+    abstract val tempDir: File
+
+    /**
+     * SAF 目录树输出：提交时经 DocumentsContract 复制到用户选择的目录树。
+     *
+     * @property treeUri 目标目录树 URI
+     */
+    data class Saf(val treeUri: Uri, override val tempDir: File) : PendingOutput()
+
+    /**
+     * MediaStore 输出（API 29+ 无全盘权限的默认路径）：
+     * 提交时插入公共 下载/ErgouTreeCrypt。
+     *
+     * @property relativePath MediaStore 相对路径（不带尾部斜杠）
+     */
+    data class MediaStore(val relativePath: String, override val tempDir: File) : PendingOutput()
+}
 
 /**
  * Android 文件系统适配器。
@@ -57,9 +77,9 @@ class AndroidFileOps(private val context: Context) {
      * @return 文件绝对路径；若无法解析返回 null
      */
     fun resolveToPath(uri: Uri): String? {
-        // 0. 命中缓存且文件仍存在时直接返回（临时文件可能已被清理）
+        // 0. 命中缓存且文件仍可读时直接返回（临时文件可能已被清理）
         resolvedCache[uri]?.let { cached ->
-            if (File(cached).exists()) {
+            if (isReadablePath(cached)) {
                 return cached
             }
             resolvedCache.remove(uri)
@@ -70,15 +90,38 @@ class AndroidFileOps(private val context: Context) {
             return uri.path?.also { resolvedCache[uri] = it }
         }
 
-        // 2. 通过 MediaStore 查询真实路径
+        // 2. 通过 MediaStore 查询真实路径（需真正可读才采用，
+        //    部分国产 ROM 上 _data 路径 exists()=true 但读取抛 EACCES）
         val path = queryMediaStorePath(uri)
-        if (path != null && File(path).exists()) {
+        if (path != null && isReadablePath(path)) {
             resolvedCache[uri] = path
             return path
         }
 
         // 3. 拷贝到内部存储
         return copyToInternal(uri)?.also { resolvedCache[uri] = it }
+    }
+
+    /**
+     * 验证路径指向的文件是否真正可读（试打开输入流而非仅 exists()）。
+     *
+     * <p>Xiaomi/HyperOS 等魔改 MediaStore 实现返回的 {@code _data} 路径可能
+     * {@code exists()=true} 但无读取权限，直接采用会导致后续加解密中途
+     * 抛 EACCES。本方法以能否成功打开流为准，确保采用前路径真实可用。
+     *
+     * @param path 待验证的文件绝对路径
+     * @return true 表示文件存在且可读
+     */
+    private fun isReadablePath(path: String): Boolean {
+        return try {
+            val f = File(path)
+            if (!f.isFile) {
+                return false
+            }
+            FileInputStream(f).use { true }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
@@ -221,6 +264,130 @@ class AndroidFileOps(private val context: Context) {
             entry.inputStream().use { input -> input.copyTo(stream) }
         }
         return true
+    }
+
+    /**
+     * 按渠道提交暂存输出（SAF 目录树或 MediaStore）。
+     *
+     * @param pending 待提交的暂存输出信息
+     * @return 是否全部提交成功
+     */
+    fun commitOutput(pending: PendingOutput): Boolean {
+        return when (pending) {
+            is PendingOutput.Saf -> copyDirectoryToTree(pending.treeUri, pending.tempDir)
+            is PendingOutput.MediaStore -> copyDirToMediaStore(pending.tempDir, pending.relativePath)
+        }
+    }
+
+    /**
+     * 将临时目录内容（保留子目录结构）复制到 MediaStore 公共下载目录。
+     *
+     * <p>供 API 29+ 无"所有文件访问权限"时使用：分区存储禁止直写公共目录，
+     * 经 MediaStore 插入即可合法落盘到 下载/ErgouTreeCrypt。同名文件会先
+     * best-effort 删除应用自有条目；删除失败（文件归其他应用所有）时由
+     * MediaProvider 自动改名（如 "name (1)"）。
+     *
+     * @param tempDir      包含待提交内容的临时目录
+     * @param relativePath 目标 MediaStore 相对路径（如 Download/ErgouTreeCrypt）
+     * @return 是否全部提交成功
+     */
+    fun copyDirToMediaStore(tempDir: File, relativePath: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return false
+        }
+        val files = tempDir.listFiles() ?: return false
+        if (files.isEmpty()) {
+            return false
+        }
+        var success = true
+        for (f in files) {
+            if (!copyFileToMediaStore(f, relativePath, "")) {
+                success = false
+            }
+        }
+        return success
+    }
+
+    /**
+     * 递归复制单个文件或目录到 MediaStore。
+     *
+     * @param file       待复制的文件或目录
+     * @param baseRel    基础相对路径（如 Download/ErgouTreeCrypt）
+     * @param sub        子目录后缀（目录嵌套时逐层追加），根层为空串
+     * @return 是否复制成功
+     */
+    private fun copyFileToMediaStore(file: File, baseRel: String, sub: String): Boolean {
+        if (file.isDirectory) {
+            val children = file.listFiles() ?: return false
+            var success = true
+            for (child in children) {
+                val childSub = if (sub.isEmpty()) file.name else "$sub/${file.name}"
+                if (!copyFileToMediaStore(child, baseRel, childSub)) {
+                    success = false
+                }
+            }
+            return success
+        }
+        return try {
+            val rel = if (sub.isEmpty()) baseRel else "$baseRel/$sub"
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(
+                    MediaStore.MediaColumns.MIME_TYPE,
+                    MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+                        ?: "application/octet-stream"
+                )
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "$rel/")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            // 覆盖同名旧文件：仅能删除应用自有条目，失败时交由 MediaProvider 自动改名
+            deleteAppOwnedMediaEntries(rel, file.name)
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val uri = context.contentResolver.insert(collection, values) ?: return false
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { it.copyTo(out) }
+            } ?: return false
+            values.clear()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            context.contentResolver.update(uri, values, null, null)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * best-effort 删除 MediaStore 中应用自有的同名旧条目（用于覆盖输出）。
+     *
+     * @param rel  条目所在相对路径（不带尾部斜杠）
+     * @param name 条目显示名
+     */
+    private fun deleteAppOwnedMediaEntries(rel: String, name: String) {
+        try {
+            val uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+            val args = arrayOf(name, "$rel/")
+            val resolver = context.contentResolver
+            resolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), selection, args, null)
+                ?.use { cursor ->
+                    val idCol = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+                    if (idCol >= 0) {
+                        val ids = mutableListOf<Long>()
+                        while (cursor.moveToNext()) {
+                            ids.add(cursor.getLong(idCol))
+                        }
+                        for (id in ids) {
+                            // 逐条删除，个别条目失败（他人所有）不影响其余
+                            resolver.delete(
+                                android.content.ContentUris.withAppendedId(uri, id), null, null
+                            )
+                        }
+                    }
+                }
+        } catch (_: Exception) {
+            // 删除失败忽略，交由插入阶段处理
+        }
     }
 
     /**

@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.android.ui.navigation
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,9 +21,11 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -96,12 +100,6 @@ fun ErgouNavGraph() {
         BottomNavItem(Routes.SETTINGS_PAGE, "设置", Icons.Filled.Settings, Icons.Outlined.Settings)
     )
 
-    if (showHistory) {
-        // 操作历史覆盖页：整屏替换主导航
-        HistoryScreen(onBack = { showHistory = false })
-        return
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景图片层（置于最底层）
         BackgroundOverlay(modifier = Modifier.fillMaxSize())
@@ -136,6 +134,8 @@ fun ErgouNavGraph() {
         ) { innerPadding ->
             HorizontalPager(
                 state = pagerState,
+                // 保持全部 6 页处于组合状态：离屏页不销毁，加解密任务跨 Tab 继续运行
+                beyondViewportPageCount = 5,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
@@ -148,6 +148,23 @@ fun ErgouNavGraph() {
                     Routes.STEGO_EXTRACT_PAGE -> StegoExtractScreen(onOpenHistory = { showHistory = true })
                     Routes.SETTINGS_PAGE -> SettingsScreen(onOpenHistory = { showHistory = true })
                 }
+            }
+        }
+
+        // 操作历史覆盖页：盖在 pager 之上（而非整屏替换），
+        // 保证底层页面保持组合，正在运行的加解密操作不被销毁
+        if (showHistory) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 吞掉点击，防止事件穿透到底层 Pager
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { },
+                color = MaterialTheme.colorScheme.background
+            ) {
+                HistoryScreen(onBack = { showHistory = false })
             }
         }
     }

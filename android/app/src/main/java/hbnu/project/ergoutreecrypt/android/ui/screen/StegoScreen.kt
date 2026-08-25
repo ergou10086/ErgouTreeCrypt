@@ -64,8 +64,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
-import hbnu.project.ergoutreecrypt.android.platform.PendingSafOutput
+import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
+import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
@@ -89,6 +93,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.platform.Argon2MobileMode
 import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
+import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.android.viewmodel.StegoViewModel
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
@@ -135,8 +140,13 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     val scroll = rememberScrollState()
     val fileOps = remember { AndroidFileOps(ctx.applicationContext) }
     val settings = remember { AndroidSettings(ctx.applicationContext) }
-    val vm = remember { StegoViewModel(ctx.applicationContext) }
+    // ViewModel 提升到 Activity 作用域：切换 Tab/旋转屏幕不中断正在进行的操作
+    val vm: StegoViewModel = viewModel(
+        key = "stegoHide",
+        factory = viewModelFactory { initializer { StegoViewModel(ctx.applicationContext) } }
+    )
     val progress by vm.progress.collectAsState()
+    val busy by OperationCoordinator.busy.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
@@ -188,7 +198,19 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
     var outDirUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingSafOut by remember { mutableStateOf<PendingSafOutput?>(null) }
+    var pendingOut by remember { mutableStateOf<PendingOutput?>(null) }
+
+    // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
+    var defaultOutPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        defaultOutPath = withContext(Dispatchers.IO) {
+            when (val r = OutputDirResolver.resolve(ctx)) {
+                is OutputDirResolver.Resolved.Direct -> r.path
+                is OutputDirResolver.Resolved.AppExternal -> r.path
+                is OutputDirResolver.Resolved.MediaStore -> OutputDirResolver.publicDownloadPath()
+            }
+        }
+    }
 
     // ---- 输出目录选择加载状态 ----
     var outDirLoading by remember { mutableStateOf(false) }
@@ -210,18 +232,14 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
                 val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
                 if (path != null) {
-                    val (size, parent) = withContext(Dispatchers.IO) {
+                    val size = withContext(Dispatchers.IO) {
                         val f = File(path)
-                        val sz = if (f.exists()) f.length() else null
-                        sz to f.parent
+                        if (f.exists()) f.length() else null
                     }
                     secretUri = u
                     secretName = name
                     secretPath = path
                     secretSize = size
-                    if (outDir == null) {
-                        outDir = parent ?: ctx.filesDir.absolutePath
-                    }
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -266,10 +284,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 carrierPath = path
                 carrierValid = path != null
                 if (path != null) {
-                    val (size, parent) = withContext(Dispatchers.IO) {
+                    val size = withContext(Dispatchers.IO) {
                         val f = File(path)
-                        val sz = if (f.exists()) f.length() else null
-                        sz to f.parent
+                        if (f.exists()) f.length() else null
                     }
                     carrierSize = size
                     // 生成输出文件名
@@ -278,9 +295,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                         "${name.substring(0, dotIdx)}_stego${name.substring(dotIdx)}"
                     } else {
                         "${name}_stego"
-                    }
-                    if (outDir == null) {
-                        outDir = parent ?: ctx.filesDir.absolutePath
                     }
                     // 加载图像预览（仅 PNG，解码在 IO 线程）
                     carrierBitmap = if (isImageCarrier(name)) {
@@ -312,19 +326,20 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
         outDirPickJob = scope.launch {
             val myJob = coroutineContext[Job]
             try {
+                // 总是记录树 URI：云盘等非主卷提供者无法解析为磁盘路径，但仍可经 SAF 写入
+                outDirUri = u
+                // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(
+                        u,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                    // 个别文档提供者不支持持久授权，忽略即可
+                }
                 val resolved = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
                 if (resolved != null) {
                     outDir = resolved
-                    outDirUri = u
-                    // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
-                    try {
-                        ctx.contentResolver.takePersistableUriPermission(
-                            u,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        )
-                    } catch (_: Exception) {
-                        // 个别文档提供者不支持持久授权，忽略即可
-                    }
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -337,34 +352,45 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasSecret = secretPath != null
     val hasCarrier = carrierPath != null && carrierValid
-    val canStart = hasSecret && hasCarrier && !isRunning && !secretLoading && !carrierLoading
+    val canStart = hasSecret && hasCarrier && !isRunning && !secretLoading && !carrierLoading && !busy
 
     // ---- 开始隐写 ----
     fun doHide() {
-        val safUri = outDirUri
-        val writeDir = if (safUri != null) {
-            val tmp = fileOps.createOutputTempDir()
-            pendingSafOut = PendingSafOutput(safUri, tmp)
-            tmp.absolutePath
-        } else {
-            outDir ?: secretPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+        scope.launch {
+            val safUri = outDirUri
+            val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
+            val writeDir = when {
+                safUri != null -> {
+                    val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                    pendingOut = PendingOutput.Saf(safUri, tmp)
+                    tmp.absolutePath
+                }
+                outDir != null -> outDir!!
+                resolved is OutputDirResolver.Resolved.Direct -> resolved.path
+                resolved is OutputDirResolver.Resolved.MediaStore -> {
+                    val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                    pendingOut = PendingOutput.MediaStore(resolved.relativePath, tmp)
+                    tmp.absolutePath
+                }
+                else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
+            }
+            val outFile = "$writeDir/${outName ?: "stego_output"}"
+            val opts = FileStegoOptions.builder()
+                .paranoid(paranoid)
+                .compressed(compressed)
+                .storeIntegrity(storeIntegrity)
+                .stealth(stealth)
+                .obfuscateSize(obfuscateSize)
+                .targetSizeBytes(if (obfuscateSize) targetSizeMB * 1024L * 1024L else 0)
+                .preferChunk(preferChunk)
+                // 移动端：低内存档位 Argon2 参数（写入载体元数据）+ 按设备可用堆设置的大文件护栏。
+                // 档位内存超过应用堆时，共享核心会自动回退到离堆（native 内存）派生
+                .argon2Params(argon2Mode.toArgon2Params())
+                .lowMemoryMode(true)
+                .lowMemoryThresholdBytes(DeviceMemory.lowMemoryThresholdBytes())
+                .build()
+            vm.hide(carrierPath!!, secretPath!!, outFile, password, opts)
         }
-        val outFile = "$writeDir/${outName ?: "stego_output"}"
-        val opts = FileStegoOptions.builder()
-            .paranoid(paranoid)
-            .compressed(compressed)
-            .storeIntegrity(storeIntegrity)
-            .stealth(stealth)
-            .obfuscateSize(obfuscateSize)
-            .targetSizeBytes(if (obfuscateSize) targetSizeMB * 1024L * 1024L else 0)
-            .preferChunk(preferChunk)
-            // 移动端：低内存档位 Argon2 参数（写入载体元数据）+ 按设备可用堆设置的大文件护栏。
-            // 档位内存超过应用堆时，共享核心会自动回退到离堆（native 内存）派生
-            .argon2Params(argon2Mode.toArgon2Params())
-            .lowMemoryMode(true)
-            .lowMemoryThresholdBytes(DeviceMemory.lowMemoryThresholdBytes())
-            .build()
-        vm.hide(carrierPath!!, secretPath!!, outFile, password, opts)
     }
 
     // ---- 结果弹窗状态 ----
@@ -374,39 +400,42 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var resultDetail by remember { mutableStateOf<String?>(null) }
     var resultType by remember { mutableStateOf(ResultType.INFO) }
 
-    // 提交 SAF 输出：将暂存临时文件复制到用户选择的 SAF 目录并清理。返回 null 表示非 SAF 输出
-    suspend fun commitSafOutput(): Boolean? {
-        val pending = pendingSafOut
+    // 提交暂存输出：SAF 树经 DocumentsContract、MediaStore 经公共下载目录。返回 null 表示无暂存输出
+    suspend fun commitOutput(): Boolean? {
+        val pending = pendingOut
         if (pending == null) {
             return null
         }
-        val ok = withContext(Dispatchers.IO) { fileOps.copyDirectoryToTree(pending.treeUri, pending.tempDir) }
+        val ok = withContext(Dispatchers.IO) { fileOps.commitOutput(pending) }
         withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
-        pendingSafOut = null
+        pendingOut = null
         return ok
     }
 
+    // 终态分支先捕获所需数据并 reset() 消费，再执行挂起工作：
+    // 切回 Tab 或页面重建不会重复弹窗/重复记录历史
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                val committed = commitSafOutput()
+                val outNameNow = outName ?: "stego_output"
+                val resolvedOutDir = OutputDirResolver.historyDir(
+                    ctx, outDir, secretPath?.let { File(it).parent })
+                val savedTreeUri = outDirUri?.toString()
+                vm.reset()
+                val committed = commitOutput()
                 when (committed) {
                     null, true -> {
                         resultTitle = "隐写完成"
-                        resultMessage = "文件已成功隐藏到载体中。\n输出文件：${outName ?: ""}"
+                        resultMessage = "文件已成功隐藏到载体中。\n输出文件：$outNameNow"
                         resultDetail = null
                         resultType = ResultType.SUCCESS
                         // 记录操作历史（隐写加密）
-                        val outNameNow = outName ?: "stego_output"
-                        val resolvedOutDir = outDir
-                            ?: secretPath?.let { File(it).parent }
-                            ?: ctx.filesDir.absolutePath
                         withContext(Dispatchers.IO) {
                             HistoryService.record(
                                 OperationType.STEGO_ENCODE,
                                 outNameNow,
                                 "$resolvedOutDir/$outNameNow",
-                                outDirUri?.toString()
+                                savedTreeUri
                             )
                         }
                     }
@@ -420,13 +449,17 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
+                val errMsg = mapErrorToChineseMessage(progress.error)
+                val errDetail = progress.error
+                vm.reset()
                 resultTitle = "隐写失败"
-                resultMessage = mapErrorToChineseMessage(progress.error)
-                resultDetail = progress.error
+                resultMessage = errMsg
+                resultDetail = errDetail
                 resultType = ResultType.ERROR
                 showResultDialog = true
             }
             ProgressState.State.CANCELLED -> {
+                vm.reset()
                 resultTitle = "已取消"
                 resultMessage = "隐写操作已被取消。"
                 resultDetail = null
@@ -437,10 +470,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
         }
     }
 
-    // 离开页面时取消正在进行的操作并回收 Bitmap，防止后台协程和 native 内存泄漏
+    // 页面销毁时回收 Bitmap 预览，防止 native 内存泄漏；操作协程不再随页面销毁而取消
     DisposableEffect(Unit) {
         onDispose {
-            vm.cancel()
             carrierBitmap?.recycle()
         }
     }
@@ -735,14 +767,11 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             // ============================================================
             // 三、输出目录
             // ============================================================
-            val displayPath = when {
-                outDir != null -> outDir!!
-                else -> ""
-            }
+            val displayPath = outDir ?: defaultOutPath ?: ""
             val displayText = if (displayPath.isNotEmpty()) {
                 if (displayPath.length > 44) "…${displayPath.takeLast(44)}" else displayPath
             } else {
-                "默认输出至输入文件同级目录"
+                "默认输出至 下载/ErgouTreeCrypt"
             }
 
             Surface(

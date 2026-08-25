@@ -40,7 +40,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,9 +56,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
-import hbnu.project.ergoutreecrypt.android.platform.PendingSafOutput
+import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
+import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
@@ -74,6 +77,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.generateRandomPassword
 import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
+import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.android.viewmodel.StegoViewModel
 import hbnu.project.ergoutreecrypt.history.HistoryService
@@ -104,9 +108,14 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     val fileOps = remember { AndroidFileOps(ctx.applicationContext) }
-    val vm = remember { StegoViewModel(ctx.applicationContext) }
+    // ViewModel 提升到 Activity 作用域：切换 Tab/旋转屏幕不中断正在进行的操作
+    val vm: StegoViewModel = viewModel(
+        key = "stegoExtract",
+        factory = viewModelFactory { initializer { StegoViewModel(ctx.applicationContext) } }
+    )
     val settings = remember { AndroidSettings(ctx.applicationContext) }
     val progress by vm.progress.collectAsState()
+    val busy by OperationCoordinator.busy.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
@@ -127,7 +136,19 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 输出目录 ----
     var outDir by remember { mutableStateOf<String?>(null) }
     var outDirUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingSafOut by remember { mutableStateOf<PendingSafOutput?>(null) }
+    var pendingOut by remember { mutableStateOf<PendingOutput?>(null) }
+
+    // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
+    var defaultOutPath by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        defaultOutPath = withContext(Dispatchers.IO) {
+            when (val r = OutputDirResolver.resolve(ctx)) {
+                is OutputDirResolver.Resolved.Direct -> r.path
+                is OutputDirResolver.Resolved.AppExternal -> r.path
+                is OutputDirResolver.Resolved.MediaStore -> OutputDirResolver.publicDownloadPath()
+            }
+        }
+    }
 
     // ---- 输出目录选择加载状态 ----
     var outDirLoading by remember { mutableStateOf(false) }
@@ -149,18 +170,14 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
                 val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
                 if (path != null) {
-                    val (size, parent) = withContext(Dispatchers.IO) {
+                    val size = withContext(Dispatchers.IO) {
                         val f = File(path)
-                        val sz = if (f.exists()) f.length() else null
-                        sz to f.parent
+                        if (f.exists()) f.length() else null
                     }
                     stegoUri = u
                     stegoName = name
                     stegoPath = path
                     stegoSize = size
-                    if (outDir == null) {
-                        outDir = parent ?: ctx.filesDir.absolutePath
-                    }
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -183,19 +200,20 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
         outDirPickJob = scope.launch {
             val myJob = coroutineContext[Job]
             try {
+                // 总是记录树 URI：云盘等非主卷提供者无法解析为磁盘路径，但仍可经 SAF 写入
+                outDirUri = u
+                // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(
+                        u,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                    // 个别文档提供者不支持持久授权，忽略即可
+                }
                 val resolved = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
                 if (resolved != null) {
                     outDir = resolved
-                    outDirUri = u
-                    // 持久化授权，使历史记录中保存的 SAF 树 URI 跨重启仍可用
-                    try {
-                        ctx.contentResolver.takePersistableUriPermission(
-                            u,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        )
-                    } catch (_: Exception) {
-                        // 个别文档提供者不支持持久授权，忽略即可
-                    }
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -207,19 +225,30 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     }
 
     val hasFile = stegoPath != null
-    val canStart = hasFile && !isRunning && !stegoLoading
+    val canStart = hasFile && !isRunning && !stegoLoading && !busy
 
     // ---- 开始提取 ----
     fun doExtract() {
-        val safUri = outDirUri
-        val outputDir = if (safUri != null) {
-            val tmp = fileOps.createOutputTempDir()
-            pendingSafOut = PendingSafOutput(safUri, tmp)
-            tmp.absolutePath
-        } else {
-            outDir ?: stegoPath?.let { File(it).parent } ?: ctx.filesDir.absolutePath
+        scope.launch {
+            val safUri = outDirUri
+            val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
+            val outputDir = when {
+                safUri != null -> {
+                    val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                    pendingOut = PendingOutput.Saf(safUri, tmp)
+                    tmp.absolutePath
+                }
+                outDir != null -> outDir!!
+                resolved is OutputDirResolver.Resolved.Direct -> resolved.path
+                resolved is OutputDirResolver.Resolved.MediaStore -> {
+                    val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                    pendingOut = PendingOutput.MediaStore(resolved.relativePath, tmp)
+                    tmp.absolutePath
+                }
+                else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
+            }
+            vm.extract(stegoPath!!, outputDir, password)
         }
-        vm.extract(stegoPath!!, outputDir, password)
     }
 
     // ---- 结果弹窗状态 ----
@@ -229,23 +258,29 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     var resultDetail by remember { mutableStateOf<String?>(null) }
     var resultType by remember { mutableStateOf(ResultType.INFO) }
 
-    // 提交 SAF 输出：将暂存临时文件复制到用户选择的 SAF 目录并清理。返回 null 表示非 SAF 输出
-    suspend fun commitSafOutput(): Boolean? {
-        val pending = pendingSafOut
+    // 提交暂存输出：SAF 树经 DocumentsContract、MediaStore 经公共下载目录。返回 null 表示无暂存输出
+    suspend fun commitOutput(): Boolean? {
+        val pending = pendingOut
         if (pending == null) {
             return null
         }
-        val ok = withContext(Dispatchers.IO) { fileOps.copyDirectoryToTree(pending.treeUri, pending.tempDir) }
+        val ok = withContext(Dispatchers.IO) { fileOps.commitOutput(pending) }
         withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
-        pendingSafOut = null
+        pendingOut = null
         return ok
     }
 
+    // 终态分支先捕获所需数据并 reset() 消费，再执行挂起工作：
+    // 切回 Tab 或页面重建不会重复弹窗/重复记录历史
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
                 val extractedName = if (progress.info.isNotEmpty()) progress.info else ""
-                val committed = commitSafOutput()
+                val resolvedOutDir = OutputDirResolver.historyDir(
+                    ctx, outDir, stegoPath?.let { File(it).parent })
+                val savedTreeUri = outDirUri?.toString()
+                vm.reset()
+                val committed = commitOutput()
                 when (committed) {
                     null, true -> {
                         resultTitle = "提取完成"
@@ -254,15 +289,12 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                         resultType = ResultType.SUCCESS
                         // 记录操作历史（隐写提取）
                         val extractedFile = extractedName.ifEmpty { "extracted" }
-                        val resolvedOutDir = outDir
-                            ?: stegoPath?.let { File(it).parent }
-                            ?: ctx.filesDir.absolutePath
                         withContext(Dispatchers.IO) {
                             HistoryService.record(
                                 OperationType.STEGO_EXTRACT,
                                 extractedFile,
                                 "$resolvedOutDir/$extractedFile",
-                                outDirUri?.toString()
+                                savedTreeUri
                             )
                         }
                     }
@@ -276,13 +308,17 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 showResultDialog = true
             }
             ProgressState.State.ERROR -> {
+                val errMsg = mapErrorToChineseMessage(progress.error)
+                val errDetail = progress.error
+                vm.reset()
                 resultTitle = "提取失败"
-                resultMessage = mapErrorToChineseMessage(progress.error)
-                resultDetail = progress.error
+                resultMessage = errMsg
+                resultDetail = errDetail
                 resultType = ResultType.ERROR
                 showResultDialog = true
             }
             ProgressState.State.CANCELLED -> {
+                vm.reset()
                 resultTitle = "已取消"
                 resultMessage = "提取操作已被取消。"
                 resultDetail = null
@@ -290,13 +326,6 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 showResultDialog = true
             }
             else -> { /* no-op */ }
-        }
-    }
-
-    // 离开页面时取消正在进行的操作，防止后台协程泄漏
-    DisposableEffect(Unit) {
-        onDispose {
-            vm.cancel()
         }
     }
 
@@ -433,14 +462,11 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
             // ============================================================
             // 二、输出目录
             // ============================================================
-            val displayPath = when {
-                outDir != null -> outDir!!
-                else -> ""
-            }
+            val displayPath = outDir ?: defaultOutPath ?: ""
             val displayText = if (displayPath.isNotEmpty()) {
                 if (displayPath.length > 44) "…${displayPath.takeLast(44)}" else displayPath
             } else {
-                "默认输出至隐写文件同级目录"
+                "默认输出至 下载/ErgouTreeCrypt"
             }
 
             Surface(

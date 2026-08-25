@@ -9,9 +9,17 @@
     <!-- 通知权限（前台 Service 必须） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 读取外部存储 -->
+    <!-- 读取外部存储（Android 10+ 由 SAF 授权替代，无需运行时申请） -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- 写入外部存储（仅 Android 8.x 运行时申请） -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- 所有文件访问权限（Android 11+ 可选增强：未授予时自动降级为 SAF/MediaStore 流程） -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <application
         android:name=".app.ErgouApp"

@@ -40,6 +40,9 @@ class MediaCryptViewModel : ViewModel() {
     /** 当前正在运行的协程，用于取消操作。 */
     private var currentJob: Job? = null
 
+    /** 当前操作的全局协调器释放令牌（取消后用于立即归还操作权）。 */
+    private var opToken: Long? = null
+
     /**
      * 执行格式保持加密。
      *
@@ -58,6 +61,10 @@ class MediaCryptViewModel : ViewModel() {
         paranoid: Boolean = false,
         storeIntegrity: Boolean = true
     ) {
+        // 全局操作权占用失败：已有其他 Tab 的操作在运行
+        val token = OperationCoordinator.tryAcquire() ?: return
+        opToken = token
+        // 如果本 VM 仍有上一次任务在收尾，先取消
         currentJob?.cancel()
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
         currentJob = viewModelScope.launch(Dispatchers.IO) {
@@ -81,6 +88,9 @@ class MediaCryptViewModel : ViewModel() {
                         error = e.localizedMessage ?: e.javaClass.simpleName
                     )
                 }
+            } finally {
+                // 令牌校验释放：过期任务的释放不会误清新任务
+                OperationCoordinator.release(token)
             }
         }
     }
@@ -95,6 +105,10 @@ class MediaCryptViewModel : ViewModel() {
      *                  避免误把普通媒体文件当密文处理
      */
     fun startDecrypt(input: String, output: String, password: String, noiseCheck: Boolean = true) {
+        // 全局操作权占用失败：已有其他 Tab 的操作在运行
+        val token = OperationCoordinator.tryAcquire() ?: return
+        opToken = token
+        // 如果本 VM 仍有上一次任务在收尾，先取消
         currentJob?.cancel()
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
         currentJob = viewModelScope.launch(Dispatchers.IO) {
@@ -144,6 +158,9 @@ class MediaCryptViewModel : ViewModel() {
                         error = e.localizedMessage ?: e.javaClass.simpleName
                     )
                 }
+            } finally {
+                // 令牌校验释放：过期任务的释放不会误清新任务
+                OperationCoordinator.release(token)
             }
         }
     }
@@ -165,19 +182,28 @@ class MediaCryptViewModel : ViewModel() {
     /**
      * 取消正在进行的操作。
      *
-     * <p>仅取消当前任务，不销毁 ViewModel 作用域。
+     * <p>仅取消当前任务，不销毁 ViewModel 作用域。操作权由任务退出时的
+     * 释放回调归还；无任务时立即归还，避免忙标记悬挂。
      */
     fun cancel() {
         currentJob?.cancel()
         currentJob = null
         _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
+        OperationCoordinator.release(opToken)
+        opToken = null
     }
 
     /**
-     * 重置状态，供重新操作前调用。
+     * 消费终态结果：回到 IDLE，防止页面重建或切回 Tab 后过期结果重复触发。
+     *
+     * <p>仅终态（DONE/ERROR/CANCELLED）被重置；RUNNING 状态保留，
+     * 避免"取消后立刻重新启动"时旧终态回调冲掉新任务的状态。
      */
     fun reset() {
-        _progress.update { ProgressState() }
+        _progress.update { p ->
+            if (p.state == ProgressState.State.IDLE || p.state == ProgressState.State.RUNNING) p
+            else ProgressState()
+        }
     }
 
     /**

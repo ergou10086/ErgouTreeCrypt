@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
+import hbnu.project.ergoutreecrypt.android.ui.component.PermissionSection
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.i18n.Messages
@@ -291,6 +292,23 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 checked = showMemoryIndicator,
                 onCheckedChange = { scope.launch { settings.setShowMemoryIndicator(it) } }
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // === 权限管理 ===
+            Text(
+                text = "权限管理",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = "为兼容澎湃OS/MIUI 等国产系统的存储限制，未授予所有文件访问权限时，输出会自动保存到 下载/ErgouTreeCrypt 目录。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            PermissionSection()
 
             Spacer(modifier = Modifier.height(24.dp))
 

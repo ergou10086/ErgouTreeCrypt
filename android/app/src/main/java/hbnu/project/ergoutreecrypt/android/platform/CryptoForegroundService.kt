@@ -42,7 +42,14 @@ class CryptoForegroundService : Service() {
         val notification = NotificationHelper.buildProgressNotification(
             this, title, 0, ""
         )
-        startForeground(NotificationHelper.FOREGROUND_NOTIFICATION_ID, notification)
+        // 后台启动受限（Android 12+）或个别 OEM 限制时静默降级：
+        // 前台通知失败不影响实际加解密（其在 ViewModel 协程中执行）
+        try {
+            startForeground(NotificationHelper.FOREGROUND_NOTIFICATION_ID, notification)
+        } catch (_: Exception) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         return START_NOT_STICKY
     }

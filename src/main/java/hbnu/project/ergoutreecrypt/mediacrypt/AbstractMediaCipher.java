@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.mediacrypt;
 import hbnu.project.ergoutreecrypt.crypto.Mac;
 import hbnu.project.ergoutreecrypt.crypto.MacFactory;
 import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -49,6 +50,12 @@ public abstract class AbstractMediaCipher implements MediaCipher {
             progress = MediaProgress.NONE;
         }
         MediaCryptProfile profile = options.resolveProfile(format());
+        LogService.info("MediaCipher", "加密 " + format() + " " + input.getFileName());
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("MediaCipher", "profile=" + profile
+                    + ", paranoid=" + options.paranoid()
+                    + ", integrity=" + options.storeIntegrity());
+        }
 
         // 1. 子类解析源文件，得到加密计划（payload 区间 + 元数据载体写入所需的上下文）
         EncryptPlan plan = planEncrypt(input, profile);

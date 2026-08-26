@@ -2,6 +2,10 @@ package hbnu.project.ergoutreecrypt;
 
 import hbnu.project.ergoutreecrypt.history.FileHistoryStore;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.log.FileLogSink;
+import hbnu.project.ergoutreecrypt.log.LogService;
+import hbnu.project.ergoutreecrypt.log.MemoryLogBuffer;
+import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.MainController;
 import hbnu.project.ergoutreecrypt.ui.support.FileAssociation;
 import javafx.application.Application;
@@ -74,9 +78,12 @@ public class PicocryptApplication extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
-        // 注册操作历史存储（用户主目录下的隐藏目录），供全应用记录加解密历史
-        HistoryService.register(new FileHistoryStore(
-                Path.of(System.getProperty("user.home"), ".ergoutreecrypt")));
+        // 注册操作历史与应用日志（用户主目录下的隐藏目录）
+        Path dataDir = Path.of(System.getProperty("user.home"), ".ergoutreecrypt");
+        HistoryService.register(new FileHistoryStore(dataDir));
+        LogService.register(new MemoryLogBuffer(), new FileLogSink(dataDir.resolve("logs")));
+        LogService.setLevel(SettingsManager.getLogLevel());
+        LogService.setClearOnNewOperation(SettingsManager.isLogClearOnNewOp());
 
         FXMLLoader fxmlLoader = new FXMLLoader(
                 PicocryptApplication.class.getResource("ui/main-view.fxml"));

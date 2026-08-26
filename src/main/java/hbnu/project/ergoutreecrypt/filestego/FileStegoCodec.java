@@ -14,6 +14,7 @@ import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierRegistry;
 import hbnu.project.ergoutreecrypt.filestego.codec.PayloadCodec;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -121,6 +122,15 @@ public final class FileStegoCodec {
         // 步骤 1：查找匹配的适配器
         CarrierAdapter adapter = findAdapterForEmbed(carrierFile);
 
+        LogService.info("FileStego", "开始嵌入 " + secretFile.getFileName()
+                + " → " + carrierFile.getFileName());
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("FileStego", "载体=" + adapter.displayName()
+                    + ", 载荷=" + LogService.humanSize(Files.size(secretFile))
+                    + ", paranoid=" + options.isParanoid()
+                    + ", stealth=" + options.isStealth());
+        }
+
         // 步骤 2：容量检查——在读取文件之前用文件大小判断，避免大文件 OOM
         String fileName = secretFile.getFileName().toString();
         long plaintextSize = Files.size(secretFile);
@@ -207,6 +217,7 @@ public final class FileStegoCodec {
         if (listener != null) {
             listener.onProgress(1.0);
         }
+        LogService.info("FileStego", "嵌入完成 → " + output.getFileName());
     }
 
     /**
@@ -283,6 +294,10 @@ public final class FileStegoCodec {
 
         // 步骤 2：查找匹配的适配器
         CarrierAdapter adapter = findAdapterForExtract(stegoFile);
+        LogService.info("FileStego", "开始提取 " + stegoFile.getFileName());
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("FileStego", "载体=" + adapter.displayName());
+        }
 
         try {
             // 低内存模式护栏：大载体且适配器未实现流式提取 → 提前友好失败

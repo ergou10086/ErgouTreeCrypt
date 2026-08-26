@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.mediacrypt;
 import hbnu.project.ergoutreecrypt.mediacrypt.mp3.Mp3Cipher;
 import hbnu.project.ergoutreecrypt.mediacrypt.mp4.Mp4Cipher;
 import hbnu.project.ergoutreecrypt.mediacrypt.wav.WavCipher;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -46,7 +47,9 @@ public final class MediaCryptCodec {
      */
     public void encrypt(Path input, Path output, byte[] password, MediaCryptOptions options,
                         MediaProgress progress) throws MediaCryptException, IOException {
+        LogService.info("MediaCrypt", "开始加密 " + input.getFileName());
         resolve(input).encrypt(input, output, password, options, progress);
+        LogService.info("MediaCrypt", "加密完成 → " + output.getFileName());
     }
 
     /**
@@ -65,7 +68,9 @@ public final class MediaCryptCodec {
      */
     public void decrypt(Path input, Path output, byte[] password, MediaProgress progress)
             throws MediaCryptException, IOException {
+        LogService.info("MediaCrypt", "开始解密 " + input.getFileName());
         resolve(input).decrypt(input, output, password, progress);
+        LogService.info("MediaCrypt", "解密完成 → " + output.getFileName());
     }
 
     /**

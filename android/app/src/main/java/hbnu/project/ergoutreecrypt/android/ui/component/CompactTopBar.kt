@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
  *
  * <p>替代默认 {@code TopAppBar}：标题收窄为略宽于文字的圆角胶囊，
  * 紧贴屏幕顶部（状态栏之下）且靠左对齐，背景半透明，避免遮挡全局背景图。
- * 右侧预留 {@code actions} 槽位，用于放置图标按钮（如操作历史入口）。
+ * 右侧预留 {@code actions} 槽位，用于放置图标按钮（如日志与操作历史入口）。
  *
  * @param title    页面标题文字
  * @param modifier 修饰符

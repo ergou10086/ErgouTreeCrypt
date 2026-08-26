@@ -6,6 +6,9 @@ import hbnu.project.ergoutreecrypt.android.platform.NotificationHelper
 import hbnu.project.ergoutreecrypt.history.FileHistoryStore
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.i18n.Messages
+import hbnu.project.ergoutreecrypt.log.FileLogSink
+import hbnu.project.ergoutreecrypt.log.LogService
+import hbnu.project.ergoutreecrypt.log.MemoryLogBuffer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,10 +63,20 @@ class ErgouApp : Application() {
         // 3. 注册操作历史存储（应用私有 filesDir 下），供全应用记录加解密历史
         HistoryService.register(FileHistoryStore(filesDir.resolve("history").toPath()))
 
-        // 4. 同步设置到共享核心并持续监听关键变更
+        // 4. 注册日志：内存缓冲供页内实时展示，文件落盘便于崩溃后排查
+        LogService.register(
+            MemoryLogBuffer(),
+            FileLogSink(filesDir.resolve("logs").toPath())
+        )
+
+        // 5. 同步设置到共享核心并持续监听关键变更
         appScope.launch {
             // 首次批量同步
             settings.syncToSettingsManager()
+            LogService.setLevel(hbnu.project.ergoutreecrypt.settings.SettingsManager.getLogLevel())
+            LogService.setClearOnNewOperation(
+                hbnu.project.ergoutreecrypt.settings.SettingsManager.isLogClearOnNewOp()
+            )
 
             // 持续监听共享核心依赖的关键设置变更
             launch {
@@ -79,6 +92,19 @@ class ErgouApp : Application() {
             launch {
                 settings.isArchivePasswordFallback.collectLatest { v ->
                     hbnu.project.ergoutreecrypt.settings.SettingsManager.setArchivePasswordFallback(v)
+                }
+            }
+            launch {
+                settings.logLevel.collectLatest { v ->
+                    val level = hbnu.project.ergoutreecrypt.log.LogLevel.fromName(v)
+                    hbnu.project.ergoutreecrypt.settings.SettingsManager.setLogLevel(level)
+                    LogService.setLevel(level)
+                }
+            }
+            launch {
+                settings.isLogClearOnNewOp.collectLatest { v ->
+                    hbnu.project.ergoutreecrypt.settings.SettingsManager.setLogClearOnNewOp(v)
+                    LogService.setClearOnNewOperation(v)
                 }
             }
         }

@@ -11,6 +11,7 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 
@@ -286,6 +287,8 @@ public final class ArchiveExtractor {
      */
     public static List<Path> extractPreserving(Path archive, Path destDir, String password,
                                                ProgressReporter reporter) throws IOException {
+        LogService.info("ArchiveExtractor", "开始解压 "
+                + (archive == null ? "?" : archive.getFileName()));
         Files.createDirectories(destDir);
 
         // 检测整体加密包裹（GZ / TAR.GZ / 7Z）

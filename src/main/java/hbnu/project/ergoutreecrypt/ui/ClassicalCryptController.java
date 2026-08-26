@@ -4,6 +4,7 @@ import hbnu.project.ergoutreecrypt.classical.CipherInfo;
 import hbnu.project.ergoutreecrypt.classical.CipherRegistry;
 import hbnu.project.ergoutreecrypt.classical.ClassicalCipher;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -207,10 +208,18 @@ public class ClassicalCryptController {
             return;
         }
         Map<String, String> params = collectParams();
+        String algo = currentCipher.getInfo().id();
+        LogService.beginSession("CLASSICAL_ENCRYPT", algo);
+        long t0 = System.nanoTime();
         try {
             String ciphertext = currentCipher.encrypt(plaintext, params);
             ccCiphertextArea.setText(ciphertext);
+            long elapsed = (System.nanoTime() - t0) / 1_000_000L;
+            LogService.info("Classical", "加密完成 " + algo, elapsed);
+            LogService.endSession(true, elapsed);
         } catch (Exception e) {
+            LogService.error("Classical", "加密失败", e);
+            LogService.endSession(false, (System.nanoTime() - t0) / 1_000_000L);
             toast.info(Messages.format("cc.toast.error", e.getMessage()));
         }
     }
@@ -226,10 +235,18 @@ public class ClassicalCryptController {
             return;
         }
         Map<String, String> params = collectParams();
+        String algo = currentCipher.getInfo().id();
+        LogService.beginSession("CLASSICAL_DECRYPT", algo);
+        long t0 = System.nanoTime();
         try {
             String plaintext = currentCipher.decrypt(ciphertext, params);
             ccPlaintextArea.setText(plaintext);
+            long elapsed = (System.nanoTime() - t0) / 1_000_000L;
+            LogService.info("Classical", "解密完成 " + algo, elapsed);
+            LogService.endSession(true, elapsed);
         } catch (Exception e) {
+            LogService.error("Classical", "解密失败", e);
+            LogService.endSession(false, (System.nanoTime() - t0) / 1_000_000L);
             toast.info(Messages.format("cc.toast.error", e.getMessage()));
         }
     }

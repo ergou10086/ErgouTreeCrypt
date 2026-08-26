@@ -534,7 +534,7 @@ public class ImageStegoController {
         Path outputPath = outFile.toPath();
 
         showProgress(true);
-        taskRunner.submit(() -> {
+        taskRunner.submit("STEGO_ENCODE", selectedSecretFile.getName(), () -> {
             codec.hide(selectedImageFile.toPath(), selectedSecretFile.toPath(),
                     outputPath, pwd, options);
             // 图像隐写成功后记录历史
@@ -563,9 +563,8 @@ public class ImageStegoController {
 
         byte[] pwd = getPasswordBytes();
         showProgress(true);
-        taskRunner.submit(() -> {
+        taskRunner.submit("STEGO_EXTRACT", selectedImageFile.getName(), () -> {
             Path extracted = codec.extract(selectedImageFile.toPath(), outDir.toPath(), pwd);
-            // 提取成功后记录历史
             HistoryService.record(OperationType.STEGO_EXTRACT,
                     extracted.getFileName().toString(), extracted.toString(), null);
             Platform.runLater(() -> {
@@ -618,7 +617,7 @@ public class ImageStegoController {
         Path outputPath = outFile.toPath();
 
         showProgress(true);
-        taskRunner.submit(() -> {
+        taskRunner.submit("STEGO_ENCODE", chunkSecretFile.getName(), () -> {
             codec.hideChunk(chunkImageFile.toPath(), chunkSecretFile.toPath(),
                     outputPath, pwd, opts);
             // Chunk 隐写成功后记录历史
@@ -647,9 +646,8 @@ public class ImageStegoController {
 
         byte[] pwd = getChunkPasswordBytes();
         showProgress(true);
-        taskRunner.submit(() -> {
+        taskRunner.submit("STEGO_EXTRACT", chunkImageFile.getName(), () -> {
             Path extracted = codec.extractChunk(chunkImageFile.toPath(), outDir.toPath(), pwd);
-            // Chunk 提取成功后记录历史
             HistoryService.record(OperationType.STEGO_EXTRACT,
                     extracted.getFileName().toString(), extracted.toString(), null);
             Platform.runLater(() -> {

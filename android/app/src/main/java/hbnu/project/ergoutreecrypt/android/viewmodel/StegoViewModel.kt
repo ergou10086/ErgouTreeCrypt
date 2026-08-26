@@ -4,10 +4,15 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
+import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressListener
+import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
+import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
 import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener
+import hbnu.project.ergoutreecrypt.log.LogService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,6 +97,10 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
 
         currentJob = viewModelScope.launch(Dispatchers.IO) {
+            LogService.beginSession("STEGO_ENCODE", logFileName(secretPath))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
             try {
                 val carrierFile = Paths.get(carrierPath)
                 val secretFile = Paths.get(secretPath)
@@ -103,13 +112,17 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                 }
 
                 codec.hide(carrierFile, secretFile, output, pwdBytes, options,
-                    createProgressListener())
+                    LoggingProgressListener(createProgressListener(), "FileStego"))
 
+                success = true
                 _progress.update {
                     it.copy(state = ProgressState.State.DONE, progress = 1f)
                 }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: OutOfMemoryError) {
-                // OOM 后堆状态不可靠，仅上报错误提示；正常情况由核心层预检提前拦截
+                LogService.error("STEGO_ENCODE", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -117,6 +130,7 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                LogService.error("STEGO_ENCODE", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -124,7 +138,12 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }
@@ -150,6 +169,10 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
 
         currentJob = viewModelScope.launch(Dispatchers.IO) {
+            LogService.beginSession("STEGO_EXTRACT", logFileName(stegoPath))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
             try {
                 val stegoFile = Paths.get(stegoPath)
                 val outDir = Paths.get(outputDir)
@@ -159,16 +182,14 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     ByteArray(0)
                 }
 
-                // 移动端提取：低内存模式（大文件护栏 + 流式提取）
-                // 护栏阈值按设备当前可用堆计算，而非固定 64 MiB；
-                // Argon2 参数取自载体元数据，核心层会按可用堆预检并给出准确错误
                 val opts = FileStegoOptions.builder()
                     .lowMemoryMode(true)
                     .lowMemoryThresholdBytes(DeviceMemory.lowMemoryThresholdBytes())
                     .build()
                 val resultFile = codec.extract(stegoFile, outDir, pwdBytes, opts,
-                    createProgressListener())
+                    LoggingProgressListener(createProgressListener(), "FileStego"))
 
+                success = true
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.DONE,
@@ -176,8 +197,11 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                         info = resultFile.fileName.toString()
                     )
                 }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: OutOfMemoryError) {
-                // OOM 后堆状态不可靠，仅上报错误提示；正常情况由核心层预检提前拦截
+                LogService.error("STEGO_EXTRACT", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -187,6 +211,7 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                LogService.error("STEGO_EXTRACT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -194,7 +219,12 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }

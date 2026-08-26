@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.settings;
 
+import hbnu.project.ergoutreecrypt.log.LogLevel;
+
 /**
  * Android 端设置管理器。
  *
@@ -32,6 +34,8 @@ public final class SettingsManager {
     private static final int DEF_THREAD_COUNT = 4;
     private static final boolean DEF_ARCHIVE_PWD_FALLBACK = false;
     private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
+    private static final String DEF_LOG_LEVEL = "INFO";
+    private static final boolean DEF_LOG_CLEAR_ON_NEW_OP = true;
 
     // ---- 可写字段（in-memory，由 AndroidSettings 同步写入） ----
 
@@ -50,6 +54,8 @@ public final class SettingsManager {
     private static volatile boolean archiveCustomEncryption = DEF_ARCHIVE_CUSTOM_ENC;
 
     private static volatile int threadCount = DEF_THREAD_COUNT;
+    private static volatile LogLevel logLevel = LogLevel.INFO;
+    private static volatile boolean logClearOnNewOp = DEF_LOG_CLEAR_ON_NEW_OP;
     private static final int MIN_THREAD_COUNT = 1;
     private static final int MAX_THREAD_COUNT = 16;
 
@@ -128,6 +134,24 @@ public final class SettingsManager {
         return threadCount;
     }
 
+    /**
+     * 获取应用日志级别。
+     *
+     * @return {@link LogLevel#INFO}（默认）或 {@link LogLevel#TRACE}
+     */
+    public static LogLevel getLogLevel() {
+        return logLevel;
+    }
+
+    /**
+     * 新加解密等操作开始时是否清空内存日志。
+     *
+     * @return true 表示每次新操作清空（默认）
+     */
+    public static boolean isLogClearOnNewOp() {
+        return logClearOnNewOp;
+    }
+
     // ---- Setters（由 AndroidSettings DataStore 变更时调用） ----
 
     public static void setAutoDecompressDecrypt(boolean v) {
@@ -203,6 +227,24 @@ public final class SettingsManager {
     }
 
     /**
+     * 设置应用日志级别。
+     *
+     * @param v 级别；null 或非 TRACE 均视为 INFO
+     */
+    public static void setLogLevel(LogLevel v) {
+        logLevel = v == LogLevel.TRACE ? LogLevel.TRACE : LogLevel.INFO;
+    }
+
+    /**
+     * 设置新操作开始时是否清空内存日志。
+     *
+     * @param v true 清空；false 一直留存
+     */
+    public static void setLogClearOnNewOp(boolean v) {
+        logClearOnNewOp = v;
+    }
+
+    /**
      * 从 AndroidSettings DataStore 批量同步初始值。
      *
      * <p>由 {@code ErgouApp.onCreate()} 在 DataStore 首次读取完成后调用。
@@ -225,6 +267,8 @@ public final class SettingsManager {
         archivePasswordFallback = bridge.archivePasswordFallback;
         archiveCustomEncryption = bridge.archiveCustomEncryption;
         threadCount = bridge.threadCount;
+        logLevel = LogLevel.fromName(bridge.logLevel);
+        logClearOnNewOp = bridge.logClearOnNewOp;
     }
 
     /**
@@ -247,5 +291,7 @@ public final class SettingsManager {
         public boolean archivePasswordFallback = DEF_ARCHIVE_PWD_FALLBACK;
         public boolean archiveCustomEncryption = DEF_ARCHIVE_CUSTOM_ENC;
         public int threadCount = DEF_THREAD_COUNT;
+        public String logLevel = DEF_LOG_LEVEL;
+        public boolean logClearOnNewOp = DEF_LOG_CLEAR_ON_NEW_OP;
     }
 }

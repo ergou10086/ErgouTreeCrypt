@@ -14,6 +14,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
@@ -196,12 +197,16 @@ public final class ArchivePacker {
      */
     public static void pack(Path output, Path input, Format format, String password,
                             ProgressReporter reporter) throws IOException {
+        long t0 = System.nanoTime();
+        LogService.info("ArchivePacker", "开始打包 " + format
+                + " ← " + (input == null ? "?" : input.getFileName()));
         reportArchive(reporter, 0f, Messages.get("status.archiving"));
         boolean hasPwd = password != null && !password.isEmpty();
         // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
         if (hasPwd && format == Format.ZIP) {
             packZipNative(output, input, password, reporter);
             reportArchive(reporter, 1f, Messages.get("status.archiving"));
+            LogService.info("ArchivePacker", "打包完成", (System.nanoTime() - t0) / 1_000_000L);
             return;
         }
         // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
@@ -265,6 +270,7 @@ public final class ArchivePacker {
         if (entries == null || entries.isEmpty()) {
             throw new IOException("no entries to archive");
         }
+        LogService.info("ArchivePacker", "开始打包 " + format + ", 条目=" + entries.size());
 
         Format effective = (format == Format.GZ && entries.size() > 1) ? Format.TAR_GZ : format;
         boolean hasPwd = password != null && !password.isEmpty();

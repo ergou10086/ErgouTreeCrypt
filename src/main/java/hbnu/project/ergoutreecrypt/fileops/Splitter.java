@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.fileops;
 
 import hbnu.project.ergoutreecrypt.crypto.CryptoConstants;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +43,8 @@ public final class Splitter {
     public static void split(Path inputPath, long chunkSize) throws IOException {
         long total = Files.size(inputPath);
         long numChunks = (total + chunkSize - 1) / chunkSize;
+        LogService.info("Splitter", "开始分卷 " + inputPath.getFileName()
+                + ", " + LogService.humanSize(total) + " → " + numChunks + " 片");
         String baseName = inputPath.toString();
 
         // 清理已有的同名前缀分片，避免新旧混杂

@@ -2,10 +2,15 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressReporter
+import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
+import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
 import hbnu.project.ergoutreecrypt.volume.FolderCrypt
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,20 +60,31 @@ class DecryptViewModel : ViewModel() {
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
 
         currentJob = viewModelScope.launch(Dispatchers.IO) {
-            val reporter = createProgressReporter()
-
+            val reporter = LoggingProgressReporter(createProgressReporter(), "Volume")
             request.reporter = reporter
+            LogService.beginSession("GENERIC_DECRYPT", logFileName(request.inputFile))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
 
             try {
                 hbnu.project.ergoutreecrypt.volume.Decryptor.decrypt(request)
+                success = true
                 _progress.update {
                     it.copy(state = ProgressState.State.DONE, progress = 1f)
                 }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
             } catch (e: InterruptedException) {
+                cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: Exception) {
+                LogService.error("GENERIC_DECRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -76,6 +92,7 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } catch (e: OutOfMemoryError) {
+                LogService.error("GENERIC_DECRYPT", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -83,7 +100,12 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }
@@ -122,7 +144,7 @@ class DecryptViewModel : ViewModel() {
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
 
         currentJob = viewModelScope.launch(Dispatchers.IO) {
-            val reporter = createProgressReporter()
+            val reporter = LoggingProgressReporter(createProgressReporter(), "Volume")
             val opts = FolderCrypt.DecryptOptions()
             opts.password = password
             opts.archivePassword = archivePassword
@@ -135,17 +157,29 @@ class DecryptViewModel : ViewModel() {
             }
             opts.reporter = reporter
             opts.threadCount = 1
+            LogService.beginSession("GENERIC_DECRYPT", logFileName(input))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
 
             try {
                 FolderCrypt.decryptAuto(Paths.get(input), Paths.get(outputDir), opts)
+                success = true
                 _progress.update {
                     it.copy(state = ProgressState.State.DONE, progress = 1f)
                 }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
             } catch (e: InterruptedException) {
+                cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: Exception) {
+                LogService.error("GENERIC_DECRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -153,6 +187,7 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } catch (e: OutOfMemoryError) {
+                LogService.error("GENERIC_DECRYPT", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -160,7 +195,12 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }

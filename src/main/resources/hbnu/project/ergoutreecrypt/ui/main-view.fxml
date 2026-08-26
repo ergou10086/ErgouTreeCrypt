@@ -32,6 +32,10 @@
             <Menu fx:id="historyMenu">
                 <MenuItem fx:id="historyMenuItem" onAction="#onOpenHistory"/>
             </Menu>
+            <Menu fx:id="logsMenu">
+                <!-- 占位项：空菜单在部分 JavaFX 版本不会触发 showing，点击后由控制器立即 hide 并弹出日志窗 -->
+                <MenuItem visible="false" disable="true"/>
+            </Menu>
             <Menu fx:id="settingsMenu">
                 <MenuItem fx:id="settingsMenuItem" onAction="#onOpenSettings"/>
                 <SeparatorMenuItem/>

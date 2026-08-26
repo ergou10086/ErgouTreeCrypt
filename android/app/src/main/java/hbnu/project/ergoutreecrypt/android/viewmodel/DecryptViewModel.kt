@@ -101,6 +101,7 @@ class DecryptViewModel : ViewModel() {
      * @param archivePassword  归档密码（可为 null/空）
      * @param forceDecrypt     是否强制解密
      * @param recursiveExtract 是否递归解压嵌套压缩包
+     * @param autoUnzip        是否在解密后自动解压新出现的归档
      * @param keyfiles         密钥文件路径列表
      */
     fun startAutoDecrypt(
@@ -110,6 +111,7 @@ class DecryptViewModel : ViewModel() {
         archivePassword: String?,
         forceDecrypt: Boolean,
         recursiveExtract: Boolean,
+        autoUnzip: Boolean,
         keyfiles: List<String>
     ) {
         // 全局操作权占用失败：已有其他 Tab 的操作在运行
@@ -126,7 +128,7 @@ class DecryptViewModel : ViewModel() {
             opts.archivePassword = archivePassword
             opts.forceDecrypt = forceDecrypt
             opts.recursiveExtract = recursiveExtract
-            opts.autoUnzip = true
+            opts.autoUnzip = autoUnzip
             opts.rsCodecs = RsCodecs()
             if (keyfiles.isNotEmpty()) {
                 opts.keyfiles = keyfiles

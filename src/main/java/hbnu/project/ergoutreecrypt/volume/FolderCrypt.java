@@ -575,6 +575,11 @@ public final class FolderCrypt {
      *
      * <p>深目录归档内是原始明文文件（非加密文件），因此仅需普通解压，
      * 无需再调用解密流程。解压后删除中间归档文件以保持输出整洁。
+     *
+     * <p>带密码保护的归档（用户加密前本身就是加密压缩包）无法在无密码时正确解压：
+     * 若强行按明文解压，会静默得到空文件或残留部分碎片，甚至删掉原包。因此这里
+     * 采用「快速失败」策略——检测到带密码归档时保留原文件、跳过自动解压，
+     * 交由用户用原压缩包密码手动解压，避免内容损坏。
      */
     private static void postExtractNewArchives(Path mirrorRoot, DecryptOptions opts,
                                                 DecryptStats stats, int depth,
@@ -591,6 +596,17 @@ public final class FolderCrypt {
         for (Path archive : newArchives) {
             if (reporter != null && reporter.isCancelled()) {
                 throw new InterruptedException("cancelled");
+            }
+            // 快速失败：带密码的归档无法无密码解压，保留原文件并跳过，避免静默损坏
+            if (isPasswordProtectedArchive(archive)) {
+                stats.archivesPassthrough.incrementAndGet();
+                if (reporter != null) {
+                    reporter.setStatus(Messages.format("status.skipped",
+                            archive.getFileName(),
+                            Messages.get("status.archive.passwordProtected")),
+                            ProgressPhase.ARCHIVE);
+                }
+                continue;
             }
             try {
                 if (reporter != null) {
@@ -610,6 +626,23 @@ public final class FolderCrypt {
                             archive.getFileName(), e.getMessage()));
                 }
             }
+        }
+    }
+
+    /**
+     * 检测归档是否为带密码保护（原生加密或本工具整体包裹加密）。
+     *
+     * <p>检测失败时按「需要密码」处理，避免对加密内容静默解压造成损坏。
+     *
+     * @param archive 归档路径
+     * @return true 表示该归档需要密码才能解压
+     */
+    private static boolean isPasswordProtectedArchive(Path archive) {
+        try {
+            return ArchiveExtractor.hasEncryptedEntries(archive);
+        } catch (IOException e) {
+            // 无法判定时按需密码处理，快速失败，避免静默损坏
+            return true;
         }
     }
 

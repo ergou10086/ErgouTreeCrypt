@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.crypto;
 
+import hbnu.project.ergoutreecrypt.log.LogService;
 import org.bouncycastle.crypto.digests.SHA3Digest;
 
 import java.io.IOException;
@@ -261,6 +262,7 @@ public final class BruteForceGuard {
         GuardEntry entry = cache.computeIfAbsent(id, k -> new GuardEntry(k));
         entry.failCount++;
         entry.lastAttempt = Instant.now().toString();
+        LogService.warn("BruteForceGuard", "解密失败计数 " + entry.failCount + "/" + maxAttempts);
         save();
     }
 

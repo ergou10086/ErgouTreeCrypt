@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.crypto;
 
 import java.util.Arrays;
 
+import hbnu.project.ergoutreecrypt.log.LogService;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
 
@@ -140,8 +141,17 @@ public final class Argon2Kdf {
         int threads = overrideParallelism != null ? overrideParallelism
                 : (paranoid ? CryptoConstants.ARGON2_PARANOID_THREADS : CryptoConstants.ARGON2_NORMAL_THREADS);
 
+        long t0 = System.nanoTime();
+        boolean offHeap = !isHeapFeasible(memoryKiB);
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("Argon2Kdf", "派生开始 passes=" + passes
+                    + ", memKiB=" + memoryKiB
+                    + ", threads=" + threads
+                    + ", offHeap=" + offHeap);
+        }
+
         byte[] key;
-        if (!isHeapFeasible(memoryKiB)) {
+        if (offHeap) {
             // 堆内放不下 → 离堆实现（native 内存不受 Java 堆上限约束）
             key = Argon2OffHeap.deriveKey(password, salt, memoryKiB, passes,
                     threads, CryptoConstants.ARGON2_KEY_SIZE);
@@ -164,6 +174,9 @@ public final class Argon2Kdf {
         // 全零结果视为 Argon2 致命故障
         if (Arrays.equals(key, new byte[CryptoConstants.ARGON2_KEY_SIZE])) {
             throw new IllegalStateException("fatal Argon2 error: produced zero key");
+        }
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("Argon2Kdf", "派生完成", (System.nanoTime() - t0) / 1_000_000L);
         }
         return key;
     }

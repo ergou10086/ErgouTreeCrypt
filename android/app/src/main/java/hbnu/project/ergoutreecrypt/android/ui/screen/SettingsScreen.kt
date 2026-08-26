@@ -95,6 +95,8 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
 
     // 内存指示器开关
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
+    val logLevel by settings.logLevel.collectAsState(initial = "INFO")
+    val logClearOnNewOp by settings.isLogClearOnNewOp.collectAsState(initial = true)
 
     // 图片选择器（OpenDocument 返回的 URI 支持持久化授权，重启后背景仍可加载）
     val imagePicker = rememberLauncherForActivityResult(
@@ -292,6 +294,66 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 checked = showMemoryIndicator,
                 onCheckedChange = { scope.launch { settings.setShowMemoryIndicator(it) } }
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "日志",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = try { Messages.get("settings.logLevel.tip") } catch (_: Exception) {
+                    "标准（INFO）记录操作、阶段与错误；诊断（TRACE）额外记录耗时与参数。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                FilterChip(
+                    selected = logLevel != "TRACE",
+                    onClick = { scope.launch { settings.setLogLevel("INFO") } },
+                    label = {
+                        Text(try { Messages.get("settings.logLevel.info") } catch (_: Exception) { "标准（INFO）" })
+                    }
+                )
+                Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+                FilterChip(
+                    selected = logLevel == "TRACE",
+                    onClick = { scope.launch { settings.setLogLevel("TRACE") } },
+                    label = {
+                        Text(try { Messages.get("settings.logLevel.trace") } catch (_: Exception) { "诊断（TRACE）" })
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = try { Messages.get("settings.logRefresh.tip") } catch (_: Exception) {
+                    "每次新加密/解密等操作开始时清空当前日志，或一直留存显示。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                FilterChip(
+                    selected = logClearOnNewOp,
+                    onClick = { scope.launch { settings.setLogClearOnNewOp(true) } },
+                    label = {
+                        Text(try { Messages.get("settings.logRefresh.clear") } catch (_: Exception) { "每次新操作清空" })
+                    }
+                )
+                Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+                FilterChip(
+                    selected = !logClearOnNewOp,
+                    onClick = { scope.launch { settings.setLogClearOnNewOp(false) } },
+                    label = {
+                        Text(try { Messages.get("settings.logRefresh.keep") } catch (_: Exception) { "不刷新，一直留存" })
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
             HorizontalDivider()

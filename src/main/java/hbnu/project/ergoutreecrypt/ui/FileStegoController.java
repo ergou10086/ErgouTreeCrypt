@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
+import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressListener;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import javafx.beans.value.ChangeListener;
@@ -519,8 +520,9 @@ public class FileStegoController {
         Path outputPath = outFile.toPath();
 
         showProgress(true, Messages.get("fileStego.status.hide"));
-        taskRunner.submit(
-                () -> codec.hide(carrierPath, secretPath, outputPath, pwd, options),
+        taskRunner.submit("STEGO_ENCODE", secretFile.getName(),
+                () -> codec.hide(carrierPath, secretPath, outputPath, pwd, options,
+                        new LoggingProgressListener(null, "FileStego")),
                 () -> {
                     showProgress(false, null);
                     toast.success(Messages.format("fileStego.status.success.hide",
@@ -555,8 +557,10 @@ public class FileStegoController {
 
         final Path[] extractedHolder = new Path[1];
         showProgress(true, Messages.get("fileStego.status.extract"));
-        taskRunner.submit(
-                () -> extractedHolder[0] = codec.extract(stegoPath, outDirPath, pwd),
+        taskRunner.submit("STEGO_EXTRACT", carrierFile.getName(),
+                () -> extractedHolder[0] = codec.extract(stegoPath, outDirPath, pwd,
+                        FileStegoOptions.defaults(),
+                        new LoggingProgressListener(null, "FileStego")),
                 () -> {
                     showProgress(false, null);
                     Path extracted = extractedHolder[0];

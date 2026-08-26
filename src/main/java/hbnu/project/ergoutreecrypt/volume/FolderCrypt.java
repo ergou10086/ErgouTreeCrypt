@@ -5,6 +5,7 @@ import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -119,6 +120,13 @@ public final class FolderCrypt {
 
         // 线程数钳制；并行时用聚合器以最慢任务为基准，避免进度条回跳并汇总吞吐
         int threads = Math.max(1, Math.min(opts.threadCount, total));
+        LogService.info("FolderCrypt", "开始加密文件夹 " + folderName);
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("FolderCrypt", "files=" + filesToEncrypt.size()
+                    + ", deepDirs=" + deepDirs.size()
+                    + ", depth=" + maxDepth
+                    + ", threads=" + threads);
+        }
         ParallelProgressAggregator progress =
                 reporter != null ? new ParallelProgressAggregator(reporter, total) : null;
         ExecutorService executor = CryptoThreadPool.forEncrypt(threads);
@@ -303,6 +311,7 @@ public final class FolderCrypt {
         if (reporter != null) {
             reporter.setProgress(1f, "");
         }
+        LogService.info("FolderCrypt", "文件夹加密完成: " + folderName);
     }
 
     // ================================================================
@@ -317,6 +326,7 @@ public final class FolderCrypt {
      * @param opts      解密选项
      */
     public static void decryptAuto(Path input, Path outputDir, DecryptOptions opts) throws Exception {
+        LogService.info("FolderCrypt", "开始自动解密 " + input.getFileName());
         DecryptStats stats = new DecryptStats();
         if (Files.isDirectory(input)) {
             // 输入文件夹：可能是单文件分卷碎片夹，或普通文件夹

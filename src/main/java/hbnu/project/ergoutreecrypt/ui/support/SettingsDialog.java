@@ -1,6 +1,8 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogLevel;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -170,6 +172,33 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.threadCount.tip")), 2, row);
         row++;
 
+        // === 日志 ===
+        grid.add(section(Messages.get("settings.section.logs")), 0, row++, 3, 1);
+
+        ComboBox<String> logLevelCombo = new ComboBox<>();
+        logLevelCombo.getItems().setAll(
+                Messages.get("settings.logLevel.info"),
+                Messages.get("settings.logLevel.trace"));
+        logLevelCombo.setPrefWidth(180);
+        HBox logLevelBox = new HBox(8,
+                new Label(Messages.get("settings.logLevel")), logLevelCombo);
+        logLevelBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(logLevelBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.logLevel.tip")), 2, row);
+        row++;
+
+        ComboBox<String> logRefreshCombo = new ComboBox<>();
+        logRefreshCombo.getItems().setAll(
+                Messages.get("settings.logRefresh.clear"),
+                Messages.get("settings.logRefresh.keep"));
+        logRefreshCombo.setPrefWidth(180);
+        HBox logRefreshBox = new HBox(8,
+                new Label(Messages.get("settings.logRefresh")), logRefreshCombo);
+        logRefreshBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(logRefreshBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.logRefresh.tip")), 2, row);
+        row++;
+
         // ---- 加载当前值 ----
         // 主题模式
         ThemeManager.Mode savedMode = themeManager != null
@@ -192,6 +221,12 @@ public final class SettingsDialog {
         archiveCustomEncryption.setSelected(SettingsManager.isArchiveCustomEncryption());
         archivePasswordFallback.setSelected(SettingsManager.isArchivePasswordFallback());
         threadCountSpinner.getValueFactory().setValue(SettingsManager.getThreadCount());
+        logLevelCombo.setValue(SettingsManager.getLogLevel() == LogLevel.TRACE
+                ? Messages.get("settings.logLevel.trace")
+                : Messages.get("settings.logLevel.info"));
+        logRefreshCombo.setValue(SettingsManager.isLogClearOnNewOp()
+                ? Messages.get("settings.logRefresh.clear")
+                : Messages.get("settings.logRefresh.keep"));
 
         // ---- 监听即时写入 ----
         themeCombo.valueProperty().addListener((o, a, b) -> {
@@ -234,6 +269,23 @@ public final class SettingsDialog {
                 SettingsManager.setArchivePasswordFallback(b));
         threadCountSpinner.valueProperty().addListener((o, a, b) ->
                 SettingsManager.setThreadCount(b));
+        logLevelCombo.valueProperty().addListener((o, a, b) -> {
+            if (b == null) {
+                return;
+            }
+            LogLevel next = Messages.get("settings.logLevel.trace").equals(b)
+                    ? LogLevel.TRACE : LogLevel.INFO;
+            SettingsManager.setLogLevel(next);
+            LogService.setLevel(next);
+        });
+        logRefreshCombo.valueProperty().addListener((o, a, b) -> {
+            if (b == null) {
+                return;
+            }
+            boolean clear = Messages.get("settings.logRefresh.clear").equals(b);
+            SettingsManager.setLogClearOnNewOp(clear);
+            LogService.setClearOnNewOperation(clear);
+        });
 
         pane.setContent(grid);
 

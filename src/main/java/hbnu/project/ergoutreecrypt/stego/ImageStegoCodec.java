@@ -9,6 +9,7 @@ import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
 import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.crypto.SerpentCtr;
 import hbnu.project.ergoutreecrypt.crypto.XChaCha20;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,6 +50,8 @@ public final class ImageStegoCodec {
     public void hide(final Path imageFile, final Path secretFile, final Path output,
                       final byte[] password, final StegoOptions options)
             throws IOException, ImageStegoException {
+        LogService.info("ImageStego", "LSB 嵌入 " + secretFile.getFileName()
+                + " → " + imageFile.getFileName());
         byte[] plaintext = Files.readAllBytes(secretFile);
         String fileName = secretFile.getFileName().toString();
 
@@ -119,6 +122,7 @@ public final class ImageStegoCodec {
      */
     public Path extract(final Path stegoImage, final Path outputDir,
                          final byte[] password) throws IOException, ImageStegoException {
+        LogService.info("ImageStego", "LSB 提取 " + stegoImage.getFileName());
         byte[] effectivePwd = (password != null && password.length > 0) ? password : DEFAULT_PASSWORD;
 
         // BruteForceGuard 检查
@@ -197,6 +201,8 @@ public final class ImageStegoCodec {
     public void hideChunk(final Path imageFile, final Path secretFile, final Path output,
                            final byte[] password, final StegoOptions options)
             throws IOException, ImageStegoException {
+        LogService.info("ImageStego", "Chunk 嵌入 " + secretFile.getFileName()
+                + " → " + imageFile.getFileName());
         byte[] plaintext = Files.readAllBytes(secretFile);
         String fileName = secretFile.getFileName().toString();
 
@@ -259,6 +265,7 @@ public final class ImageStegoCodec {
      */
     public Path extractChunk(final Path stegoImage, final Path outputDir,
                               final byte[] password) throws IOException, ImageStegoException {
+        LogService.info("ImageStego", "Chunk 提取 " + stegoImage.getFileName());
         byte[] effectivePwd = (password != null && password.length > 0) ? password : DEFAULT_PASSWORD;
 
         BruteForceGuard guard = BruteForceGuard.getInstance();

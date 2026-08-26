@@ -21,6 +21,8 @@ import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderWriter;
 import hbnu.project.ergoutreecrypt.header.VolumeHeader;
 import hbnu.project.ergoutreecrypt.keyfile.KeyfileProcessor;
+import hbnu.project.ergoutreecrypt.log.LogPhases;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 import hbnu.project.ergoutreecrypt.password.Passwordless;
 
@@ -64,30 +66,62 @@ public final class Encryptor {
      * @throws Exception 密码学或 I/O 错误
      */
     public static void encrypt(EncryptRequest req) throws Exception {
-        // 双卷可否认加密：完全独立的路径
-        if (req.isDualDeniability()) {
-            DualDeniability.encrypt(req);
-            return;
+        long t0 = System.nanoTime();
+        String label = inputLabel(req);
+        LogService.info("Encryptor", "开始加密 " + label);
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("Encryptor", "paranoid=" + req.isParanoid()
+                    + ", rs=" + req.isReedSolomon()
+                    + ", split=" + req.isSplit()
+                    + ", dual=" + req.isDualDeniability()
+                    + ", compress=" + req.isCompress());
         }
-
-        OperationContext ctx = new OperationContext();
-        ctx.outputFile = req.getOutputFile();
-        ctx.reporter = req.getReporter();
         try {
-            encryptPreprocess(ctx, req);
-            encryptGenerateValues(ctx, req);
-            encryptWriteHeader(ctx, req);
-            encryptDeriveKeys(ctx, req);
-            encryptProcessKeyfiles(ctx, req);
-            encryptComputeAuth(ctx, req);
-            encryptPayload(ctx, req);
-            encryptFinalize(ctx, req);
+            // 双卷可否认加密：完全独立的路径
+            if (req.isDualDeniability()) {
+                DualDeniability.encrypt(req);
+            } else {
+                OperationContext ctx = new OperationContext();
+                ctx.outputFile = req.getOutputFile();
+                ctx.reporter = req.getReporter();
+                try {
+                    LogPhases.run("Encryptor", "preprocess", () -> encryptPreprocess(ctx, req));
+                    LogPhases.run("Encryptor", "generateValues", () -> encryptGenerateValues(ctx, req));
+                    LogPhases.run("Encryptor", "writeHeader", () -> encryptWriteHeader(ctx, req));
+                    LogPhases.run("Encryptor", "deriveKeys", () -> encryptDeriveKeys(ctx, req));
+                    LogPhases.run("Encryptor", "processKeyfiles", () -> encryptProcessKeyfiles(ctx, req));
+                    LogPhases.run("Encryptor", "computeAuth", () -> encryptComputeAuth(ctx, req));
+                    LogPhases.run("Encryptor", "encryptPayload", () -> encryptPayload(ctx, req));
+                    LogPhases.run("Encryptor", "finalize", () -> encryptFinalize(ctx, req));
+                } catch (Exception e) {
+                    cleanupEncrypt(ctx, req);
+                    throw e;
+                } finally {
+                    ctx.close();
+                }
+            }
+            LogService.info("Encryptor", "加密完成", (System.nanoTime() - t0) / 1_000_000L);
         } catch (Exception e) {
-            cleanupEncrypt(ctx, req);
+            LogService.error("Encryptor", "加密失败", e);
             throw e;
-        } finally {
-            ctx.close();
         }
+    }
+
+    /**
+     * 从请求中提取适合日志的输入标签（仅文件名，不含路径与密钥）。
+     *
+     * @param req 加密请求
+     * @return 文件名或文件数量描述
+     */
+    private static String inputLabel(EncryptRequest req) {
+        if (req.getInputFile() != null && !req.getInputFile().isBlank()) {
+            return Path.of(req.getInputFile()).getFileName().toString();
+        }
+        List<String> files = req.getInputFiles();
+        if (files != null && !files.isEmpty()) {
+            return files.size() + " files";
+        }
+        return "?";
     }
 
     // ==================== Phase 1: Preprocess ====================

@@ -22,6 +22,8 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaProgress;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
+import hbnu.project.ergoutreecrypt.ui.support.LoggingMediaProgress;
+import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressReporter;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
@@ -558,7 +560,7 @@ public class MediaCryptController {
         }
 
         byte[] pwdBytes = pwd.getBytes(StandardCharsets.UTF_8);
-        runTask(progress -> {
+        runTask("FPE_VERIFY", progress -> {
             boolean ok = codec.verifyIntegrity(input, pwdBytes, progress);
             if (!ok) {
                 throw new MediaCryptException(
@@ -608,7 +610,7 @@ public class MediaCryptController {
             finalOutput = Path.of(output.toString() + ext);
         }
         Path archivePath = finalOutput;
-        runTask(progress -> {
+        runTask("FPE_ENCRYPT", progress -> {
             codec.encrypt(input, output, pwdBytes, options, progress);
             if (doArchive) {
                 ProgressReporter archiveReporter = newArchiveReporter();
@@ -640,7 +642,7 @@ public class MediaCryptController {
      * @return 进度回调实现
      */
     private ProgressReporter newArchiveReporter() {
-        return new ProgressReporter() {
+        return new LoggingProgressReporter(new ProgressReporter() {
             @Override
             public void setStatus(String text) {
                 setStatus(text, ProgressPhase.ARCHIVE);
@@ -678,7 +680,7 @@ public class MediaCryptController {
             public boolean isCancelled() {
                 return cancelRequested;
             }
-        };
+        }, "Archive");
     }
 
     private void startDecrypt(String pwd) {
@@ -702,7 +704,7 @@ public class MediaCryptController {
 
         byte[] pwdBytes = pwd.getBytes(StandardCharsets.UTF_8);
         boolean noiseMode = avNoiseDecryptCheck.isSelected();
-        runTask(progress -> {
+        runTask("FPE_DECRYPT", progress -> {
             Path actualInput = input;
             Path tempDir = null;
             try {
@@ -820,7 +822,7 @@ public class MediaCryptController {
         }
     }
 
-    private void runTask(MediaWork work, String successMsg) {
+    private void runTask(String opName, MediaWork work, String successMsg) {
         setRunning(true);
         cancelRequested = false;
         avProgressBar.setProgress(0);
@@ -828,7 +830,7 @@ public class MediaCryptController {
         setVisible(avArchiveProgressBox, false);
         avStatusLabel.setText(Messages.get("action.processing"));
 
-        MediaProgress progress = new MediaProgress() {
+        MediaProgress progress = new LoggingMediaProgress(new MediaProgress() {
             @Override
             public void onProgress(long processed, long total) {
                 double frac = total <= 0 ? 0 : (double) processed / total;
@@ -843,9 +845,10 @@ public class MediaCryptController {
             public boolean isCancelled() {
                 return cancelRequested;
             }
-        };
+        }, "MediaCrypt");
 
-        taskRunner.submit(() -> work.run(progress),
+        String fileName = selectedFile == null ? null : selectedFile.getName();
+        taskRunner.submit(opName, fileName, () -> work.run(progress),
                 () -> {
                     avProgressBar.setProgress(1);
                     avStatusLabel.setText(successMsg);

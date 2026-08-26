@@ -59,6 +59,7 @@ import hbnu.project.ergoutreecrypt.classical.CipherRegistry
 import hbnu.project.ergoutreecrypt.classical.ClassicalCipher
 import hbnu.project.ergoutreecrypt.classical.CipherInfo
 import hbnu.project.ergoutreecrypt.i18n.Messages
+import hbnu.project.ergoutreecrypt.log.LogService
 
 /**
  * 文本加密页面（古典与现代密码）。
@@ -81,7 +82,6 @@ fun ClassicalScreen(onOpenHistory: () -> Unit = {}) {
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
 
     Scaffold(
-        // 容器透明，避免遮住全局背景图层
         containerColor = Color.Transparent,
         topBar = {
             CompactTopBar(
@@ -109,7 +109,6 @@ fun ClassicalScreen(onOpenHistory: () -> Unit = {}) {
                 )
             }
             item { Spacer(modifier = Modifier.height(8.dp)) }
-            // 低调的内存使用指示器（可在设置中关闭）
             if (showMemoryIndicator) {
                 item { MemoryIndicator() }
                 item { Spacer(modifier = Modifier.height(12.dp)) }
@@ -309,8 +308,15 @@ private fun CipherCard(
                             onClick = {
                                 val params = paramStates.mapValues { it.value.value }
                                 try {
+                                    val t0 = System.nanoTime()
+                                    LogService.beginSession("CLASSICAL_ENCRYPT", info.id())
                                     outputText = cipher.encrypt(inputText, params)
+                                    val elapsed = (System.nanoTime() - t0) / 1_000_000L
+                                    LogService.info("Classical", "加密完成 " + info.id(), elapsed)
+                                    LogService.endSession(true, elapsed)
                                 } catch (e: Exception) {
+                                    LogService.error("Classical", "加密失败", e)
+                                    LogService.endSession(false, 0)
                                     outputText = "加密失败：${e.localizedMessage ?: e.javaClass.simpleName}"
                                 }
                             },
@@ -323,8 +329,15 @@ private fun CipherCard(
                             onClick = {
                                 val params = paramStates.mapValues { it.value.value }
                                 try {
+                                    val t0 = System.nanoTime()
+                                    LogService.beginSession("CLASSICAL_DECRYPT", info.id())
                                     outputText = cipher.decrypt(inputText, params)
+                                    val elapsed = (System.nanoTime() - t0) / 1_000_000L
+                                    LogService.info("Classical", "解密完成 " + info.id(), elapsed)
+                                    LogService.endSession(true, elapsed)
                                 } catch (e: Exception) {
+                                    LogService.error("Classical", "解密失败", e)
+                                    LogService.endSession(false, 0)
                                     outputText = "解密失败：${e.localizedMessage ?: e.javaClass.simpleName}"
                                 }
                             },

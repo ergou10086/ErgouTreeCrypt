@@ -19,6 +19,8 @@ import hbnu.project.ergoutreecrypt.header.HeaderReader;
 import hbnu.project.ergoutreecrypt.header.ReadResult;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.keyfile.KeyfileProcessor;
+import hbnu.project.ergoutreecrypt.log.LogPhases;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 import hbnu.project.ergoutreecrypt.password.Passwordless;
 
@@ -60,13 +62,17 @@ public final class Decryptor {
      * @throws Exception 密码错误、MAC 验证失败或 I/O 错误
      */
     public static void decrypt(DecryptRequest req) throws Exception {
-        // 暴力破解防护：检查是否超过失败阈值
+        long t0 = System.nanoTime();
         String inputPath = req.getInputFile();
+        String label = inputPath == null ? "?" : Path.of(inputPath).getFileName().toString();
+        LogService.info("Decryptor", "开始解密 " + label);
+        // 暴力破解防护：检查是否超过失败阈值
         if (!req.isForceDecrypt()
                 && !hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                 .allowAttempt(inputPath)) {
             int max = hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                     .getMaxAttempts();
+            LogService.warn("Decryptor", "暴力破解防护锁定, maxAttempts=" + max);
             throw new IOException(String.format(
                     "too many failed attempts (%d), file temporarily locked", max));
         }
@@ -75,15 +81,16 @@ public final class Decryptor {
         ctx.outputFile = req.getOutputFile();
         ctx.reporter = req.getReporter();
         try {
-            decryptPreprocess(ctx, req);
+            LogPhases.run("Decryptor", "preprocess", () -> decryptPreprocess(ctx, req));
             // 双卷可否认解密已在预处理阶段完成，跳过后续流水线
             if (ctx.dualDeniabilityDone) {
+                LogService.info("Decryptor", "双卷可否认解密完成", (System.nanoTime() - t0) / 1_000_000L);
                 return;
             }
-            decryptReadHeader(ctx, req);
-            decryptDeriveProcessVerify(ctx, req);
-            decryptPayload(ctx, req, true);
-            decryptFinalize(ctx, req);
+            LogPhases.run("Decryptor", "readHeader", () -> decryptReadHeader(ctx, req));
+            LogPhases.run("Decryptor", "deriveProcessVerify", () -> decryptDeriveProcessVerify(ctx, req));
+            LogPhases.run("Decryptor", "decryptPayload", () -> decryptPayload(ctx, req, true));
+            LogPhases.run("Decryptor", "finalize", () -> decryptFinalize(ctx, req));
         } catch (Exception e) {
             cleanupDecrypt(ctx, req);
             // 记录失败尝试（暴力破解防护）
@@ -97,6 +104,7 @@ public final class Decryptor {
                 hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                         .recordFailure(inputPath);
             }
+            LogService.error("Decryptor", "解密失败", e);
             throw e;
         } finally {
             ctx.close();
@@ -104,6 +112,7 @@ public final class Decryptor {
         // 解密成功，重置计数器
         hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                 .recordSuccess(inputPath);
+        LogService.info("Decryptor", "解密完成", (System.nanoTime() - t0) / 1_000_000L);
     }
 
     // ==================== Phase 1: Preprocess ====================

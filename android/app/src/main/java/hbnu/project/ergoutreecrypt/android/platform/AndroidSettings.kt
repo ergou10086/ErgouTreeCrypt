@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import hbnu.project.ergoutreecrypt.log.LogLevel
+import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.settings.SettingsManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -80,6 +82,14 @@ class AndroidSettings(context: Context) {
         it[KEY_ARCHIVE_CUSTOM_ENC] ?: DEF_ARCHIVE_CUSTOM_ENC
     }
 
+    val logLevel: Flow<String> = dataStore.data.map {
+        it[KEY_LOG_LEVEL] ?: DEF_LOG_LEVEL
+    }
+
+    val isLogClearOnNewOp: Flow<Boolean> = dataStore.data.map {
+        it[KEY_LOG_CLEAR_ON_NEW_OP] ?: DEF_LOG_CLEAR_ON_NEW_OP
+    }
+
     // ==================== Android 专属键 ====================
 
     val argon2MobileMode: Flow<String> = dataStore.data.map {
@@ -135,6 +145,8 @@ class AndroidSettings(context: Context) {
             archiveCustomEncryption = prefs[KEY_ARCHIVE_CUSTOM_ENC] ?: DEF_ARCHIVE_CUSTOM_ENC
             themeMode = prefs[KEY_THEME_MODE] ?: DEF_THEME_MODE
             threadCount = prefs[KEY_THREAD_COUNT] ?: DEF_THREAD_COUNT
+            logLevel = prefs[KEY_LOG_LEVEL] ?: DEF_LOG_LEVEL
+            logClearOnNewOp = prefs[KEY_LOG_CLEAR_ON_NEW_OP] ?: DEF_LOG_CLEAR_ON_NEW_OP
         }
         SettingsManager.initFromBridge(bridge)
     }
@@ -248,6 +260,30 @@ class AndroidSettings(context: Context) {
         SettingsManager.setArchiveCustomEncryption(v)
     }
 
+    /**
+     * 设置应用日志级别。
+     *
+     * @param v {@code INFO} 或 {@code TRACE}；其它值视为 INFO
+     */
+    suspend fun setLogLevel(v: String) {
+        val normalized = if (v.equals("TRACE", ignoreCase = true)) "TRACE" else DEF_LOG_LEVEL
+        dataStore.edit { it[KEY_LOG_LEVEL] = normalized }
+        val level = LogLevel.fromName(normalized)
+        SettingsManager.setLogLevel(level)
+        LogService.setLevel(level)
+    }
+
+    /**
+     * 设置新操作开始时是否清空内存日志。
+     *
+     * @param v true 清空；false 一直留存
+     */
+    suspend fun setLogClearOnNewOp(v: Boolean) {
+        dataStore.edit { it[KEY_LOG_CLEAR_ON_NEW_OP] = v }
+        SettingsManager.setLogClearOnNewOp(v)
+        LogService.setClearOnNewOperation(v)
+    }
+
     // ==================== 键定义与默认值 ====================
 
     companion object {
@@ -263,6 +299,8 @@ class AndroidSettings(context: Context) {
         private val KEY_DEFAULT_COMPRESS_FORMAT = stringPreferencesKey("default.compress.format")
         private val KEY_ARCHIVE_PWD_FALLBACK = booleanPreferencesKey("archive.password.fallback")
         private val KEY_ARCHIVE_CUSTOM_ENC = booleanPreferencesKey("archive.custom.encryption")
+        private val KEY_LOG_LEVEL = stringPreferencesKey("log.level")
+        private val KEY_LOG_CLEAR_ON_NEW_OP = booleanPreferencesKey("log.clearOnNewOp")
 
         // --- Android 专属键 ---
         private val KEY_ARGON2_MODE = stringPreferencesKey("mobile.argon2.mode")
@@ -290,6 +328,8 @@ class AndroidSettings(context: Context) {
         private const val DEF_COMPRESS_FORMAT = "ZIP"
         private const val DEF_ARCHIVE_PWD_FALLBACK = false
         private const val DEF_ARCHIVE_CUSTOM_ENC = false
+        private const val DEF_LOG_LEVEL = "INFO"
+        private const val DEF_LOG_CLEAR_ON_NEW_OP = true
         private const val MIN_THREAD_COUNT = 1
         private const val MAX_THREAD_COUNT = 16
     }

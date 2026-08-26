@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -75,7 +74,9 @@ import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
+import hbnu.project.ergoutreecrypt.android.ui.component.LogHistoryActions
 import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.OperationLogPanel
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordStrengthMeter
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
@@ -101,6 +102,7 @@ import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,6 +151,13 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     val busy by OperationCoordinator.busy.collectAsState()
     val isRunning = progress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
+    var logVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(logVisible) {
+        if (logVisible) {
+            delay(80)
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
 
     // ---- 待隐藏文件 ----
     var secretUri by remember { mutableStateOf<Uri?>(null) }
@@ -495,9 +504,11 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             CompactTopBar(
                 title = "隐写",
                 actions = {
-                    IconButton(onClick = onOpenHistory) {
-                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
-                    }
+                    LogHistoryActions(
+                        logVisible = logVisible,
+                        onToggleLog = { logVisible = !logVisible },
+                        onOpenHistory = onOpenHistory
+                    )
                 }
             )
         },
@@ -943,6 +954,8 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                     )
                 }
             }
+
+            OperationLogPanel(visible = logVisible)
 
             Spacer(modifier = Modifier.height(80.dp))
         }

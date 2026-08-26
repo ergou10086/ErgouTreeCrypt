@@ -9,6 +9,7 @@ import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.header.Flags;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.password.PasswordNormalizer;
 import hbnu.project.ergoutreecrypt.password.Passwordless;
 import org.bouncycastle.crypto.digests.SHA3Digest;
@@ -188,6 +189,7 @@ public final class DualDeniability {
      * @throws Exception 密码学或 I/O 错误
      */
     public static void encrypt(EncryptRequest req) throws Exception {
+        LogService.info("DualDeniability", "开始双卷可否认加密");
         ProgressReporter reporter = req.getReporter();
         String realFile = req.getInputFile();
         String decoyFile = req.getDecoyFilePath();
@@ -380,6 +382,7 @@ public final class DualDeniability {
      * @throws Exception 密码错误或 I/O 错误
      */
     public static void decrypt(DecryptRequest req) throws Exception {
+        LogService.info("DualDeniability", "开始双卷可否认解密");
         String inputFile = req.getInputFile();
         String password = Passwordless.effectivePassword(req.getPassword());
         ProgressReporter reporter = req.getReporter();

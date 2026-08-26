@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.encoding.Padding;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,6 +49,9 @@ public final class Verifier {
      * @throws Exception 校验失败（密码错误、header 被篡改、载荷损坏/被篡改）或 I/O 错误
      */
     public static boolean verify(VerifyRequest req) throws Exception {
+        long t0 = System.nanoTime();
+        String label = req.getInputFile() == null ? "?" : Path.of(req.getInputFile()).getFileName().toString();
+        LogService.info("Verifier", "开始校验 " + label);
         OperationContext ctx = new OperationContext();
         ctx.reporter = req.getReporter();
         try {
@@ -56,7 +60,11 @@ public final class Verifier {
             Decryptor.decryptDeriveProcessVerify(ctx, toDecryptRequest(req));
             verifyMacScan(ctx, req, true);
             verifyCompare(ctx, req);
+            LogService.info("Verifier", "校验通过", (System.nanoTime() - t0) / 1_000_000L);
             return true;
+        } catch (Exception e) {
+            LogService.error("Verifier", "校验失败", e);
+            throw e;
         } finally {
             cleanupVerify(ctx);
             ctx.close();

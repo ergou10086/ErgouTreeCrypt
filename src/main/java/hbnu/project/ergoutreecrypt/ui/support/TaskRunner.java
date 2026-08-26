@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
+import hbnu.project.ergoutreecrypt.log.LogService;
 import javafx.application.Platform;
 
 import java.util.concurrent.LinkedBlockingQueue;
@@ -25,7 +26,7 @@ public final class TaskRunner {
             Thread t = new Thread(r, "ergou-crypto-" + seq.getAndIncrement());
             t.setDaemon(true);
             t.setUncaughtExceptionHandler((th, ex) ->
-                    System.err.println("[TaskRunner] uncaught in " + th.getName() + ": " + ex));
+                    LogService.error("TaskRunner", "uncaught in " + th.getName(), ex));
             return t;
         }
     };
@@ -61,11 +62,45 @@ public final class TaskRunner {
      * @param onError   失败回调（FX 线程）
      */
     public void submit(CheckedRunnable work, Runnable onSuccess, java.util.function.Consumer<Throwable> onError) {
+        submit(null, null, work, onSuccess, onError);
+    }
+
+    /**
+     * 提交后台任务，并开启一条操作日志会话。
+     *
+     * @param opName    操作名称；为 null 时不开启会话
+     * @param fileName  相关文件名，可为 null
+     * @param work      后台执行的工作（不在 FX 线程）
+     * @param onSuccess 成功回调（FX 线程）
+     * @param onError   失败回调（FX 线程）
+     */
+    public void submit(String opName, String fileName, CheckedRunnable work,
+                       Runnable onSuccess, java.util.function.Consumer<Throwable> onError) {
+        if (opName != null) {
+            LogService.beginSession(opName, fileName);
+        }
+        if (LogService.isTraceEnabled()) {
+            LogService.trace("TaskRunner", "提交任务 " + (opName == null ? "(anonymous)" : opName));
+        }
+        long startNs = System.nanoTime();
         executor.submit(() -> {
             try {
                 work.run();
+                long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                if (opName != null) {
+                    LogService.endSession(true, elapsed);
+                }
                 Platform.runLater(onSuccess);
             } catch (Throwable t) {
+                long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                if (opName != null) {
+                    if (t instanceof InterruptedException) {
+                        LogService.endSessionCancelled(elapsed);
+                    } else {
+                        LogService.error("TaskRunner", "任务失败", t);
+                        LogService.endSession(false, elapsed);
+                    }
+                }
                 Platform.runLater(() -> onError.accept(t));
             }
         });

@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -82,7 +81,9 @@ import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
 import hbnu.project.ergoutreecrypt.android.ui.component.FilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
+import hbnu.project.ergoutreecrypt.android.ui.component.LogHistoryActions
 import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.OperationLogPanel
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordStrengthMeter
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
@@ -106,6 +107,7 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -172,6 +174,13 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     val isRunning = progress.state == ProgressState.State.RUNNING
             || mediaProgress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
+    var logVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(logVisible) {
+        if (logVisible) {
+            delay(80)
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
 
     // ---- 文件（仅单文件或单文件夹） ----
     var inUri by remember { mutableStateOf<Uri?>(null) }
@@ -691,9 +700,11 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             CompactTopBar(
                 title = "文件加密",
                 actions = {
-                    IconButton(onClick = onOpenHistory) {
-                        Icon(Icons.Outlined.History, contentDescription = "操作历史")
-                    }
+                    LogHistoryActions(
+                        logVisible = logVisible,
+                        onToggleLog = { logVisible = !logVisible },
+                        onOpenHistory = onOpenHistory
+                    )
                 }
             )
         },
@@ -1178,6 +1189,8 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     }
                 }
             } // End ExpandableCard
+
+            OperationLogPanel(visible = logVisible)
 
             Spacer(Modifier.height(80.dp))
         }

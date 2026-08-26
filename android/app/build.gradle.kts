@@ -103,8 +103,8 @@ android {
     }
 }
 
-// 编译前自动同步共享核心代码
-tasks.named("preBuild") { dependsOn(syncCoreLibs) }
+// 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
+tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n) }
 
 // ============================================================
 // 自定义 APK 输出文件名：ErgouTreeCrypt-v1.8.7-release.apk

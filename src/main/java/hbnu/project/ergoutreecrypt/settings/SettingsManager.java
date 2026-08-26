@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.settings;
 
+import hbnu.project.ergoutreecrypt.log.LogLevel;
+
 import java.util.prefs.Preferences;
 
 /**
@@ -27,6 +29,8 @@ public final class SettingsManager {
     private static final String KEY_THREAD_COUNT        = "thread.count";
     private static final String KEY_ARCHIVE_PWD_FALLBACK = "archive.password.fallback";
     private static final String KEY_ARCHIVE_CUSTOM_ENC  = "archive.custom.encryption";
+    private static final String KEY_LOG_LEVEL           = "log.level";
+    private static final String KEY_LOG_CLEAR_ON_NEW_OP = "log.clearOnNewOp";
 
     // ---- 默认值 ----
     private static final boolean DEF_AUTO_DECOMPRESS  = true;
@@ -42,6 +46,8 @@ public final class SettingsManager {
     private static final int     DEF_THREAD_COUNT     = 4;
     private static final boolean DEF_ARCHIVE_PWD_FALLBACK = false;
     private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
+    private static final String  DEF_LOG_LEVEL        = "INFO";
+    private static final boolean DEF_LOG_CLEAR_ON_NEW_OP = true;
     private static final int     MIN_THREAD_COUNT     = 1;
     private static final int     MAX_THREAD_COUNT     = 16;
 
@@ -164,5 +170,41 @@ public final class SettingsManager {
      */
     public static void setArchiveCustomEncryption(boolean v) {
         PREFS.putBoolean(KEY_ARCHIVE_CUSTOM_ENC, v);
+    }
+
+    /**
+     * 获取应用日志级别。
+     *
+     * @return {@link LogLevel#INFO}（默认）或 {@link LogLevel#TRACE}
+     */
+    public static LogLevel getLogLevel() {
+        return LogLevel.fromName(PREFS.get(KEY_LOG_LEVEL, DEF_LOG_LEVEL));
+    }
+
+    /**
+     * 设置应用日志级别。
+     *
+     * @param v 级别；null 或非 TRACE 均视为 INFO
+     */
+    public static void setLogLevel(LogLevel v) {
+        PREFS.put(KEY_LOG_LEVEL, v == LogLevel.TRACE ? "TRACE" : DEF_LOG_LEVEL);
+    }
+
+    /**
+     * 新加解密等操作开始时是否清空内存日志。
+     *
+     * @return true 表示每次新操作清空（默认）
+     */
+    public static boolean isLogClearOnNewOp() {
+        return PREFS.getBoolean(KEY_LOG_CLEAR_ON_NEW_OP, DEF_LOG_CLEAR_ON_NEW_OP);
+    }
+
+    /**
+     * 设置新操作开始时是否清空内存日志。
+     *
+     * @param v true 清空；false 一直留存
+     */
+    public static void setLogClearOnNewOp(boolean v) {
+        PREFS.putBoolean(KEY_LOG_CLEAR_ON_NEW_OP, v);
     }
 }

@@ -2,10 +2,15 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import hbnu.project.ergoutreecrypt.android.platform.LoggingMediaProgress
+import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
+import hbnu.project.ergoutreecrypt.android.platform.logFileName
+import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptOptions
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaProgress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +73,10 @@ class MediaCryptViewModel : ViewModel() {
         currentJob?.cancel()
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
         currentJob = viewModelScope.launch(Dispatchers.IO) {
+            LogService.beginSession("FPE_ENCRYPT", logFileName(input))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
             try {
                 val options = MediaCryptOptions.builder()
                     .profile(profile)
@@ -75,13 +84,19 @@ class MediaCryptViewModel : ViewModel() {
                     .storeIntegrity(storeIntegrity)
                     .build()
                 val pwdBytes = password.toByteArray(StandardCharsets.UTF_8)
-                val progressCallback = createMediaProgress()
+                val progressCallback = LoggingMediaProgress(createMediaProgress(), "MediaCrypt")
 
                 codec.encrypt(Paths.get(input), Paths.get(output), pwdBytes, options, progressCallback)
+                success = true
                 _progress.update { it.copy(state = ProgressState.State.DONE, progress = 1f) }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException) {
+                cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: Exception) {
+                LogService.error("FPE_ENCRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -89,7 +104,12 @@ class MediaCryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }
@@ -112,13 +132,17 @@ class MediaCryptViewModel : ViewModel() {
         currentJob?.cancel()
         _progress.update { it.copy(state = ProgressState.State.RUNNING) }
         currentJob = viewModelScope.launch(Dispatchers.IO) {
+            LogService.beginSession("FPE_DECRYPT", logFileName(input))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
             try {
                 val inputPath = Paths.get(input)
                 val pwdBytes = password.toByteArray(StandardCharsets.UTF_8)
-                val progressCallback = createMediaProgress()
+                val progressCallback = LoggingMediaProgress(createMediaProgress(), "MediaCrypt")
 
-                // 噪音文件检测：确认文件确实含有本工具的加密元数据
                 if (noiseCheck && !codec.isEncrypted(inputPath)) {
+                    LogService.error("FPE_DECRYPT", "文件不含 EGTC-AVE 加密元数据")
                     _progress.update {
                         it.copy(
                             state = ProgressState.State.ERROR,
@@ -128,16 +152,14 @@ class MediaCryptViewModel : ViewModel() {
                     return@launch
                 }
 
-                // 解密前完整性校验：若文件含完整性数据则自动校验
                 try {
                     val ok = codec.verifyIntegrity(inputPath, pwdBytes, MediaProgress.NONE)
                     if (!ok) {
-                        // 无完整性数据存储，继续解密但给出提示
                         _progress.update { it.copy(info = "文件未存储完整性校验数据，跳过完整性验证") }
                     }
                 } catch (e: Exception) {
-                    // 完整性校验失败 → 密码错误或文件被篡改
                     val msg = e.localizedMessage ?: e.javaClass.simpleName
+                    LogService.error("FPE_DECRYPT", "完整性校验失败", e)
                     _progress.update {
                         it.copy(
                             state = ProgressState.State.ERROR,
@@ -148,10 +170,16 @@ class MediaCryptViewModel : ViewModel() {
                 }
 
                 codec.decrypt(inputPath, Paths.get(output), pwdBytes, progressCallback)
+                success = true
                 _progress.update { it.copy(state = ProgressState.State.DONE, progress = 1f, info = "") }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException) {
+                cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: Exception) {
+                LogService.error("FPE_DECRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
@@ -159,7 +187,12 @@ class MediaCryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                // 令牌校验释放：过期任务的释放不会误清新任务
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
                 OperationCoordinator.release(token)
             }
         }

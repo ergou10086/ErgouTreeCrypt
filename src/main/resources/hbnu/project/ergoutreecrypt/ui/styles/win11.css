@@ -2152,5 +2152,66 @@
  * // fadeIn.play();
  *
  * ==========================================================================
+ *                           END OF USAGE NOTES
+ * ========================================================================== */
+
+/* ==========================================================================
+ * SECTION — 日志伴生窗 (Log Companion)
+ * ========================================================================== */
+
+.log-body {
+    -fx-padding: 8 14 14 14;
+    -fx-spacing: 8;
+}
+
+.log-footer {
+    -fx-padding: 4 0 0 0;
+}
+
+.log-list {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 6;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 6;
+    -fx-padding: 4;
+}
+
+.log-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 3 8 3 8;
+    -fx-font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -text-primary;
+}
+
+.log-list .list-cell:filled:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.log-list .list-cell:filled:selected {
+    -fx-background-color: -accent-subtle;
+}
+
+.log-list .list-cell.log-error {
+    -fx-text-fill: -danger;
+}
+
+.log-list .list-cell.log-warn {
+    -fx-text-fill: -warning;
+}
+
+.log-list .list-cell.log-info {
+    -fx-text-fill: -text-primary;
+}
+
+.log-list .list-cell.log-trace {
+    -fx-text-fill: -text-secondary;
+}
+
+.log-list .placeholder .label {
+    -fx-text-fill: -text-tertiary;
+}
+
+/* ==========================================================================
  *                           END OF FILE
  * ========================================================================== */

@@ -69,6 +69,8 @@ public class MainController {
     private Menu historyMenu;
     @FXML
     private MenuItem historyMenuItem;
+    @FXML
+    private Menu logsMenu;
 
     // ---- 标签页 ----
     @FXML
@@ -403,6 +405,12 @@ public class MainController {
         // 默认钓鱼文件按钮
         decoyFileDefaultBtn.setOnAction(e -> setDefaultDecoyFile());
 
+        // 顶栏「日志」当作按钮：展开时立刻收起并切换伴生窗，避免多余的「打开日志」子菜单
+        logsMenu.setOnShown(e -> {
+            logsMenu.hide();
+            Platform.runLater(() -> LogCompanionWindow.toggle(stage()));
+        });
+
         setupInfoTooltips();
         applyTexts();
         switchMode(Mode.ENCRYPT);
@@ -539,6 +547,8 @@ public class MainController {
         aboutMenuItem.setText(Messages.get("menu.about"));
         historyMenu.setText(Messages.get("menu.history"));
         historyMenuItem.setText(Messages.get("menu.history.open"));
+        logsMenu.setText(Messages.get("menu.logs"));
+        LogCompanionWindow.applyTextsIfOpen();
         splitCheck.setText(Messages.get("options.split"));
         splitUnitLabel.setText(Messages.get("options.split.size"));
         encryptDepthLabel.setText(Messages.get("options.encryptDepth"));
@@ -639,6 +649,7 @@ public class MainController {
 
     @FXML
     private void onClose() {
+        LogCompanionWindow.closeIfOpen();
         themeManager.shutdown();
         taskRunner.shutdown();
         if (mediaViewController != null) {
@@ -1036,9 +1047,9 @@ public class MainController {
             req.setKeyfiles(MainViewSupport.toPaths(keyfiles));
         }
 
-        FxProgressReporter reporter = newReporter();
+        ProgressReporter reporter = newReporter();
         req.setReporter(reporter);
-        runTask(() -> Verifier.verify(req), Messages.get("status.success.verify"));
+        runTask("VERIFY", () -> Verifier.verify(req), Messages.get("status.success.verify"));
     }
 
     private void startEncrypt(String pwd) {
@@ -1076,9 +1087,9 @@ public class MainController {
             }
             opts.threadCount = SettingsManager.getThreadCount();
             opts.encryptDepth = encryptDepthSpinner.getValue();
-            FxProgressReporter reporter = newReporter();
-            opts.reporter = reporter;
-            runTask(() -> {
+            ProgressReporter reporter = newReporter();
+        opts.reporter = reporter;
+        runTask("GENERIC_ENCRYPT", () -> {
                 FolderCrypt.encryptFolder(selectedFile.toPath(), Path.of(outputDir), opts);
                 // 文件夹加密结果位于 outputDir 下（内部工作目录归档后会被删除，故记录 outputDir）
                 HistoryService.record(OperationType.GENERIC_ENCRYPT, selectedFile.getName(),
@@ -1120,7 +1131,7 @@ public class MainController {
             req.setKeyfileOrdered(keyfileOrderedCheck.isSelected());
         }
 
-        FxProgressReporter reporter = newReporter();
+        ProgressReporter reporter = newReporter();
         req.setReporter(reporter);
         runTask(() -> {
             Encryptor.encrypt(req);
@@ -1158,7 +1169,7 @@ public class MainController {
             req.setKeyfiles(MainViewSupport.toPaths(keyfiles));
         }
 
-        FxProgressReporter reporter = newReporter();
+        ProgressReporter reporter = newReporter();
         req.setReporter(reporter);
         runTask(() -> {
             Decryptor.decrypt(req);
@@ -1221,11 +1232,11 @@ public class MainController {
         setVisible(archiveProgressBox, false);
         statusLabel.setText(Messages.get("status.decrypting"));
 
-        FxProgressReporter reporter = newReporter();
+        ProgressReporter reporter = newReporter();
         opts.reporter = reporter;
 
         final Path finalOutDir = outDir;
-        taskRunner.submit(() -> {
+        taskRunner.submit("GENERIC_DECRYPT", input.getFileName().toString(), () -> {
             try {
                 FolderCrypt.decryptAuto(input, finalOutDir, opts);
             } catch (Exception firstErr) {
@@ -1274,7 +1285,7 @@ public class MainController {
         return dlg.showAndWait().orElse("");
     }
 
-    private FxProgressReporter newReporter() {
+    private ProgressReporter newReporter() {
         FxProgressReporter reporter = new FxProgressReporter(
                 statusLabel::setText,
                 (fraction, info) -> {
@@ -1290,16 +1301,28 @@ public class MainController {
                 visible -> setVisible(archiveProgressBox, visible),
                 cancelBtn::setVisible);
         activeReporter = reporter;
-        return reporter;
+        return new LoggingProgressReporter(reporter, "Volume");
     }
 
     private void runTask(TaskRunner.CheckedRunnable work, String successMsg) {
+        runTask(mode == Mode.ENCRYPT ? "GENERIC_ENCRYPT" : "GENERIC_DECRYPT", work, successMsg);
+    }
+
+    /**
+     * 提交后台任务并开启日志会话。
+     *
+     * @param opName     操作名称
+     * @param work       后台工作
+     * @param successMsg 成功文案
+     */
+    private void runTask(String opName, TaskRunner.CheckedRunnable work, String successMsg) {
         setRunning(true);
         progressBar.setProgress(0);
         archiveProgressBar.setProgress(0);
         setVisible(archiveProgressBox, false);
         statusLabel.setText(Messages.get("action.processing"));
-        taskRunner.submit(work,
+        String fileName = selectedFile == null ? null : selectedFile.getName();
+        taskRunner.submit(opName, fileName, work,
                 () -> {
                     progressBar.setProgress(1);
                     statusLabel.setText(successMsg);

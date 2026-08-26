@@ -401,6 +401,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     archivePassword = archivePassword.ifEmpty { null },
                     forceDecrypt = force,
                     recursiveExtract = recursive,
+                    autoUnzip = autoUnzip,
                     keyfiles = kfPaths.toList()
                 )
                 return@launch

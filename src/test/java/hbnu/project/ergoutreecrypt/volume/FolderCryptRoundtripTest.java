@@ -200,7 +200,7 @@ class FolderCryptRoundtripTest {
 
     /**
      * 嵌套压缩包：外层 zip 内含一个"加密后压缩"得到的 zip（其中是多个 .ergou）。
-     * 解密外层 zip 应递归解压解密，输出文件夹中包含全部解密结果。
+     * 默认深度 2 会解压解密这一层嵌套，输出文件夹中包含全部解密结果。
      */
     @Test
     void nestedArchiveOfEncryptedFilesRoundtrip() throws Exception {
@@ -239,7 +239,6 @@ class FolderCryptRoundtripTest {
             Files.createDirectories(decOut);
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
-            dop.recursiveExtract = true;
             dop.rsCodecs = new RsCodecs();
             FolderCrypt.decryptAuto(outerZip, decOut, dop);
 
@@ -254,7 +253,7 @@ class FolderCryptRoundtripTest {
     }
 
     /**
-     * 默认不递归：解密外层 zip 只解压一层，内部嵌套的 zip 应原样输出，不被深入解密。
+     * 默认嵌套深度为 2：外层 + 一层嵌套会被解压解密；第三层压缩包原样输出。
      */
     @Test
     void nestedArchiveNotRecursedByDefault() throws Exception {
@@ -274,8 +273,8 @@ class FolderCryptRoundtripTest {
             FolderCrypt.encryptFolder(in, encOut, eo);
             Path innerZip = encOut.resolve("payload.zip");
 
-            Path outerZip = tmp.resolve("outer.zip");
-            try (OutputStream fos = Files.newOutputStream(outerZip);
+            Path midZip = tmp.resolve("mid.zip");
+            try (OutputStream fos = Files.newOutputStream(midZip);
                  ZipArchiveOutputStream zos = new ZipArchiveOutputStream(fos)) {
                 ZipArchiveEntry entry = new ZipArchiveEntry(innerZip.getFileName().toString());
                 zos.putArchiveEntry(entry);
@@ -283,18 +282,25 @@ class FolderCryptRoundtripTest {
                 zos.closeArchiveEntry();
             }
 
+            Path outerZip = tmp.resolve("outer.zip");
+            try (OutputStream fos = Files.newOutputStream(outerZip);
+                 ZipArchiveOutputStream zos = new ZipArchiveOutputStream(fos)) {
+                ZipArchiveEntry entry = new ZipArchiveEntry(midZip.getFileName().toString());
+                zos.putArchiveEntry(entry);
+                Files.copy(midZip, zos);
+                zos.closeArchiveEntry();
+            }
+
             Path decOut = tmp.resolve("decout");
             Files.createDirectories(decOut);
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
-            // recursiveExtract 默认为 false
             dop.rsCodecs = new RsCodecs();
             FolderCrypt.decryptAuto(outerZip, decOut, dop);
 
-            // 内部 zip 被原样拷贝输出，one.txt 不应出现（未被深入解密）
             Path passthrough = findPathOrNull(decOut, "payload.zip");
-            assertNotNull(passthrough, "嵌套压缩包应被原样输出");
-            assertNull(findPathOrNull(decOut, "one.txt"), "默认不应深入解密内部内容");
+            assertNotNull(passthrough, "第三层压缩包应被原样输出");
+            assertNull(findPathOrNull(decOut, "one.txt"), "默认深度 2 不应深入第三层");
         } finally {
             rmrf(tmp);
         }

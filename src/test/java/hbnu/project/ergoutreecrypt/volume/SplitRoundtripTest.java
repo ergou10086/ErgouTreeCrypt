@@ -145,8 +145,8 @@ class SplitRoundtripTest {
     }
 
     /**
-     * 勾选「解压后解密」对「分卷后再压缩」得到的普通 ZIP 无额外影响：
-     * 选中压缩包时 {@link FolderCrypt#decryptAuto} 总会先解压再解密碎片。
+     * 勾选「解密后解压」对「分卷后再压缩」得到的普通 ZIP 无额外影响：
+     * 选中压缩包时 {@link FolderCrypt#decryptAuto} 在解压后解密开启（默认）时总会先解压再解密碎片。
      *
      * @throws Exception 加解密失败
      */
@@ -279,7 +279,7 @@ class SplitRoundtripTest {
     }
 
     /**
-     * 默认加密深度=2 时，二级子目录会被打成 zip 再分卷；不勾选 autoUnzip 时明文仍在 zip 内。
+     * 默认加密深度=2 时，二级子目录会被打成 zip 再分卷；不勾选解密后解压时明文仍在 zip 内。
      *
      * @throws Exception 加解密失败
      */
@@ -303,7 +303,7 @@ class SplitRoundtripTest {
             Path decNo = tmp.resolve("dec-no");
             Files.createDirectories(decNo);
             FolderCrypt.decryptAuto(encFolder, decNo, decryptOpts(false));
-            assertNotNull(findPath(decNo, "nested.zip"), "未勾选解压后解密时应留下明文 zip");
+            assertNotNull(findPath(decNo, "nested.zip"), "未勾选解密后解压时应留下明文 zip");
             assertNull(findPath(decNo, "two.bin"));
 
             Path decYes = tmp.resolve("dec-yes");
@@ -601,7 +601,7 @@ class SplitRoundtripTest {
     }
 
     /**
-     * 深度=1 时子目录打成 zip.ergou 再分卷；勾选 autoUnzip 应展开明文 zip。
+     * 深度=1 时子目录打成 zip.ergou 再分卷；勾选解密后解压应展开明文 zip。
      *
      * @throws Exception 加解密失败
      */
@@ -752,7 +752,7 @@ class SplitRoundtripTest {
     /**
      * 构造解密选项。
      *
-     * @param autoUnzip 是否解密后自动解压新出现的归档（深目录 zip.ergou）
+     * @param autoUnzip 是否解密后解压新出现的归档（深目录 zip.ergou）
      * @return 选项
      */
     private static FolderCrypt.DecryptOptions decryptOpts(boolean autoUnzip) {

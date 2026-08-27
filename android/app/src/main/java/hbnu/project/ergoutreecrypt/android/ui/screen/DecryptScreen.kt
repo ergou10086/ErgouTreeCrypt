@@ -106,9 +106,10 @@ import java.io.File
 
 // ---- 桌面端对齐提示 ----
 private val TIP_FORCE = "即使检测到数据损坏也强制解密，尽可能恢复未损坏部分的数据。"
-private val TIP_AUTO_UNZIP = "如果输入的是压缩包，或文件夹中包含压缩包，解密后自动解压其中的归档文件，并递归解密解压出的 .ergou 加密文件。如果压缩包需要密码，会弹出密码输入框。"
+private val TIP_AUTO_UNZIP = "输入为明文压缩包时，先解压再解密其中的加密文件，对分卷有效。未勾选「递归解压嵌套压缩包」时最多处理 2 层嵌套。如果压缩包需要密码，请在下方输入。"
+private val TIP_DECRYPT_THEN_EXTRACT = "针对 zip.ergou / 7z.ergou 等加密归档：解密后保留明文压缩包，并解压到同名文件夹且保留内部目录结构。不会解密解压出来的 .ergou 文件。"
 private val TIP_VERIFY = "解密前先校验文件完整性，确认数据未被篡改后再进行解密。"
-private val TIP_RECURSIVE = "默认仅解压最外层一层压缩包。开启后会递归深入解压解密内部的嵌套压缩包。递归解压存在压缩炸弹等风险，请确认来源可信后再使用。"
+private val TIP_RECURSIVE = "未勾选时，解压后解密与解密后解压最多处理 2 层嵌套压缩包；勾选后最多处理 5 层。递归解压存在压缩炸弹等风险，请确认来源可信后再使用。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
 private fun fmtSize(bytes: Long): String {
@@ -202,6 +203,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 解密选项（初始值从 DataStore 设置中加载） ----
     var force by remember { mutableStateOf(false) }
     var autoUnzip by remember { mutableStateOf(true) }
+    var decryptThenExtract by remember { mutableStateOf(false) }
     var verifyFirst by remember { mutableStateOf(false) }
     var recursive by remember { mutableStateOf(false) }
     var recombine by remember { mutableStateOf(false) }
@@ -410,7 +412,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     archivePassword = archivePassword.ifEmpty { null },
                     forceDecrypt = force,
                     recursiveExtract = recursive,
-                    autoUnzip = autoUnzip,
+                    extractThenDecrypt = autoUnzip,
+                    decryptThenExtract = decryptThenExtract,
                     keyfiles = kfPaths.toList()
                 )
                 return@launch
@@ -422,7 +425,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             req.outputFile = outFile
             req.password = password
             req.setForceDecrypt(force)
-            req.setAutoUnzip(autoUnzip)
+            req.setDecryptThenExtract(decryptThenExtract)
+            req.setRecursiveExtract(recursive)
             req.setVerifyFirst(verifyFirst)
             req.setRecombine(recombine)
             if (kfPaths.isNotEmpty()) req.keyfiles = kfPaths.toList()
@@ -894,6 +898,12 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                     )
                 }
+
+                Spacer(Modifier.height(6.dp))
+
+                // ---- 解密后解压 ----
+                OptionRow("解密后解压", decryptThenExtract, { decryptThenExtract = it },
+                    TIP_DECRYPT_THEN_EXTRACT, enabled = !mediaDecryptMode)
 
                 Spacer(Modifier.height(6.dp))
 

@@ -103,7 +103,7 @@ class EncryptDepthTest {
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
             dop.rsCodecs = new RsCodecs();
-            dop.autoUnzip = true; // 自动解压解密后新出现的归档
+            dop.decryptThenExtract = true; // 兼容别名：触发解密后解压
             // 解密工作目录
             FolderCrypt.decryptAuto(work, decOut, dop);
 
@@ -151,7 +151,7 @@ class EncryptDepthTest {
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
             dop.rsCodecs = new RsCodecs();
-            dop.autoUnzip = true;
+            dop.decryptThenExtract = true;
             FolderCrypt.decryptAuto(zip, decOut, dop);
 
             byte[] r0 = findFile(decOut, "f0.txt");
@@ -202,7 +202,7 @@ class EncryptDepthTest {
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
             dop.rsCodecs = new RsCodecs();
-            dop.autoUnzip = true;
+            dop.decryptThenExtract = true;
             FolderCrypt.decryptAuto(work, decOut, dop);
 
             assertArrayEquals(rand(100), findFile(decOut, "f0.txt"));
@@ -248,7 +248,7 @@ class EncryptDepthTest {
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
             dop.rsCodecs = new RsCodecs();
-            dop.autoUnzip = true;
+            dop.decryptThenExtract = true;
             FolderCrypt.decryptAuto(work, decOut, dop);
 
             assertArrayEquals(rand(100), findFile(decOut, "f0.txt"));
@@ -294,7 +294,7 @@ class EncryptDepthTest {
             FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
             dop.password = "pw";
             dop.rsCodecs = new RsCodecs();
-            dop.autoUnzip = true;
+            dop.decryptThenExtract = true;
             FolderCrypt.decryptAuto(work, decOut, dop);
 
             assertArrayEquals(rand(50), findFile(decOut, "f0.txt"));

@@ -7,6 +7,10 @@
       <excludeFolder url="file://$MODULE_DIR$/android/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/android/jcef" />
       <excludeFolder url="file://$MODULE_DIR$/docs" />
+      <excludeFolder url="file://$MODULE_DIR$/android/app/build" />
+      <excludeFolder url="file://$MODULE_DIR$/android/build" />
+      <excludeFolder url="file://$MODULE_DIR$/android/shared-test/build" />
+      <excludeFolder url="file://$MODULE_DIR$/temp" />
     </content>
   </component>
 </module>

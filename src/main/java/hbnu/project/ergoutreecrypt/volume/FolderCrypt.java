@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.volume;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
@@ -39,10 +40,11 @@ import java.util.stream.Stream;
  *
  * <h2>解密（自动识别输入类型）</h2>
  * <ul>
- *   <li>压缩包：解压后逐个解密其中的加密文件。</li>
+ *   <li>明文压缩包（解压后解密）：先解压再逐个解密其中的加密文件 / 分卷。</li>
  *   <li>分卷碎片文件夹（含 {@code name.0, name.1, ...}）：合并后解密为单个文件。</li>
  *   <li>普通文件夹：递归解密其中所有加密文件（含其下的分卷碎片子文件夹）。</li>
- *   <li>单个 {@code .ergou}/{@code .pcv} 文件：直接解密。</li>
+ *   <li>单个 {@code .ergou}/{@code .pcv} 文件：直接解密；
+ *       若勾选解密后解压且产物为归档，再解压到同名文件夹并保留压缩包。</li>
  * </ul>
  *
  * @author ErgouTree
@@ -214,11 +216,17 @@ public final class FolderCrypt {
                 decryptRecombine(input.resolve(chunkBase), out, opts);
                 stats.decrypted.incrementAndGet();
                 result.addSuccess(chunkBase);
+                maybePostExtractSingle(out, opts, stats);
             } else {
                 decryptDirectory(input, outputDir, input.getFileName().toString(), opts, stats, 0, false);
             }
         } else if (ArchiveExtractor.isArchive(input)) {
-            decryptArchive(input, outputDir, opts, stats, 0);
+            if (opts.extractThenDecrypt) {
+                decryptArchive(input, outputDir, opts, stats, 0);
+            } else {
+                throw new NoDecryptableFilesException(
+                        "未勾选解压后解密，无法将明文压缩包作为加密文件处理：" + input.getFileName());
+            }
         } else {
             // 单个文件：可能是分卷碎片、加密文件、或不可解密文件
             String fn = input.getFileName().toString();
@@ -234,6 +242,7 @@ public final class FolderCrypt {
                 decryptRecombine(Path.of(base), out, opts);
                 stats.decrypted.incrementAndGet();
                 result.addSuccess(Path.of(base).getFileName().toString());
+                maybePostExtractSingle(out, opts, stats);
             } else if (!isEncryptedName(fn)) {
                 throw new NoDecryptableFilesException(
                         "无法解密：文件后缀不是受支持的加密格式（.ergou/.pcv）：" + input.getFileName());
@@ -243,6 +252,7 @@ public final class FolderCrypt {
                 decryptSingle(input, out, opts);
                 stats.decrypted.incrementAndGet();
                 result.addSuccess(fn);
+                maybePostExtractSingle(out, opts, stats);
             }
         }
 
@@ -261,8 +271,9 @@ public final class FolderCrypt {
     /**
      * 解密压缩包：解压（可带密码）后逐个解密内部加密文件。
      *
-     * <p>嵌套压缩包仅在 {@link DecryptOptions#recursiveExtract} 为 true 时才继续深入；
-     * 默认只解压最外层一层。
+     * <p>嵌套压缩包的处理深度由 {@link DecryptOptions#recursiveExtract} 决定：
+     * 未勾选最多 {@link ArchivePostExtract#DEFAULT_MAX_DEPTH} 层，
+     * 勾选最多 {@link ArchivePostExtract#RECURSIVE_MAX_DEPTH} 层。
      *
      * @param depth 当前解压深度（最外层为 0）
      */
@@ -307,13 +318,14 @@ public final class FolderCrypt {
             decryptRecombine(dir.resolve(selfBase), out, opts);
             stats.decrypted.incrementAndGet();
             ensureDecryptResult(opts).addSuccess(selfBase);
+            maybePostExtractSingle(out, opts, stats);
             return;
         }
 
         Path mirrorRoot = outputDir.resolve(mirrorName);
         Files.createDirectories(mirrorRoot);
 
-        boolean allowNested = opts.recursiveExtract;
+        boolean allowNested = (depth + 1) < archiveDepthLimit(opts);
         List<Unit> units = collectUnits(dir, stats, allowNested);
         ProgressReporter reporter = opts.reporter;
         int total = units.size();
@@ -361,7 +373,7 @@ public final class FolderCrypt {
 
         processJobs(jobs, threads, false, reporter, progress, completed, total, result);
 
-        if (opts.autoUnzip) {
+        if (wantsDecryptThenExtract(opts)) {
             postExtractNewArchives(mirrorRoot, opts, stats, depth, reporter);
         }
 
@@ -371,82 +383,87 @@ public final class FolderCrypt {
     }
 
     /**
-     * 扫描并解压 .zip.ergou 解密后新出现的归档文件（来自迭代加密深目录）。
+     * 扫描解密输出中新出现的明文归档，解压到同名文件夹并保留压缩包。
      *
-     * <p>深目录归档内是原始明文文件（非加密文件），因此仅需普通解压，
-     * 无需再调用解密流程。解压后删除中间归档文件以保持输出整洁。
+     * <p>不解密解压出来的 {@code .ergou}。带密码归档快速失败并保留原文件。
      *
-     * <p>带密码保护的归档（用户加密前本身就是加密压缩包）无法在无密码时正确解压：
-     * 若强行按明文解压，会静默得到空文件或残留部分碎片，甚至删掉原包。因此这里
-     * 采用「快速失败」策略——检测到带密码归档时保留原文件、跳过自动解压，
-     * 交由用户用原压缩包密码手动解压，避免内容损坏。
+     * @param mirrorRoot 解密镜像根目录
+     * @param opts       解密选项
+     * @param stats      统计
+     * @param depth      当前归档层数
+     * @param reporter   进度回调
+     * @throws Exception 用户取消
      */
     private static void postExtractNewArchives(Path mirrorRoot, DecryptOptions opts,
                                                 DecryptStats stats, int depth,
                                                 ProgressReporter reporter) throws Exception {
-        List<Path> newArchives = new ArrayList<>();
-        try (Stream<Path> walk = Files.walk(mirrorRoot, 5)) {
-            for (Path f : walk.toList()) {
-                if (Files.isRegularFile(f) && ArchiveExtractor.isArchive(f)) {
-                    newArchives.add(f);
-                }
-            }
-        }
+        int limit = archiveDepthLimit(opts);
+        ArchivePostExtract.extractNewArchives(mirrorRoot, depth, limit, reporter,
+                postExtractListener(opts, stats, reporter));
+    }
 
-        for (Path archive : newArchives) {
-            if (reporter != null && reporter.isCancelled()) {
-                throw new InterruptedException("cancelled");
-            }
-            // 快速失败：带密码的归档无法无密码解压，保留原文件并跳过，避免静默损坏
-            if (isPasswordProtectedArchive(archive)) {
-                stats.archivesPassthrough.incrementAndGet();
-                ensureDecryptResult(opts).addSkipped(1);
-                if (reporter != null) {
-                    reporter.setStatus(Messages.format("status.skipped",
-                            archive.getFileName(),
-                            Messages.get("status.archive.passwordProtected")),
-                            ProgressPhase.ARCHIVE);
-                }
-                continue;
-            }
-            try {
-                if (reporter != null) {
-                    reporter.setStatus(Messages.format("status.extracting.file",
-                            archive.getFileName()), ProgressPhase.ARCHIVE);
-                }
-                // 深目录归档内是明文文件，直接解压即可（无需解密）
-                Path extractDest = archive.getParent();
-                ArchiveExtractor.extract(archive, extractDest, null);
-                stats.decrypted.incrementAndGet();
-                ensureDecryptResult(opts).addSuccess(archive.getFileName().toString());
-                // 删除中间归档文件
-                Files.deleteIfExists(archive);
-            } catch (Exception e) {
-                ensureDecryptResult(opts).addFailure(archive.getFileName().toString(),
-                        e.getMessage());
-                if (reporter != null) {
-                    reporter.setStatus(Messages.format("status.skipped",
-                            archive.getFileName(), e.getMessage()));
-                }
-            }
+    /**
+     * 单文件 / 分卷合并解密完成后，若勾选解密后解压且产物为归档，则解压到同名文件夹。
+     *
+     * @param decrypted 解密输出文件
+     * @param opts      解密选项
+     * @param stats     统计
+     * @throws Exception 解压失败或用户取消
+     */
+    private static void maybePostExtractSingle(Path decrypted, DecryptOptions opts,
+                                               DecryptStats stats) throws Exception {
+        if (!wantsDecryptThenExtract(opts) || decrypted == null) {
+            return;
+        }
+        try {
+            ArchivePostExtract.extractIfArchive(decrypted, 0, archiveDepthLimit(opts),
+                    opts.reporter, postExtractListener(opts, stats, opts.reporter));
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (Exception e) {
+            ensureDecryptResult(opts).addFailure(decrypted.getFileName().toString(), e.getMessage());
+            LogService.warn("FolderCrypt", "解密后解压失败，已保留 " + decrypted.getFileName()
+                    + ": " + e.getMessage());
         }
     }
 
     /**
-     * 检测归档是否为带密码保护（原生加密或本工具整体包裹加密）。
+     * 将解密后解压结果写入批处理统计。
      *
-     * <p>检测失败时按「需要密码」处理，避免对加密内容静默解压造成损坏。
-     *
-     * @param archive 归档路径
-     * @return true 表示该归档需要密码才能解压
+     * @param opts     解密选项
+     * @param stats    统计
+     * @param reporter 进度回调
+     * @return 监听器
      */
-    private static boolean isPasswordProtectedArchive(Path archive) {
-        try {
-            return ArchiveExtractor.hasEncryptedEntries(archive);
-        } catch (IOException e) {
-            // 无法判定时按需密码处理，快速失败，避免静默损坏
-            return true;
-        }
+    private static ArchivePostExtract.Listener postExtractListener(DecryptOptions opts,
+                                                                   DecryptStats stats,
+                                                                   ProgressReporter reporter) {
+        return new ArchivePostExtract.Listener() {
+            @Override
+            public void onExtracted(Path archive, Path destDir) {
+                stats.decrypted.incrementAndGet();
+                ensureDecryptResult(opts).addSuccess(archive.getFileName().toString());
+            }
+
+            @Override
+            public void onSkipped(Path archive, String reason) {
+                stats.archivesPassthrough.incrementAndGet();
+                ensureDecryptResult(opts).addSkipped(1);
+                if (reporter != null) {
+                    reporter.setStatus(Messages.format("status.skipped",
+                            archive.getFileName(), reason), ProgressPhase.ARCHIVE);
+                }
+            }
+
+            @Override
+            public void onFailed(Path archive, String reason) {
+                ensureDecryptResult(opts).addFailure(archive.getFileName().toString(), reason);
+                if (reporter != null) {
+                    reporter.setStatus(Messages.format("status.skipped",
+                            archive.getFileName(), reason));
+                }
+            }
+        };
     }
 
     /**
@@ -725,6 +742,9 @@ public final class FolderCrypt {
 
     /**
      * 浅克隆解密选项，用于嵌套调用时覆写 threadCount 为 1。
+     *
+     * @param opts 源选项
+     * @return 浅拷贝
      */
     private static DecryptOptions cloneDecryptOptions(DecryptOptions opts) {
         DecryptOptions cloned = new DecryptOptions();
@@ -732,6 +752,8 @@ public final class FolderCrypt {
         cloned.archivePassword = opts.archivePassword;
         cloned.forceDecrypt = opts.forceDecrypt;
         cloned.recursiveExtract = opts.recursiveExtract;
+        cloned.extractThenDecrypt = opts.extractThenDecrypt;
+        cloned.decryptThenExtract = opts.decryptThenExtract;
         cloned.autoUnzip = opts.autoUnzip;
         cloned.keyfiles = opts.keyfiles;
         cloned.rsCodecs = opts.rsCodecs;
@@ -739,6 +761,26 @@ public final class FolderCrypt {
         cloned.threadCount = opts.threadCount;
         cloned.batchResult = opts.batchResult;
         return cloned;
+    }
+
+    /**
+     * 解压后解密 / 解密后解压共用的嵌套归档层数上限。
+     *
+     * @param opts 解密选项
+     * @return 2 或 5
+     */
+    private static int archiveDepthLimit(DecryptOptions opts) {
+        return ArchivePostExtract.maxDepth(opts != null && opts.recursiveExtract);
+    }
+
+    /**
+     * 是否启用解密后解压（含已弃用的 {@link DecryptOptions#autoUnzip} 别名）。
+     *
+     * @param opts 解密选项
+     * @return true 表示解密产物中的明文归档应解压到同名文件夹
+     */
+    private static boolean wantsDecryptThenExtract(DecryptOptions opts) {
+        return opts != null && (opts.decryptThenExtract || opts.autoUnzip);
     }
 
     private static void deleteRecursively(Path dir) throws IOException {
@@ -1413,14 +1455,30 @@ public final class FolderCrypt {
         public String archivePassword;
         public boolean forceDecrypt;
         /**
-         * 是否递归解压解密嵌套压缩包。默认 false：只解压最外层一层压缩包并解密其内容；
-         * 内部若还有压缩包则原样输出，不再深入（更安全，避免压缩炸弹/意外深层展开）。
+         * 是否加深嵌套压缩包处理层数。
+         *
+         * <p>未勾选时解压后解密与解密后解压最多处理
+         * {@link ArchivePostExtract#DEFAULT_MAX_DEPTH} 层；
+         * 勾选后最多 {@link ArchivePostExtract#RECURSIVE_MAX_DEPTH} 层。
          */
         public boolean recursiveExtract;
         /**
-         * 是否解压后解密。当输入为压缩包时，若为 true 则先解压再解密其中内容；
-         * 若为 false 且压缩包本身是加密文件（.ergou 后缀），则作为单加密文件直接解密。
+         * 是否解压后解密。输入为明文压缩包时先解压再解密其中的加密文件 / 分卷。
+         * 默认 true，以保持「选中压缩包即解压后解密」的既有体验。
          */
+        public boolean extractThenDecrypt = true;
+        /**
+         * 是否解密后解压。解密产物若为明文归档，则解压到同名文件夹并保留压缩包。
+         * 默认 false。
+         */
+        public boolean decryptThenExtract;
+        /**
+         * 已弃用：作为 {@link #decryptThenExtract} 的兼容别名。
+         * 旧测试与调用写入此字段时仍会触发解密后解压。
+         *
+         * @deprecated 请使用 {@link #decryptThenExtract}
+         */
+        @Deprecated
         public boolean autoUnzip;
         public List<String> keyfiles;
         public RsCodecs rsCodecs;

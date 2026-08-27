@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.log.LogService
+import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
 import hbnu.project.ergoutreecrypt.volume.FolderCrypt
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter
@@ -69,6 +70,16 @@ class DecryptViewModel : ViewModel() {
 
             try {
                 hbnu.project.ergoutreecrypt.volume.Decryptor.decrypt(request)
+                if (request.isDecryptThenExtract) {
+                    val out = request.outputFile?.let { java.nio.file.Paths.get(it) }
+                    if (out != null) {
+                        ArchivePostExtract.extractIfArchive(
+                            out,
+                            ArchivePostExtract.maxDepth(request.isRecursiveExtract),
+                            reporter
+                        )
+                    }
+                }
                 success = true
                 _progress.update {
                     it.copy(state = ProgressState.State.DONE, progress = 1f)
@@ -122,9 +133,10 @@ class DecryptViewModel : ViewModel() {
      * @param password         加密密码
      * @param archivePassword  归档密码（可为 null/空）
      * @param forceDecrypt     是否强制解密
-     * @param recursiveExtract 是否递归解压嵌套压缩包
-     * @param autoUnzip        是否在解密后自动解压新出现的归档
-     * @param keyfiles         密钥文件路径列表
+     * @param recursiveExtract    是否加深嵌套压缩包处理层数（2 → 5）
+     * @param extractThenDecrypt  是否解压后解密（明文压缩包先解压再解密）
+     * @param decryptThenExtract  是否解密后解压（加密归档解密后再解压到同名文件夹）
+     * @param keyfiles            密钥文件路径列表
      */
     fun startAutoDecrypt(
         input: String,
@@ -133,7 +145,8 @@ class DecryptViewModel : ViewModel() {
         archivePassword: String?,
         forceDecrypt: Boolean,
         recursiveExtract: Boolean,
-        autoUnzip: Boolean,
+        extractThenDecrypt: Boolean,
+        decryptThenExtract: Boolean,
         keyfiles: List<String>
     ) {
         // 全局操作权占用失败：已有其他 Tab 的操作在运行
@@ -150,7 +163,8 @@ class DecryptViewModel : ViewModel() {
             opts.archivePassword = archivePassword
             opts.forceDecrypt = forceDecrypt
             opts.recursiveExtract = recursiveExtract
-            opts.autoUnzip = autoUnzip
+            opts.extractThenDecrypt = extractThenDecrypt
+            opts.decryptThenExtract = decryptThenExtract
             opts.rsCodecs = RsCodecs()
             if (keyfiles.isNotEmpty()) {
                 opts.keyfiles = keyfiles

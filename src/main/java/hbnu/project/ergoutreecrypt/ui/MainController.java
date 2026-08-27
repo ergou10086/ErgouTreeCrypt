@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.ui;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
@@ -240,6 +241,10 @@ public class MainController {
     private CheckBox autoUnzipCheck;
     @FXML
     private Label autoUnzipInfo;
+    @FXML
+    private CheckBox decryptThenExtractCheck;
+    @FXML
+    private Label decryptThenExtractInfo;
     @FXML
     private CheckBox verifyFirstCheck;
     @FXML
@@ -554,6 +559,7 @@ public class MainController {
         encryptDepthLabel.setText(Messages.get("options.encryptDepth"));
         forceDecryptCheck.setText(Messages.get("options.forceDecrypt"));
         autoUnzipCheck.setText(Messages.get("options.autoUnzip"));
+        decryptThenExtractCheck.setText(Messages.get("options.decryptThenExtract"));
         verifyFirstCheck.setText(Messages.get("options.verifyFirst"));
         recursiveExtractCheck.setText(Messages.get("options.recursiveExtract"));
         keyfilesLabel.setText(Messages.get("options.keyfiles"));
@@ -594,6 +600,7 @@ public class MainController {
         MainViewSupport.installTooltip(encryptDepthInfo, Messages.get("options.encryptDepth.tip"));
         MainViewSupport.installTooltip(forceDecryptInfo, Messages.get("options.forceDecrypt.tip"));
         MainViewSupport.installTooltip(autoUnzipInfo, Messages.get("options.autoUnzip.tip"));
+        MainViewSupport.installTooltip(decryptThenExtractInfo, Messages.get("options.decryptThenExtract.tip"));
         MainViewSupport.installTooltip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
         MainViewSupport.installTooltip(recursiveExtractInfo, Messages.get("options.recursiveExtract.tip"));
         MainViewSupport.installTooltip(keyfileOrderedInfo, Messages.get("options.keyfiles.ordered.tip"));
@@ -1225,7 +1232,8 @@ public class MainController {
         req.setOutputFile(out);
         req.setPassword(pwd == null ? "" : pwd);
         req.setForceDecrypt(forceDecryptCheck.isSelected());
-        req.setAutoUnzip(autoUnzipCheck.isSelected());
+        req.setDecryptThenExtract(decryptThenExtractCheck.isSelected());
+        req.setRecursiveExtract(recursiveExtractCheck.isSelected());
         req.setVerifyFirst(verifyFirstCheck.isSelected());
         req.setRsCodecs(new RsCodecs());
         if (!keyfiles.isEmpty()) {
@@ -1236,6 +1244,11 @@ public class MainController {
         req.setReporter(reporter);
         runTask(() -> {
             Decryptor.decrypt(req);
+            if (req.isDecryptThenExtract()) {
+                ArchivePostExtract.extractIfArchive(Path.of(req.getOutputFile()),
+                        ArchivePostExtract.maxDepth(req.isRecursiveExtract()),
+                        reporter);
+            }
             Path finalOut = Path.of(req.getOutputFile());
             HistoryService.record(OperationType.GENERIC_DECRYPT,
                     finalOut.getFileName().toString(), finalOut.toString(), null);
@@ -1259,7 +1272,8 @@ public class MainController {
         opts.archivePassword = null;
         opts.forceDecrypt = forceDecryptCheck.isSelected();
         opts.recursiveExtract = recursiveExtractCheck.isSelected();
-        opts.autoUnzip = autoUnzipCheck.isSelected();
+        opts.extractThenDecrypt = autoUnzipCheck.isSelected();
+        opts.decryptThenExtract = decryptThenExtractCheck.isSelected();
         opts.rsCodecs = new RsCodecs();
         if (!keyfiles.isEmpty()) {
             opts.keyfiles = MainViewSupport.toPaths(keyfiles);

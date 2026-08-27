@@ -221,8 +221,12 @@
                                                 <Label fx:id="forceDecryptInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
-                                                <CheckBox fx:id="autoUnzipCheck" styleClass="check"/>
+                                                <CheckBox fx:id="autoUnzipCheck" styleClass="check" selected="true"/>
                                                 <Label fx:id="autoUnzipInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="decryptThenExtractCheck" styleClass="check"/>
+                                                <Label fx:id="decryptThenExtractInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="verifyFirstCheck" styleClass="check"/>

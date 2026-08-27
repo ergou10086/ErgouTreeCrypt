@@ -42,9 +42,14 @@ public final class DecryptRequest {
     private boolean verifyFirst;
 
     /**
-     * 解密后自动解压归档。
+     * 解密后自动解压归档（解密后解压）。等同于 {@link #decryptThenExtract}。
      */
-    private boolean autoUnzip;
+    private boolean decryptThenExtract;
+
+    /**
+     * 嵌套归档是否使用最大层数（5）；未勾选时为默认层数（2）。
+     */
+    private boolean recursiveExtract;
 
     /**
      * 是否在同级目录输出。
@@ -125,11 +130,47 @@ public final class DecryptRequest {
     }
 
     public boolean isAutoUnzip() {
-        return autoUnzip;
+        return decryptThenExtract;
     }
 
     public void setAutoUnzip(boolean a) {
-        this.autoUnzip = a;
+        this.decryptThenExtract = a;
+    }
+
+    /**
+     * 是否在单文件解密完成后把明文归档解压到同名文件夹。
+     *
+     * @return true 表示启用解密后解压
+     */
+    public boolean isDecryptThenExtract() {
+        return decryptThenExtract;
+    }
+
+    /**
+     * 设置是否解密后解压。
+     *
+     * @param v true 表示解密产物若为归档则解压到同名文件夹并保留压缩包
+     */
+    public void setDecryptThenExtract(boolean v) {
+        this.decryptThenExtract = v;
+    }
+
+    /**
+     * 是否勾选递归解压嵌套压缩包（单文件解密后解压的层数上限）。
+     *
+     * @return true 表示最多 5 层，false 表示最多 2 层
+     */
+    public boolean isRecursiveExtract() {
+        return recursiveExtract;
+    }
+
+    /**
+     * 设置是否递归解压嵌套压缩包。
+     *
+     * @param v true 表示最多 5 层
+     */
+    public void setRecursiveExtract(boolean v) {
+        this.recursiveExtract = v;
     }
 
     public boolean isSameLevel() {

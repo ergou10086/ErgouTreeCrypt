@@ -81,6 +81,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     val themeMode by settings.themeMode.collectAsState(initial = "SYSTEM")
     val languageCode by settings.languageCode.collectAsState(initial = "zh_CN")
     val threadCount by settings.threadCount.collectAsState(initial = 4)
+    val batchSerialGiB by settings.batchSerialThresholdGiB.collectAsState(initial = 10)
     val defaultParanoid by settings.isDefaultParanoid.collectAsState(initial = false)
     val defaultReedSolomon by settings.isDefaultReedSolomon.collectAsState(initial = false)
 
@@ -97,6 +98,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
     val logLevel by settings.logLevel.collectAsState(initial = "INFO")
     val logClearOnNewOp by settings.isLogClearOnNewOp.collectAsState(initial = true)
+    val logJvmDiagnostics by settings.isJvmDiagnostics.collectAsState(initial = false)
 
     // 图片选择器（OpenDocument 返回的 URI 支持持久化授权，重启后背景仍可加载）
     val imagePicker = rememberLauncherForActivityResult(
@@ -354,6 +356,15 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                     }
                 )
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            SettingSwitch(
+                title = try { Messages.get("settings.logJvm") } catch (_: Exception) { "JVM 底层日志" },
+                description = try { Messages.get("settings.logJvm.tip") } catch (_: Exception) {
+                    "默认关闭。开启后记录堆内存、GC 累计与完整异常堆栈，用于诊断内存不足等 JVM 问题。"
+                },
+                checked = logJvmDiagnostics,
+                onCheckedChange = { scope.launch { settings.setJvmDiagnostics(it) } }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
             HorizontalDivider()
@@ -396,7 +407,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "移动端建议 2-4 线程，更高会增加 CPU 占用",
+                text = "移动端批处理始终单线程，此滑块目前不影响加解密。保留以便与桌面端设置键兼容。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -406,6 +417,44 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 onValueChange = { sliderValue = it },
                 valueRange = 1f..8f,
                 steps = 6
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            var thresholdValue by remember { mutableFloatStateOf(batchSerialGiB.toFloat()) }
+            LaunchedEffect(batchSerialGiB) {
+                thresholdValue = batchSerialGiB.toFloat()
+            }
+            LaunchedEffect(Unit) {
+                snapshotFlow { thresholdValue }
+                    .debounce(300L)
+                    .collect { value ->
+                        settings.setBatchSerialThresholdGiB(value.toInt())
+                    }
+            }
+            Text(
+                text = try {
+                    hbnu.project.ergoutreecrypt.i18n.Messages.get("settings.batchSerialThreshold")
+                } catch (_: Exception) {
+                    "大批次单线程阈值（GiB）："
+                } + thresholdValue.toInt(),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = try {
+                    hbnu.project.ergoutreecrypt.i18n.Messages.get("settings.batchSerialThreshold.tip")
+                } catch (_: Exception) {
+                    "文件夹总大小达到该值时改为单线程。移动端解密始终单线程。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Slider(
+                value = thresholdValue,
+                onValueChange = { thresholdValue = it },
+                valueRange = 1f..100f,
+                steps = 98
             )
 
             Spacer(modifier = Modifier.height(24.dp))

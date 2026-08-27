@@ -61,6 +61,34 @@ class Argon2KdfTest {
                 "Argon2id 与 Go x/crypto 向量不一致：实际 " + Hex.toHexString(out));
     }
 
+    /**
+     * 小内存并发派生时全局许可保证任意时刻只有一路在飞。
+     */
+    @Test
+    void deriveKey_isGloballySerialized() throws Exception {
+        Argon2Kdf.resetKdfStats();
+        byte[] pwd = "ergou".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] salt = Hex.decode("000102030405060708090a0b0c0d0e0f");
+        int n = 4;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(n);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            futures.add(pool.submit(() -> {
+                start.await();
+                Argon2Kdf.deriveKey(pwd, salt, false, 32, 1, 1);
+                return null;
+            }));
+        }
+        start.countDown();
+        for (java.util.concurrent.Future<?> f : futures) {
+            f.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        pool.shutdownNow();
+        assertEquals(1, Argon2Kdf.kdfMaxInFlight.get(), "KDF 不得并行叠加");
+        assertEquals(0, Argon2Kdf.kdfInFlight.get());
+    }
+
     /** 验证 {@link Argon2Kdf} 普通模式确定性与长度（不依赖 1GiB 内存）。 */
     @Test
     void deriveKeyDeterministic() {

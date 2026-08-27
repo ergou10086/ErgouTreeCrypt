@@ -164,10 +164,20 @@ class DecryptViewModel : ViewModel() {
 
             try {
                 FolderCrypt.decryptAuto(Paths.get(input), Paths.get(outputDir), opts)
-                success = true
+                val batch = opts.batchResult
+                val summary = batch?.formatSummary()
+                val detail = batch?.formatDetail()?.ifBlank { null }
+                val partial = batch != null && batch.hasFailures() && batch.hasSuccesses()
                 _progress.update {
-                    it.copy(state = ProgressState.State.DONE, progress = 1f)
+                    it.copy(
+                        state = ProgressState.State.DONE,
+                        progress = 1f,
+                        statusText = summary ?: it.statusText,
+                        detail = detail,
+                        error = if (partial) summary else null
+                    )
                 }
+                success = true
             } catch (e: CancellationException) {
                 cancelled = true
                 _progress.update {
@@ -180,18 +190,23 @@ class DecryptViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 LogService.error("GENERIC_DECRYPT", "任务失败", e)
+                val batch = opts.batchResult
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = e.localizedMessage ?: e.javaClass.simpleName,
+                        detail = batch?.formatDetail()?.ifBlank { null },
+                        statusText = batch?.formatSummary() ?: it.statusText
                     )
                 }
             } catch (e: OutOfMemoryError) {
                 LogService.error("GENERIC_DECRYPT", "内存不足", e)
+                val batch = opts.batchResult
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString()
+                        error = e.toString(),
+                        detail = batch?.formatDetail()?.ifBlank { null }
                     )
                 }
             } finally {

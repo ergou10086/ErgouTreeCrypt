@@ -12,6 +12,7 @@ import hbnu.project.ergoutreecrypt.ui.support.*;
 import hbnu.project.ergoutreecrypt.volume.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
@@ -71,6 +72,9 @@ public class MainController {
     private MenuItem historyMenuItem;
     @FXML
     private Menu logsMenu;
+
+    /** 本次点击已由 MenuBar 拦截处理，避免 showing 回调再次 toggle。 */
+    private boolean logsMenuClickHandled;
 
     // ---- 标签页 ----
     @FXML
@@ -405,11 +409,7 @@ public class MainController {
         // 默认钓鱼文件按钮
         decoyFileDefaultBtn.setOnAction(e -> setDefaultDecoyFile());
 
-        // 顶栏「日志」当作按钮：展开时立刻收起并切换伴生窗，避免多余的「打开日志」子菜单
-        logsMenu.setOnShown(e -> {
-            logsMenu.hide();
-            Platform.runLater(() -> LogCompanionWindow.toggle(stage()));
-        });
+        installLogsMenuAsButton();
 
         setupInfoTooltips();
         applyTexts();
@@ -680,6 +680,69 @@ public class MainController {
     @FXML
     private void onOpenHistory() {
         HistoryDialog.show(stage());
+    }
+
+    /**
+     * 将顶栏「日志」菜单当作按钮：点击直接切换伴生窗，不弹出子菜单。
+     *
+     * <p>仅含不可见菜单项时 JavaFX 不会触发 {@code showing}，因此必须在 MenuBar
+     * 上拦截鼠标按下。若拦截未命中，再以 showing 回调作为后备。
+     */
+    private void installLogsMenuAsButton() {
+        menuBar.addEventFilter(MouseEvent.MOUSE_PRESSED, this::onLogsMenuBarPressed);
+        logsMenu.setOnShowing(e -> {
+            logsMenu.hide();
+            if (!logsMenuClickHandled) {
+                Platform.runLater(this::onToggleLogs);
+            }
+        });
+    }
+
+    /**
+     * 拦截顶栏「日志」按钮的按下事件，直接切换日志窗。
+     *
+     * @param event 鼠标事件
+     */
+    private void onLogsMenuBarPressed(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY) {
+            return;
+        }
+        if (!isClickOnLogsMenu(event)) {
+            return;
+        }
+        event.consume();
+        logsMenuClickHandled = true;
+        logsMenu.hide();
+        onToggleLogs();
+        Platform.runLater(() -> logsMenuClickHandled = false);
+    }
+
+    /**
+     * 判断事件是否点在「日志」菜单按钮上。
+     *
+     * @param event 鼠标事件
+     * @return 点在日志菜单上时返回 {@code true}
+     */
+    private boolean isClickOnLogsMenu(MouseEvent event) {
+        String logsText = logsMenu.getText();
+        if (logsText == null || logsText.isBlank()) {
+            return false;
+        }
+        Node node = event.getTarget() instanceof Node n ? n : null;
+        while (node != null && node != menuBar) {
+            if (node instanceof MenuButton button && logsText.equals(button.getText())) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * 打开或关闭右侧翻书式日志窗。
+     */
+    private void onToggleLogs() {
+        LogCompanionWindow.toggle(stage());
     }
 
     @FXML
@@ -1088,13 +1151,13 @@ public class MainController {
             opts.threadCount = SettingsManager.getThreadCount();
             opts.encryptDepth = encryptDepthSpinner.getValue();
             ProgressReporter reporter = newReporter();
-        opts.reporter = reporter;
+            opts.reporter = reporter;
         runTask("GENERIC_ENCRYPT", () -> {
                 FolderCrypt.encryptFolder(selectedFile.toPath(), Path.of(outputDir), opts);
-                // 文件夹加密结果位于 outputDir 下（内部工作目录归档后会被删除，故记录 outputDir）
                 HistoryService.record(OperationType.GENERIC_ENCRYPT, selectedFile.getName(),
                         outputDir, null);
-            }, Messages.get("status.success.encrypt"));
+            }, () -> showBatchOutcome(opts.batchResult, Messages.get("status.success.encrypt")),
+                err -> showBatchError(opts.batchResult, err));
             return;
         }
 
@@ -1262,18 +1325,10 @@ public class MainController {
                 FolderCrypt.decryptAuto(input, finalOutDir, opts);
             }
         }, () -> {
-            progressBar.setProgress(1);
-            statusLabel.setText(Messages.get("status.success.decrypt"));
-            toast.success(Messages.get("status.success.decrypt"));
             HistoryService.record(OperationType.GENERIC_DECRYPT,
                     input.getFileName().toString(), finalOutDir.toString(), null);
-            setRunning(false);
-        }, err -> {
-            String msg = err.getMessage() == null ? err.toString() : err.getMessage();
-            statusLabel.setText(Messages.format("status.failed", msg));
-            toast.error(Messages.format("status.failed", msg));
-            setRunning(false);
-        });
+            showBatchOutcome(opts.batchResult, Messages.get("status.success.decrypt"));
+        }, err -> showBatchError(opts.batchResult, err));
     }
 
     private String showArchivePasswordDialog() {
@@ -1304,6 +1359,12 @@ public class MainController {
         return new LoggingProgressReporter(reporter, "Volume");
     }
 
+    /**
+     * 提交后台任务（操作名由当前加/解密模式决定）。
+     *
+     * @param work       后台工作
+     * @param successMsg 成功文案
+     */
     private void runTask(TaskRunner.CheckedRunnable work, String successMsg) {
         runTask(mode == Mode.ENCRYPT ? "GENERIC_ENCRYPT" : "GENERIC_DECRYPT", work, successMsg);
     }
@@ -1316,13 +1377,7 @@ public class MainController {
      * @param successMsg 成功文案
      */
     private void runTask(String opName, TaskRunner.CheckedRunnable work, String successMsg) {
-        setRunning(true);
-        progressBar.setProgress(0);
-        archiveProgressBar.setProgress(0);
-        setVisible(archiveProgressBox, false);
-        statusLabel.setText(Messages.get("action.processing"));
-        String fileName = selectedFile == null ? null : selectedFile.getName();
-        taskRunner.submit(opName, fileName, work,
+        runTask(opName, work,
                 () -> {
                     progressBar.setProgress(1);
                     statusLabel.setText(successMsg);
@@ -1330,7 +1385,6 @@ public class MainController {
                     setRunning(false);
                 },
                 err -> {
-                    // 区分用户主动取消与真正的操作失败
                     if (err instanceof InterruptedException) {
                         statusLabel.setText(Messages.get("status.cancelled"));
                         toast.info(Messages.get("status.cancelled"));
@@ -1341,6 +1395,100 @@ public class MainController {
                     }
                     setRunning(false);
                 });
+    }
+
+    /**
+     * 提交后台任务，自定义成功/失败回调（仍负责 setRunning 与进度条初值）。
+     *
+     * @param opName    操作名称
+     * @param work      后台工作
+     * @param onSuccess 成功回调（FX 线程）；须自行 {@code setRunning(false)}
+     * @param onError   失败回调（FX 线程）；须自行 {@code setRunning(false)}
+     */
+    private void runTask(String opName, TaskRunner.CheckedRunnable work,
+                         Runnable onSuccess, java.util.function.Consumer<Throwable> onError) {
+        setRunning(true);
+        progressBar.setProgress(0);
+        archiveProgressBar.setProgress(0);
+        setVisible(archiveProgressBox, false);
+        statusLabel.setText(Messages.get("action.processing"));
+        String fileName = selectedFile == null ? null : selectedFile.getName();
+        taskRunner.submit(opName, fileName, work, onSuccess, onError);
+    }
+
+    /**
+     * 展示批处理汇总：多文件或有失败时弹窗，否则保持 toast。
+     *
+     * @param result     批结果，可为 null
+     * @param successMsg 全成功时的短文案
+     */
+    private void showBatchOutcome(BatchResult result, String successMsg) {
+        progressBar.setProgress(1);
+        if (result == null || !shouldShowBatchDialog(result)) {
+            statusLabel.setText(successMsg);
+            toast.success(successMsg);
+            setRunning(false);
+            return;
+        }
+        statusLabel.setText(result.formatSummary());
+        if (result.hasFailures()) {
+            toast.info(result.formatSummary());
+        } else {
+            toast.success(result.formatSummary());
+        }
+        Alert alert = new Alert(result.hasFailures()
+                ? Alert.AlertType.WARNING : Alert.AlertType.INFORMATION);
+        alert.initOwner(stage());
+        alert.setTitle(Messages.get("batch.summary.title"));
+        alert.setHeaderText(result.formatSummary());
+        String detail = result.formatDetail();
+        alert.setContentText(detail.isEmpty() ? successMsg : detail);
+        alert.getDialogPane().setPrefWidth(520);
+        alert.showAndWait();
+        setRunning(false);
+    }
+
+    /**
+     * 批处理失败（整批无成功或被取消）时的展示。
+     *
+     * @param result 可能已部分入账的汇总
+     * @param err    抛出的异常
+     */
+    private void showBatchError(BatchResult result, Throwable err) {
+        if (err instanceof InterruptedException) {
+            statusLabel.setText(Messages.get("status.cancelled"));
+            toast.info(Messages.get("status.cancelled"));
+            setRunning(false);
+            return;
+        }
+        if (result != null && result.hasSuccesses()) {
+            showBatchOutcome(result, Messages.get("batch.summary.partial"));
+            return;
+        }
+        String errMsg = err.getMessage() == null ? err.toString() : err.getMessage();
+        statusLabel.setText(Messages.format("status.failed", errMsg));
+        toast.error(Messages.format("status.failed", errMsg));
+        if (result != null && result.hasFailures()) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.initOwner(stage());
+            alert.setTitle(Messages.get("batch.summary.title"));
+            alert.setHeaderText(result.formatSummary());
+            alert.setContentText(result.formatDetail());
+            alert.getDialogPane().setPrefWidth(520);
+            alert.showAndWait();
+        }
+        setRunning(false);
+    }
+
+    /**
+     * 是否需要弹出批处理汇总（多文件或存在失败）。
+     *
+     * @param result 批结果
+     * @return true 表示弹窗
+     */
+    private static boolean shouldShowBatchDialog(BatchResult result) {
+        return result.hasFailures()
+                || result.succeededCount() + result.failedCount() > 1;
     }
 
     @FXML

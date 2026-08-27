@@ -1,6 +1,8 @@
 package hbnu.project.ergoutreecrypt.crypto;
 
 import java.util.Arrays;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import hbnu.project.ergoutreecrypt.log.LogService;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
@@ -18,6 +20,10 @@ import org.bouncycastle.crypto.params.Argon2Parameters;
  *   <li>偏执模式：8 passes / 1 GiB / 8 threads</li>
  * </ul>
  *
+ * <p>任意时刻只允许一路派生持有全局许可：默认参数每路约 1 GiB（堆内或离堆），
+ * 并行文件处理若同时进入 KDF 会叠加内存并在 native {@code Unsafe} 路径上闪退。
+ * 文件 I/O 仍可并行，仅密钥派生串行化。
+ *
  * @author ErgouTree
  */
 public final class Argon2Kdf {
@@ -34,7 +40,30 @@ public final class Argon2Kdf {
      */
     private static final long MEMORY_CHECK_MARGIN_BYTES = 32L << 20;
 
+    /**
+     * 全局 KDF 许可：同时只允许一路 1 GiB 级 Argon2 分配。
+     */
+    private static final Semaphore KDF_LOCK = new Semaphore(1, true);
+
+    /**
+     * 当前持有 KDF 许可的线程数（0 或 1）。供单测断言互斥。
+     */
+    static final AtomicInteger kdfInFlight = new AtomicInteger();
+
+    /**
+     * 观测到的最大并发持有数。供单测断言互斥。
+     */
+    static final AtomicInteger kdfMaxInFlight = new AtomicInteger();
+
     private Argon2Kdf() {
+    }
+
+    /**
+     * 重置互斥观测计数。仅供测试使用。
+     */
+    static void resetKdfStats() {
+        kdfInFlight.set(0);
+        kdfMaxInFlight.set(0);
     }
 
     /**
@@ -118,9 +147,8 @@ public final class Argon2Kdf {
      * <p>当 override 参数为非 null 时使用覆写值，否则根据 paranoid 标志选择默认值。
      * Android 移动端通过此方法使用更低的内存参数以适配移动设备。
      *
-     * <p>实现选择：先按 {@link #isHeapFeasible(int)} 判断堆内派生是否可行；
-     * 不足时回退到 {@link Argon2OffHeap}（离堆 native 内存），使桌面端
-     * 1 GiB 参数的文件也能在 16 GB 级设备上派生密钥，避免误报内存不足。
+     * <p>任意时刻只允许一路派生持有全局许可，避免并行文件处理叠加 1 GiB 内存。
+     * 堆内不足时回退到 {@link Argon2OffHeap}。
      *
      * @param password           已归一化（NFC）的密码 UTF-8 字节
      * @param salt               16 字节 Argon2 salt
@@ -129,7 +157,7 @@ public final class Argon2Kdf {
      * @param overridePasses     覆写的迭代次数，null 表示使用默认值
      * @param overrideParallelism 覆写的并行线程数，null 表示使用默认值
      * @return 32 字节派生密钥
-     * @throws IllegalStateException 若派生结果为全零，视为 Argon2 故障
+     * @throws IllegalStateException 若派生结果为全零，或等待许可时被中断
      */
     public static byte[] deriveKey(byte[] password, byte[] salt, boolean paranoid,
                                    Integer overrideMemoryKib, Integer overridePasses,
@@ -141,18 +169,52 @@ public final class Argon2Kdf {
         int threads = overrideParallelism != null ? overrideParallelism
                 : (paranoid ? CryptoConstants.ARGON2_PARANOID_THREADS : CryptoConstants.ARGON2_NORMAL_THREADS);
 
+        long waitStart = System.nanoTime();
+        try {
+            KDF_LOCK.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Argon2 密钥派生等待许可时被取消", e);
+        }
+        long waitMs = (System.nanoTime() - waitStart) / 1_000_000L;
+        int inflight = kdfInFlight.incrementAndGet();
+        kdfMaxInFlight.accumulateAndGet(inflight, Math::max);
+        try {
+            return deriveKeyUnlocked(password, salt, memoryKiB, passes, threads, waitMs);
+        } finally {
+            kdfInFlight.decrementAndGet();
+            KDF_LOCK.release();
+        }
+    }
+
+    /**
+     * 已持有全局许可后的实际派生。
+     *
+     * @param password  密码字节
+     * @param salt      Argon2 盐
+     * @param memoryKiB 内存参数（KiB）
+     * @param passes    迭代次数
+     * @param threads   lane 并行度
+     * @param waitMs    获取许可等待的毫秒数
+     * @return 32 字节派生密钥
+     */
+    private static byte[] deriveKeyUnlocked(byte[] password, byte[] salt,
+                                            int memoryKiB, int passes, int threads,
+                                            long waitMs) {
         long t0 = System.nanoTime();
         boolean offHeap = !isHeapFeasible(memoryKiB);
         if (LogService.isTraceEnabled()) {
             LogService.trace("Argon2Kdf", "派生开始 passes=" + passes
                     + ", memKiB=" + memoryKiB
                     + ", threads=" + threads
-                    + ", offHeap=" + offHeap);
+                    + ", offHeap=" + offHeap
+                    + ", waitMs=" + waitMs);
+        } else if (waitMs >= 50L) {
+            LogService.info("Argon2Kdf", "等待全局许可 " + waitMs + " ms 后开始派生 offHeap=" + offHeap);
         }
 
         byte[] key;
         if (offHeap) {
-            // 堆内放不下 → 离堆实现（native 内存不受 Java 堆上限约束）
             key = Argon2OffHeap.deriveKey(password, salt, memoryKiB, passes,
                     threads, CryptoConstants.ARGON2_KEY_SIZE);
         } else {
@@ -171,12 +233,12 @@ public final class Argon2Kdf {
             generator.generateBytes(password, key);
         }
 
-        // 全零结果视为 Argon2 致命故障
         if (Arrays.equals(key, new byte[CryptoConstants.ARGON2_KEY_SIZE])) {
             throw new IllegalStateException("fatal Argon2 error: produced zero key");
         }
         if (LogService.isTraceEnabled()) {
-            LogService.trace("Argon2Kdf", "派生完成", (System.nanoTime() - t0) / 1_000_000L);
+            LogService.trace("Argon2Kdf", "派生完成 offHeap=" + offHeap,
+                    (System.nanoTime() - t0) / 1_000_000L);
         }
         return key;
     }

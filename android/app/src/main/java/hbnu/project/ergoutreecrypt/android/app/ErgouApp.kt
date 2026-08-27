@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.history.FileHistoryStore
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.i18n.Messages
 import hbnu.project.ergoutreecrypt.log.FileLogSink
+import hbnu.project.ergoutreecrypt.log.JvmDiagnostics
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.log.MemoryLogBuffer
 import kotlinx.coroutines.CoroutineScope
@@ -77,11 +78,19 @@ class ErgouApp : Application() {
             LogService.setClearOnNewOperation(
                 hbnu.project.ergoutreecrypt.settings.SettingsManager.isLogClearOnNewOp()
             )
+            if (hbnu.project.ergoutreecrypt.settings.SettingsManager.isJvmDiagnostics()) {
+                JvmDiagnostics.start()
+            }
 
             // 持续监听共享核心依赖的关键设置变更
             launch {
                 settings.threadCount.collectLatest { v ->
                     hbnu.project.ergoutreecrypt.settings.SettingsManager.setThreadCount(v)
+                }
+            }
+            launch {
+                settings.batchSerialThresholdGiB.collectLatest { v ->
+                    hbnu.project.ergoutreecrypt.settings.SettingsManager.setBatchSerialThresholdGiB(v)
                 }
             }
             launch {
@@ -105,6 +114,16 @@ class ErgouApp : Application() {
                 settings.isLogClearOnNewOp.collectLatest { v ->
                     hbnu.project.ergoutreecrypt.settings.SettingsManager.setLogClearOnNewOp(v)
                     LogService.setClearOnNewOperation(v)
+                }
+            }
+            launch {
+                settings.isJvmDiagnostics.collectLatest { v ->
+                    hbnu.project.ergoutreecrypt.settings.SettingsManager.setJvmDiagnostics(v)
+                    if (v) {
+                        JvmDiagnostics.start()
+                    } else {
+                        JvmDiagnostics.stop()
+                    }
                 }
             }
         }

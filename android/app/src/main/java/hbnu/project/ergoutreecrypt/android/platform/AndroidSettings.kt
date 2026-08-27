@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import hbnu.project.ergoutreecrypt.log.JvmDiagnostics
 import hbnu.project.ergoutreecrypt.log.LogLevel
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.settings.SettingsManager
@@ -62,6 +63,10 @@ class AndroidSettings(context: Context) {
         it[KEY_THREAD_COUNT] ?: DEF_THREAD_COUNT
     }
 
+    val batchSerialThresholdGiB: Flow<Int> = dataStore.data.map {
+        it[KEY_BATCH_SERIAL_GIB] ?: DEF_BATCH_SERIAL_GIB
+    }
+
     val themeMode: Flow<String> = dataStore.data.map {
         it[KEY_THEME_MODE] ?: DEF_THEME_MODE
     }
@@ -88,6 +93,10 @@ class AndroidSettings(context: Context) {
 
     val isLogClearOnNewOp: Flow<Boolean> = dataStore.data.map {
         it[KEY_LOG_CLEAR_ON_NEW_OP] ?: DEF_LOG_CLEAR_ON_NEW_OP
+    }
+
+    val isJvmDiagnostics: Flow<Boolean> = dataStore.data.map {
+        it[KEY_LOG_JVM_DIAGNOSTICS] ?: DEF_LOG_JVM_DIAGNOSTICS
     }
 
     // ==================== Android 专属键 ====================
@@ -145,8 +154,10 @@ class AndroidSettings(context: Context) {
             archiveCustomEncryption = prefs[KEY_ARCHIVE_CUSTOM_ENC] ?: DEF_ARCHIVE_CUSTOM_ENC
             themeMode = prefs[KEY_THEME_MODE] ?: DEF_THEME_MODE
             threadCount = prefs[KEY_THREAD_COUNT] ?: DEF_THREAD_COUNT
+            batchSerialThresholdGiB = prefs[KEY_BATCH_SERIAL_GIB] ?: DEF_BATCH_SERIAL_GIB
             logLevel = prefs[KEY_LOG_LEVEL] ?: DEF_LOG_LEVEL
             logClearOnNewOp = prefs[KEY_LOG_CLEAR_ON_NEW_OP] ?: DEF_LOG_CLEAR_ON_NEW_OP
+            logJvmDiagnostics = prefs[KEY_LOG_JVM_DIAGNOSTICS] ?: DEF_LOG_JVM_DIAGNOSTICS
         }
         SettingsManager.initFromBridge(bridge)
     }
@@ -172,6 +183,17 @@ class AndroidSettings(context: Context) {
         val clamped = v.coerceIn(MIN_THREAD_COUNT, MAX_THREAD_COUNT)
         dataStore.edit { it[KEY_THREAD_COUNT] = clamped }
         SettingsManager.setThreadCount(clamped)
+    }
+
+    /**
+     * 设置批处理单线程阈值（GiB）。
+     *
+     * @param v 阈值，钳制在 1–100
+     */
+    suspend fun setBatchSerialThresholdGiB(v: Int) {
+        val clamped = v.coerceIn(MIN_BATCH_SERIAL_GIB, MAX_BATCH_SERIAL_GIB)
+        dataStore.edit { it[KEY_BATCH_SERIAL_GIB] = clamped }
+        SettingsManager.setBatchSerialThresholdGiB(clamped)
     }
 
     suspend fun setAutoDecompress(v: Boolean) {
@@ -284,6 +306,21 @@ class AndroidSettings(context: Context) {
         LogService.setClearOnNewOperation(v)
     }
 
+    /**
+     * 设置 JVM 底层诊断日志开关。
+     *
+     * @param v true 开启堆快照、GC 累计与完整异常堆栈
+     */
+    suspend fun setJvmDiagnostics(v: Boolean) {
+        dataStore.edit { it[KEY_LOG_JVM_DIAGNOSTICS] = v }
+        SettingsManager.setJvmDiagnostics(v)
+        if (v) {
+            JvmDiagnostics.start()
+        } else {
+            JvmDiagnostics.stop()
+        }
+    }
+
     // ==================== 键定义与默认值 ====================
 
     companion object {
@@ -294,6 +331,7 @@ class AndroidSettings(context: Context) {
         private val KEY_DEFAULT_RS = booleanPreferencesKey("default.reedSolomon")
         private val KEY_DEFAULT_PASSWORDLESS = booleanPreferencesKey("default.passwordless")
         private val KEY_THREAD_COUNT = intPreferencesKey("thread.count")
+        private val KEY_BATCH_SERIAL_GIB = intPreferencesKey("batch.serial.threshold.gib")
         private val KEY_THEME_MODE = stringPreferencesKey("theme.mode")
         private val KEY_DEFAULT_SPLIT_SIZE = intPreferencesKey("default.split.size")
         private val KEY_DEFAULT_COMPRESS_FORMAT = stringPreferencesKey("default.compress.format")
@@ -301,6 +339,7 @@ class AndroidSettings(context: Context) {
         private val KEY_ARCHIVE_CUSTOM_ENC = booleanPreferencesKey("archive.custom.encryption")
         private val KEY_LOG_LEVEL = stringPreferencesKey("log.level")
         private val KEY_LOG_CLEAR_ON_NEW_OP = booleanPreferencesKey("log.clearOnNewOp")
+        private val KEY_LOG_JVM_DIAGNOSTICS = booleanPreferencesKey("log.jvmDiagnostics")
 
         // --- Android 专属键 ---
         private val KEY_ARGON2_MODE = stringPreferencesKey("mobile.argon2.mode")
@@ -323,6 +362,7 @@ class AndroidSettings(context: Context) {
         private const val DEF_RS = false
         private const val DEF_PASSWORDLESS = false
         private const val DEF_THREAD_COUNT = 4
+        private const val DEF_BATCH_SERIAL_GIB = 10
         private const val DEF_THEME_MODE = "SYSTEM"
         private const val DEF_SPLIT_SIZE = 100
         private const val DEF_COMPRESS_FORMAT = "ZIP"
@@ -330,7 +370,10 @@ class AndroidSettings(context: Context) {
         private const val DEF_ARCHIVE_CUSTOM_ENC = false
         private const val DEF_LOG_LEVEL = "INFO"
         private const val DEF_LOG_CLEAR_ON_NEW_OP = true
+        private const val DEF_LOG_JVM_DIAGNOSTICS = false
         private const val MIN_THREAD_COUNT = 1
         private const val MAX_THREAD_COUNT = 16
+        private const val MIN_BATCH_SERIAL_GIB = 1
+        private const val MAX_BATCH_SERIAL_GIB = 100
     }
 }

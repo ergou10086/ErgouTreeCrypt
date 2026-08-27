@@ -2,12 +2,14 @@ package hbnu.project.ergoutreecrypt;
 
 import hbnu.project.ergoutreecrypt.history.FileHistoryStore;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
+import hbnu.project.ergoutreecrypt.log.CompositeLogSink;
 import hbnu.project.ergoutreecrypt.log.FileLogSink;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.log.MemoryLogBuffer;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.MainController;
 import hbnu.project.ergoutreecrypt.ui.support.FileAssociation;
+import hbnu.project.ergoutreecrypt.ui.support.JvmLogSupport;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -81,9 +83,13 @@ public class PicocryptApplication extends Application {
         // 注册操作历史与应用日志（用户主目录下的隐藏目录）
         Path dataDir = Path.of(System.getProperty("user.home"), ".ergoutreecrypt");
         HistoryService.register(new FileHistoryStore(dataDir));
-        LogService.register(new MemoryLogBuffer(), new FileLogSink(dataDir.resolve("logs")));
+        Path logsDir = dataDir.resolve("logs");
+        LogService.register(
+                new MemoryLogBuffer(),
+                new CompositeLogSink(new FileLogSink(logsDir), JvmLogSupport.bind(logsDir)));
         LogService.setLevel(SettingsManager.getLogLevel());
         LogService.setClearOnNewOperation(SettingsManager.isLogClearOnNewOp());
+        JvmLogSupport.apply(SettingsManager.isJvmDiagnostics());
 
         FXMLLoader fxmlLoader = new FXMLLoader(
                 PicocryptApplication.class.getResource("ui/main-view.fxml"));

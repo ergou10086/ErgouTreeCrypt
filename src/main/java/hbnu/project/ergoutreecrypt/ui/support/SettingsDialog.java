@@ -172,6 +172,17 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.threadCount.tip")), 2, row);
         row++;
 
+        Spinner<Integer> batchSerialSpinner = new Spinner<>(1, 100, 10);
+        batchSerialSpinner.setPrefWidth(90);
+        batchSerialSpinner.setEditable(true);
+        HBox batchSerialBox = new HBox(6,
+                new Label(Messages.get("settings.batchSerialThreshold")),
+                batchSerialSpinner);
+        batchSerialBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(batchSerialBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.batchSerialThreshold.tip")), 2, row);
+        row++;
+
         // === 日志 ===
         grid.add(section(Messages.get("settings.section.logs")), 0, row++, 3, 1);
 
@@ -199,6 +210,11 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.logRefresh.tip")), 2, row);
         row++;
 
+        CheckBox logJvmDiagnostics = checkBox(Messages.get("settings.logJvm"));
+        grid.add(logJvmDiagnostics, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.logJvm.tip")), 2, row);
+        row++;
+
         // ---- 加载当前值 ----
         // 主题模式
         ThemeManager.Mode savedMode = themeManager != null
@@ -221,12 +237,14 @@ public final class SettingsDialog {
         archiveCustomEncryption.setSelected(SettingsManager.isArchiveCustomEncryption());
         archivePasswordFallback.setSelected(SettingsManager.isArchivePasswordFallback());
         threadCountSpinner.getValueFactory().setValue(SettingsManager.getThreadCount());
+        batchSerialSpinner.getValueFactory().setValue(SettingsManager.getBatchSerialThresholdGiB());
         logLevelCombo.setValue(SettingsManager.getLogLevel() == LogLevel.TRACE
                 ? Messages.get("settings.logLevel.trace")
                 : Messages.get("settings.logLevel.info"));
         logRefreshCombo.setValue(SettingsManager.isLogClearOnNewOp()
                 ? Messages.get("settings.logRefresh.clear")
                 : Messages.get("settings.logRefresh.keep"));
+        logJvmDiagnostics.setSelected(SettingsManager.isJvmDiagnostics());
 
         // ---- 监听即时写入 ----
         themeCombo.valueProperty().addListener((o, a, b) -> {
@@ -269,6 +287,11 @@ public final class SettingsDialog {
                 SettingsManager.setArchivePasswordFallback(b));
         threadCountSpinner.valueProperty().addListener((o, a, b) ->
                 SettingsManager.setThreadCount(b));
+        batchSerialSpinner.valueProperty().addListener((o, a, b) -> {
+            if (b != null) {
+                SettingsManager.setBatchSerialThresholdGiB(b);
+            }
+        });
         logLevelCombo.valueProperty().addListener((o, a, b) -> {
             if (b == null) {
                 return;
@@ -285,6 +308,10 @@ public final class SettingsDialog {
             boolean clear = Messages.get("settings.logRefresh.clear").equals(b);
             SettingsManager.setLogClearOnNewOp(clear);
             LogService.setClearOnNewOperation(clear);
+        });
+        logJvmDiagnostics.selectedProperty().addListener((o, a, b) -> {
+            SettingsManager.setJvmDiagnostics(b);
+            JvmLogSupport.apply(b);
         });
 
         pane.setContent(grid);

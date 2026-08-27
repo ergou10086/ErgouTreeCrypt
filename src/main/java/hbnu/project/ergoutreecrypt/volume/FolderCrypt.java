@@ -6,14 +6,17 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
+import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -118,177 +121,46 @@ public final class FolderCrypt {
             }
         }
 
-        // 线程数钳制；并行时用聚合器以最慢任务为基准，避免进度条回跳并汇总吞吐
-        int threads = Math.max(1, Math.min(opts.threadCount, total));
-        LogService.info("FolderCrypt", "开始加密文件夹 " + folderName);
-        if (LogService.isTraceEnabled()) {
-            LogService.trace("FolderCrypt", "files=" + filesToEncrypt.size()
-                    + ", deepDirs=" + deepDirs.size()
-                    + ", depth=" + maxDepth
-                    + ", threads=" + threads);
-        }
-        ParallelProgressAggregator progress =
-                reporter != null ? new ParallelProgressAggregator(reporter, total) : null;
-        ExecutorService executor = CryptoThreadPool.forEncrypt(threads);
+        // 线程数：总大小达阈值则单线程；并行时用聚合器以最慢任务为基准
+        BatchResult result = new BatchResult();
+        opts.batchResult = result;
+        long totalBytes = sumFileSizes(filesToEncrypt) + sumDirSizes(deepDirs);
+        int threads = Math.max(1, Math.min(
+                resolveThreadCount(opts.threadCount, totalBytes, false, result), total));
+        result.setThreadCountUsed(threads);
+        LogService.info("FolderCrypt", "开始加密文件夹 " + folderName
+                + " files=" + filesToEncrypt.size()
+                + " deepDirs=" + deepDirs.size()
+                + " size=" + LogService.humanSize(totalBytes)
+                + " threads=" + threads);
+        ParallelProgressAggregator progress = (reporter != null && threads > 1)
+                ? new ParallelProgressAggregator(reporter, total) : null;
         AtomicInteger completed = new AtomicInteger(0);
-        AtomicReference<Exception> firstError = new AtomicReference<>(null);
 
-        try {
-            List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
-
-            // 处理深度内的普通文件：逐一加密
-            for (int i = 0; i < filesToEncrypt.size(); i++) {
-                final Path src = filesToEncrypt.get(i);
-                futures.add(executor.submit(() -> {
-                    if ((progress != null && progress.isCancelled())
-                            || (reporter != null && reporter.isCancelled())) {
-                        return;
-                    }
-                    if (firstError.get() != null) {
-                        return;
-                    }
-                    ParallelProgressAggregator.TaskHandle task =
-                            progress != null ? progress.openTask() : null;
-                    try {
-                        Path rel = inputDir.relativize(src);
-                        Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
-                        ProgressReporter taskReporter = task != null ? task : reporter;
-
-                        if (opts.split) {
-                            Path chunkDir = destEnc.getParent().resolve(
-                                    stripExt(destEnc.getFileName().toString()));
-                            Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
-                            EncryptRequest req = buildRequest(src, chunkBase, opts, taskReporter);
-                            req.setSplit(true);
-                            req.setArchiveFormat(null);
-                            Encryptor.encrypt(req);
-                        } else {
-                            EncryptRequest req = buildRequest(src, destEnc, opts, taskReporter);
-                            req.setSplit(false);
-                            req.setArchiveFormat(null);
-                            Encryptor.encrypt(req);
-                        }
-
-                        int done = completed.incrementAndGet();
-                        if (progress != null) {
-                            progress.setStatus(
-                                    Messages.format("status.encrypting.progress", done, total, rel));
-                        } else if (reporter != null) {
-                            reporter.setStatus(
-                                    Messages.format("status.encrypting.progress", done, total, rel));
-                            reporter.setProgress((float) done / total, "");
-                        }
-                    } catch (Exception e) {
-                        firstError.compareAndSet(null, e);
-                    } finally {
-                        if (task != null) {
-                            task.close();
-                        }
-                    }
-                }));
-            }
-
-            // 处理深目录：先打包成 ZIP，再加密该 ZIP
-            for (int i = 0; i < deepDirs.size(); i++) {
-                final Path deepDir = deepDirs.get(i);
-                futures.add(executor.submit(() -> {
-                    if ((progress != null && progress.isCancelled())
-                            || (reporter != null && reporter.isCancelled())) {
-                        return;
-                    }
-                    if (firstError.get() != null) {
-                        return;
-                    }
-                    Path tempArchive = null;
-                    ParallelProgressAggregator.TaskHandle task =
-                            progress != null ? progress.openTask() : null;
-                    try {
-                        Path rel = inputDir.relativize(deepDir);
-                        String dirName = deepDir.getFileName().toString();
-                        Path parentInWork = rel.getParent() != null
-                                ? workDir.resolve(rel.getParent().toString())
-                                : workDir;
-                        Path destEnc = parentInWork.resolve(dirName + ".zip.ergou");
-                        ProgressReporter taskReporter = task != null ? task : reporter;
-
-                        // 将深目录打包为临时 ZIP
-                        tempArchive = archiveDirectory(deepDir);
-
-                        if (opts.split) {
-                            Path chunkDir = destEnc.getParent().resolve(
-                                    stripExt(destEnc.getFileName().toString()));
-                            Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
-                            EncryptRequest req = buildRequest(tempArchive, chunkBase, opts, taskReporter);
-                            req.setSplit(true);
-                            req.setArchiveFormat(null);
-                            Encryptor.encrypt(req);
-                        } else {
-                            EncryptRequest req = buildRequest(tempArchive, destEnc, opts, taskReporter);
-                            req.setSplit(false);
-                            req.setArchiveFormat(null);
-                            Encryptor.encrypt(req);
-                        }
-
-                        int done = completed.incrementAndGet();
-                        if (progress != null) {
-                            progress.setStatus(
-                                    Messages.format("status.encrypting.progress", done, total,
-                                            rel.getFileName() + " (archived)"));
-                        } else if (reporter != null) {
-                            reporter.setStatus(
-                                    Messages.format("status.encrypting.progress", done, total,
-                                            rel.getFileName() + " (archived)"));
-                            reporter.setProgress((float) done / total, "");
-                        }
-                    } catch (Exception e) {
-                        firstError.compareAndSet(null, e);
-                    } finally {
-                        if (task != null) {
-                            task.close();
-                        }
-                        if (tempArchive != null) {
-                            try {
-                                Files.deleteIfExists(tempArchive);
-                            } catch (IOException ignored) {
-                            }
-                        }
-                    }
-                }));
-            }
-
-            // 等待全部完成
-            for (java.util.concurrent.Future<?> f : futures) {
-                try {
-                    f.get();
-                } catch (java.util.concurrent.ExecutionException e) {
-                    firstError.compareAndSet(null, (Exception) e.getCause());
-                }
-            }
-        } finally {
-            executor.shutdownNow();
-            try {
-                executor.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-            }
+        List<BatchJob> jobs = new ArrayList<>(total);
+        for (Path src : filesToEncrypt) {
+            final Path file = src;
+            jobs.add(new BatchJob(inputDir.relativize(file).toString(), taskReporter ->
+                    encryptPlainFile(file, inputDir, workDir, opts, taskReporter)));
+        }
+        for (Path deepDir : deepDirs) {
+            final Path dir = deepDir;
+            Path rel = inputDir.relativize(dir);
+            String label = rel.getFileName() + " (archived)";
+            jobs.add(new BatchJob(label, taskReporter ->
+                    encryptDeepDirectory(dir, inputDir, workDir, opts, taskReporter)));
         }
 
-        // 抛出首个错误（若有）
-        Exception err = firstError.get();
-        if (err != null) {
-            if (err instanceof InterruptedException) {
-                throw (InterruptedException) err;
-            }
-            throw err;
+        processJobs(jobs, threads, true, reporter, progress, completed, total, result);
+
+        if (result.succeededCount() == 0 && result.failedCount() > 0) {
+            BatchResult.Failure first = result.failures().get(0);
+            throw new IOException("全部文件加密失败：" + first.name() + " — " + first.message());
         }
 
-        // 检查是否被取消
-        if (reporter != null && reporter.isCancelled()) {
-            throw new InterruptedException("cancelled");
-        }
-
-        // 若启用压缩：将整个工作目录打成一个压缩包，压缩为最后一步。
-        if (opts.archiveFormat != null && !opts.archiveFormat.isEmpty()) {
+        // 若启用压缩：只打包工作目录中已成功写出的文件（失败文件不会落盘）。
+        if (opts.archiveFormat != null && !opts.archiveFormat.isEmpty()
+                && result.succeededCount() > 0) {
             if (reporter != null) {
                 reporter.setStatus(Messages.get("status.archiving"), ProgressPhase.ARCHIVE);
                 reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
@@ -299,10 +171,12 @@ public final class FolderCrypt {
             try (Stream<Path> walk = Files.walk(workDir)) {
                 entries = walk.filter(Files::isRegularFile).sorted().toList();
             }
-            ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
-                    ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password, fmt),
-                    reporter);
-            deleteRecursively(workDir);
+            if (!entries.isEmpty()) {
+                ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
+                        ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password, fmt),
+                        reporter);
+                deleteRecursively(workDir);
+            }
             if (reporter != null) {
                 reporter.setProgress(1f, "", ProgressPhase.ARCHIVE);
             }
@@ -311,6 +185,7 @@ public final class FolderCrypt {
         if (reporter != null) {
             reporter.setProgress(1f, "");
         }
+        result.logSummary("FolderCrypt");
         LogService.info("FolderCrypt", "文件夹加密完成: " + folderName);
     }
 
@@ -327,6 +202,8 @@ public final class FolderCrypt {
      */
     public static void decryptAuto(Path input, Path outputDir, DecryptOptions opts) throws Exception {
         LogService.info("FolderCrypt", "开始自动解密 " + input.getFileName());
+        BatchResult result = new BatchResult();
+        opts.batchResult = result;
         DecryptStats stats = new DecryptStats();
         if (Files.isDirectory(input)) {
             // 输入文件夹：可能是单文件分卷碎片夹，或普通文件夹
@@ -336,8 +213,9 @@ public final class FolderCrypt {
                 Path out = outputDir.resolve(stripEncExt(chunkBase));
                 decryptRecombine(input.resolve(chunkBase), out, opts);
                 stats.decrypted.incrementAndGet();
+                result.addSuccess(chunkBase);
             } else {
-                decryptDirectory(input, outputDir, input.getFileName().toString(), opts, stats, 0);
+                decryptDirectory(input, outputDir, input.getFileName().toString(), opts, stats, 0, false);
             }
         } else if (ArchiveExtractor.isArchive(input)) {
             decryptArchive(input, outputDir, opts, stats, 0);
@@ -355,6 +233,7 @@ public final class FolderCrypt {
                 Path out = outputDir.resolve(stripEncExt(Path.of(base).getFileName().toString()));
                 decryptRecombine(Path.of(base), out, opts);
                 stats.decrypted.incrementAndGet();
+                result.addSuccess(Path.of(base).getFileName().toString());
             } else if (!isEncryptedName(fn)) {
                 throw new NoDecryptableFilesException(
                         "无法解密：文件后缀不是受支持的加密格式（.ergou/.pcv）：" + input.getFileName());
@@ -363,13 +242,19 @@ public final class FolderCrypt {
                 Path out = outputDir.resolve(stripEncExt(fn));
                 decryptSingle(input, out, opts);
                 stats.decrypted.incrementAndGet();
+                result.addSuccess(fn);
             }
         }
 
         // 全部输入都没有产生任何输出时报错；否则（哪怕只解密了 1 个，或仅原样输出了嵌套压缩包）视为成功。
+        result.addSkipped(stats.skipped);
+        result.logSummary("FolderCrypt");
         if (stats.decrypted.get() == 0 && stats.archivesPassthrough.get() == 0) {
             throw new NoDecryptableFilesException(
-                    "未找到任何可解密的文件（.ergou/.pcv）；已跳过 " + stats.skipped + " 个不可解密文件。");
+                    "未找到任何可解密的文件（.ergou/.pcv）；已跳过 " + stats.skipped + " 个不可解密文件"
+                            + (result.failedCount() > 0
+                            ? "，失败 " + result.failedCount() + " 个。"
+                            : "。"));
         }
     }
 
@@ -397,7 +282,7 @@ public final class FolderCrypt {
                     opts.archivePassword, opts.password);
             ArchiveExtractor.extractPreserving(archive, extractDir, archPwd, reporter);
             // 解压结果可能是普通加密文件、分卷碎片子目录、嵌套压缩包或多层目录结构，统一交给目录解密逻辑。
-            decryptDirectory(extractDir, outputDir, base, opts, stats, depth);
+            decryptDirectory(extractDir, outputDir, base, opts, stats, depth, true);
         } finally {
             deleteRecursively(extractDir);
         }
@@ -407,9 +292,13 @@ public final class FolderCrypt {
      * 解密一个目录，镜像保留结构输出到 {@code outputDir/<mirrorName>}：
      * 分卷碎片子目录合并解密为单文件；普通加密文件逐个解密；嵌套压缩包递归处理。
      * 不可解密后缀的文件将被跳过（计入 {@code stats.skipped}）。
+     *
+     * @param forceSerial 为 true 时忽略配置线程数与大小阈值，始终单线程
+     *                    （压缩包解压后解密、以及嵌套归档）
      */
     private static void decryptDirectory(Path dir, Path outputDir, String mirrorName,
-                                         DecryptOptions opts, DecryptStats stats, int depth) throws Exception {
+                                         DecryptOptions opts, DecryptStats stats,
+                                         int depth, boolean forceSerial) throws Exception {
         // 若 dir 本身就是单个文件的分卷碎片集合（如解压后顶层即碎片），合并解密为单文件。
         String selfBase = detectChunkBase(dir);
         if (selfBase != null) {
@@ -417,16 +306,14 @@ public final class FolderCrypt {
             Path out = outputDir.resolve(stripEncExt(selfBase));
             decryptRecombine(dir.resolve(selfBase), out, opts);
             stats.decrypted.incrementAndGet();
+            ensureDecryptResult(opts).addSuccess(selfBase);
             return;
         }
 
         Path mirrorRoot = outputDir.resolve(mirrorName);
         Files.createDirectories(mirrorRoot);
 
-        // 是否允许深入处理内部的嵌套压缩包：仅在开启递归解压时才深入；否则原样输出，不再深入。
         boolean allowNested = opts.recursiveExtract;
-
-        // 收集需处理的"单元"：分卷碎片子目录 + 普通加密文件 + 嵌套压缩包
         List<Unit> units = collectUnits(dir, stats, allowNested);
         ProgressReporter reporter = opts.reporter;
         int total = units.size();
@@ -437,140 +324,43 @@ public final class FolderCrypt {
             return;
         }
 
-        // 预创建所有目标目录（单线程，避免竞态）
         for (Unit u : units) {
             Path relParent = dir.relativize(u.relativeTo);
             Path destParent = mirrorRoot.resolve(relParent.toString());
             Files.createDirectories(destParent);
         }
 
-        // 嵌套调用（递归解压内部归档）始终使用串行模式，避免线程爆炸
-        // 外层调用使用配置的线程数；并行时用聚合器以最慢任务为基准
-        boolean isTopLevel = (depth == 0);
-        int threads = isTopLevel ? Math.max(1, Math.min(opts.threadCount, total)) : 1;
-        ParallelProgressAggregator progress =
-                (reporter != null && threads > 1)
-                        ? new ParallelProgressAggregator(reporter, total) : null;
-        ExecutorService executor = threads > 1 ? CryptoThreadPool.forDecrypt(threads) : null;
+        BatchResult result = ensureDecryptResult(opts);
+        boolean serial = forceSerial || depth > 0;
+        long totalBytes = sumUnitSizes(units);
+        int threads = Math.max(1, Math.min(
+                resolveThreadCount(opts.threadCount, totalBytes, serial, result), total));
+        result.setThreadCountUsed(threads);
+        LogService.info("FolderCrypt", "解密目录 " + mirrorName
+                + " units=" + total
+                + " size=" + LogService.humanSize(totalBytes)
+                + " threads=" + threads
+                + (serial ? " serial=true" : ""));
+
+        ParallelProgressAggregator progress = (reporter != null && threads > 1)
+                ? new ParallelProgressAggregator(reporter, total) : null;
         AtomicInteger completed = new AtomicInteger(0);
-        AtomicReference<Exception> firstError = new AtomicReference<>(null);
 
-        try {
-            List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
-            for (int i = 0; i < units.size(); i++) {
-                final Unit u = units.get(i);
-                Runnable task = () -> {
-                    if ((progress != null && progress.isCancelled())
-                            || (reporter != null && reporter.isCancelled())) {
-                        return;
-                    }
-                    if (firstError.get() != null) {
-                        return;
-                    }
-                    ParallelProgressAggregator.TaskHandle handle =
-                            progress != null ? progress.openTask() : null;
-                    try {
-                        Path relParent = dir.relativize(u.relativeTo);
-                        Path destParent = mirrorRoot.resolve(relParent.toString());
-                        DecryptOptions taskOpts = opts;
-                        if (handle != null) {
-                            taskOpts = cloneDecryptOptions(opts);
-                            taskOpts.reporter = handle;
-                        }
-
-                        if (u.isArchive) {
-                            if (allowNested) {
-                                DecryptOptions nestedOpts = cloneDecryptOptions(taskOpts);
-                                nestedOpts.threadCount = 1;
-                                decryptArchive(u.encFile, destParent, nestedOpts, stats, depth + 1);
-                            } else {
-                                Path copyOut = destParent.resolve(u.outputName);
-                                Files.copy(u.encFile, copyOut, StandardCopyOption.REPLACE_EXISTING);
-                                stats.archivesPassthrough.incrementAndGet();
-                            }
-                        } else if (u.isChunkDir) {
-                            Path out = destParent.resolve(stripEncExt(u.outputName));
-                            decryptRecombine(u.chunkBase, out, taskOpts);
-                            stats.decrypted.incrementAndGet();
-                        } else {
-                            Path out = destParent.resolve(stripEncExt(u.outputName));
-                            decryptSingle(u.encFile, out, taskOpts);
-                            stats.decrypted.incrementAndGet();
-                        }
-
-                        int done = completed.incrementAndGet();
-                        if (progress != null) {
-                            progress.setStatus(
-                                    Messages.format("status.decrypting.progress", done, total));
-                        } else if (reporter != null) {
-                            reporter.setStatus(
-                                    Messages.format("status.decrypting.progress", done, total));
-                            reporter.setProgress((float) done / total, "");
-                        }
-                    } catch (Exception e) {
-                        firstError.compareAndSet(null, e);
-                    } finally {
-                        if (handle != null) {
-                            handle.close();
-                        }
-                    }
-                };
-
-                if (executor != null) {
-                    futures.add(executor.submit(task));
-                } else {
-                    // 串行模式：直接执行
-                    task.run();
-                    Exception err = firstError.get();
-                    if (err != null) {
-                        if (err instanceof InterruptedException) {
-                            throw (InterruptedException) err;
-                        }
-                        throw err;
-                    }
-                    if (reporter != null && reporter.isCancelled()) {
-                        throw new InterruptedException("cancelled");
-                    }
+        List<BatchJob> jobs = new ArrayList<>(total);
+        for (Unit u : units) {
+            final Unit unit = u;
+            jobs.add(new BatchJob(unit.outputName, taskReporter -> {
+                DecryptOptions taskOpts = opts;
+                if (taskReporter != opts.reporter) {
+                    taskOpts = cloneDecryptOptions(opts);
+                    taskOpts.reporter = taskReporter;
                 }
-            }
-
-            // 等待全部完成（并行模式）
-            if (executor != null) {
-                for (java.util.concurrent.Future<?> f : futures) {
-                    try {
-                        f.get();
-                    } catch (java.util.concurrent.ExecutionException e) {
-                        firstError.compareAndSet(null, (Exception) e.getCause());
-                    }
-                }
-            }
-        } finally {
-            if (executor != null) {
-                executor.shutdownNow();
-                try {
-                    executor.awaitTermination(5, TimeUnit.SECONDS);
-                } catch (InterruptedException ignored) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+                decryptOneUnit(unit, dir, mirrorRoot, taskOpts, stats, depth, allowNested);
+            }));
         }
 
-        // 抛出首个错误（若有）
-        Exception err = firstError.get();
-        if (err != null) {
-            if (err instanceof InterruptedException) {
-                throw (InterruptedException) err;
-            }
-            throw err;
-        }
+        processJobs(jobs, threads, false, reporter, progress, completed, total, result);
 
-        // 检查是否被取消
-        if (reporter != null && reporter.isCancelled()) {
-            throw new InterruptedException("cancelled");
-        }
-
-        // 后处理：解密 .zip.ergou 后新出现的归档文件（来自迭代加密深目录），
-        // 当 autoUnzip 开启时自动解压并递归解密其中的加密内容。
         if (opts.autoUnzip) {
             postExtractNewArchives(mirrorRoot, opts, stats, depth, reporter);
         }
@@ -610,6 +400,7 @@ public final class FolderCrypt {
             // 快速失败：带密码的归档无法无密码解压，保留原文件并跳过，避免静默损坏
             if (isPasswordProtectedArchive(archive)) {
                 stats.archivesPassthrough.incrementAndGet();
+                ensureDecryptResult(opts).addSkipped(1);
                 if (reporter != null) {
                     reporter.setStatus(Messages.format("status.skipped",
                             archive.getFileName(),
@@ -627,10 +418,12 @@ public final class FolderCrypt {
                 Path extractDest = archive.getParent();
                 ArchiveExtractor.extract(archive, extractDest, null);
                 stats.decrypted.incrementAndGet();
+                ensureDecryptResult(opts).addSuccess(archive.getFileName().toString());
                 // 删除中间归档文件
                 Files.deleteIfExists(archive);
             } catch (Exception e) {
-                // 归档解压失败不中断整体流程，仅跳过该归档
+                ensureDecryptResult(opts).addFailure(archive.getFileName().toString(),
+                        e.getMessage());
                 if (reporter != null) {
                     reporter.setStatus(Messages.format("status.skipped",
                             archive.getFileName(), e.getMessage()));
@@ -905,6 +698,9 @@ public final class FolderCrypt {
         req.setDeniability(opts.deniability);
         req.setChunkSize(opts.chunkSize);
         req.setRsCodecs(opts.rsCodecs != null ? opts.rsCodecs : new RsCodecs());
+        req.setArgon2MemoryKib(opts.argon2MemoryKib);
+        req.setArgon2Passes(opts.argon2Passes);
+        req.setArgon2Threads(opts.argon2Threads);
         if (opts.keyfiles != null && !opts.keyfiles.isEmpty()) {
             req.setKeyfiles(opts.keyfiles);
             req.setKeyfileOrdered(opts.keyfileOrdered);
@@ -941,6 +737,7 @@ public final class FolderCrypt {
         cloned.rsCodecs = opts.rsCodecs;
         cloned.reporter = opts.reporter;
         cloned.threadCount = opts.threadCount;
+        cloned.batchResult = opts.batchResult;
         return cloned;
     }
 
@@ -956,6 +753,549 @@ public final class FolderCrypt {
                 }
             });
         }
+    }
+
+    /**
+     * 将并行任务失败原因规范为 {@link Exception}。
+     *
+     * <p>{@link OutOfMemoryError} 等 {@link Error} 不能强转为 Exception，
+     * 否则会再抛出 {@link ClassCastException} 掩盖真实原因。
+     *
+     * @param t 失败原因，可为 null
+     * @return 可存入并行错误槽的异常
+     */
+    private static Exception wrapTaskFailure(Throwable t) {
+        if (t instanceof Exception e) {
+            return e;
+        }
+        if (t == null) {
+            return new IOException("parallel task failed");
+        }
+        String msg = t.getClass().getSimpleName();
+        if (t.getMessage() != null && !t.getMessage().isBlank()) {
+            msg = msg + ": " + t.getMessage();
+        }
+        return new IOException(msg, t);
+    }
+
+    // ================================================================
+    // 批处理调度：阈值、跳过失败、OOM 降级
+    // ================================================================
+
+    /**
+     * 取得或创建加密选项上的 {@link BatchResult}。
+     *
+     * @param opts 加密选项
+     * @return 非 null 的汇总对象
+     */
+    private static BatchResult ensureEncryptResult(EncryptOptions opts) {
+        if (opts.batchResult == null) {
+            opts.batchResult = new BatchResult();
+        }
+        return opts.batchResult;
+    }
+
+    /**
+     * 取得或创建解密选项上的 {@link BatchResult}。
+     *
+     * @param opts 解密选项
+     * @return 非 null 的汇总对象
+     */
+    private static BatchResult ensureDecryptResult(DecryptOptions opts) {
+        if (opts.batchResult == null) {
+            opts.batchResult = new BatchResult();
+        }
+        return opts.batchResult;
+    }
+
+    /**
+     * 按设置阈值与强制串行标志解析文件级线程数。
+     *
+     * @param configured  用户配置的线程数
+     * @param totalBytes  本批输入总字节
+     * @param forceSerial 强制单线程（解压后解密 / 嵌套）
+     * @param result      写入策略原因
+     * @return 实际线程数（≥ 1）
+     */
+    static int resolveThreadCount(int configured, long totalBytes,
+                                  boolean forceSerial, BatchResult result) {
+        return resolveThreadCount(configured, totalBytes, forceSerial, result,
+                SettingsManager.getBatchSerialThresholdGiB());
+    }
+
+    /**
+     * 解析文件级线程数（可注入阈值，便于测试）。
+     *
+     * @param configured   用户配置的线程数
+     * @param totalBytes   本批输入总字节
+     * @param forceSerial  强制单线程
+     * @param result       写入策略原因
+     * @param thresholdGiB 单线程阈值（GiB）
+     * @return 实际线程数（≥ 1）
+     */
+    static int resolveThreadCount(int configured, long totalBytes, boolean forceSerial,
+                                  BatchResult result, int thresholdGiB) {
+        result.setTotalBytes(totalBytes);
+        int threads = Math.max(1, configured);
+        if (forceSerial) {
+            result.setSerialReason(BatchResult.SerialReason.ARCHIVE_EXTRACT);
+            LogService.info("FolderCrypt", "解压后/嵌套解密强制单线程");
+            return 1;
+        }
+        long thresholdBytes = (long) Math.max(1, thresholdGiB) * 1024L * 1024L * 1024L;
+        if (totalBytes >= thresholdBytes) {
+            result.setSerialReason(BatchResult.SerialReason.THRESHOLD);
+            LogService.info("FolderCrypt", "总大小 " + LogService.humanSize(totalBytes)
+                    + " ≥ " + thresholdGiB + " GiB，切换为单线程");
+            return 1;
+        }
+        return threads;
+    }
+
+    /**
+     * 对文件列表求和大小，读失败的条目记为 0。
+     *
+     * @param files 文件路径
+     * @return 总字节
+     */
+    static long sumFileSizes(List<Path> files) {
+        long sum = 0L;
+        if (files == null) {
+            return 0L;
+        }
+        for (Path p : files) {
+            sum += sizeOf(p);
+        }
+        return sum;
+    }
+
+    /**
+     * 对目录内常规文件求和大小。
+     *
+     * @param dirs 目录列表
+     * @return 总字节
+     */
+    static long sumDirSizes(List<Path> dirs) {
+        long sum = 0L;
+        if (dirs == null) {
+            return 0L;
+        }
+        for (Path dir : dirs) {
+            try (Stream<Path> walk = Files.walk(dir)) {
+                for (Path p : walk.filter(Files::isRegularFile).toList()) {
+                    sum += sizeOf(p);
+                }
+            } catch (IOException ignored) {
+            }
+        }
+        return sum;
+    }
+
+    /**
+     * 对解密单元估算输入大小。
+     *
+     * @param units 解密单元
+     * @return 总字节
+     */
+    static long sumUnitSizes(List<Unit> units) {
+        long sum = 0L;
+        if (units == null) {
+            return 0L;
+        }
+        for (Unit u : units) {
+            if (u.isChunkDir && u.chunkBase != null) {
+                Path parent = u.chunkBase.getParent();
+                if (parent != null && Files.isDirectory(parent)) {
+                    try (Stream<Path> children = Files.list(parent)) {
+                        for (Path p : children.filter(Files::isRegularFile).toList()) {
+                            sum += sizeOf(p);
+                        }
+                    } catch (IOException ignored) {
+                    }
+                }
+            } else if (u.encFile != null) {
+                sum += sizeOf(u.encFile);
+            }
+        }
+        return sum;
+    }
+
+    /**
+     * 读取文件大小，失败返回 0。
+     *
+     * @param path 路径
+     * @return 字节数
+     */
+    private static long sizeOf(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            return 0L;
+        }
+    }
+
+    /**
+     * 是否为内存耗尽类错误（含 cause 链）。
+     *
+     * @param t 失败原因
+     * @return true 表示应停止并行
+     */
+    static boolean isMemoryError(Throwable t) {
+        Throwable cur = t;
+        int depth = 0;
+        while (cur != null && depth < 8) {
+            if (cur instanceof VirtualMachineError) {
+                return true;
+            }
+            cur = cur.getCause();
+            depth++;
+        }
+        return false;
+    }
+
+    /**
+     * 是否为用户取消。
+     *
+     * @param t 失败原因
+     * @return true 表示应中止整批
+     */
+    private static boolean isCancel(Throwable t) {
+        if (t instanceof InterruptedException) {
+            return true;
+        }
+        return t != null && "cancelled".equalsIgnoreCase(t.getMessage());
+    }
+
+    /**
+     * 从异常提取短消息。
+     *
+     * @param t 失败原因
+     * @return 非空消息
+     */
+    private static String failureMessage(Throwable t) {
+        if (t == null) {
+            return "failed";
+        }
+        String msg = t.getMessage();
+        if (msg != null && !msg.isBlank()) {
+            return msg;
+        }
+        return t.getClass().getSimpleName();
+    }
+
+    /**
+     * 加密深度内的单个普通文件。
+     *
+     * @param src          源文件
+     * @param inputDir     加密根
+     * @param workDir      工作目录
+     * @param opts         选项
+     * @param taskReporter 该任务的进度回调
+     * @throws Exception 加密失败
+     */
+    private static void encryptPlainFile(Path src, Path inputDir, Path workDir,
+                                         EncryptOptions opts, ProgressReporter taskReporter)
+            throws Exception {
+        Path rel = inputDir.relativize(src);
+        Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
+        if (opts.split) {
+            Path chunkDir = destEnc.getParent().resolve(
+                    stripExt(destEnc.getFileName().toString()));
+            Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
+            EncryptRequest req = buildRequest(src, chunkBase, opts, taskReporter);
+            req.setSplit(true);
+            req.setArchiveFormat(null);
+            Encryptor.encrypt(req);
+        } else {
+            EncryptRequest req = buildRequest(src, destEnc, opts, taskReporter);
+            req.setSplit(false);
+            req.setArchiveFormat(null);
+            Encryptor.encrypt(req);
+        }
+    }
+
+    /**
+     * 将深目录打成 ZIP 再加密。
+     *
+     * @param deepDir      深目录
+     * @param inputDir     加密根
+     * @param workDir      工作目录
+     * @param opts         选项
+     * @param taskReporter 该任务的进度回调
+     * @throws Exception 打包或加密失败
+     */
+    private static void encryptDeepDirectory(Path deepDir, Path inputDir, Path workDir,
+                                             EncryptOptions opts, ProgressReporter taskReporter)
+            throws Exception {
+        Path rel = inputDir.relativize(deepDir);
+        String dirName = deepDir.getFileName().toString();
+        Path parentInWork = rel.getParent() != null
+                ? workDir.resolve(rel.getParent().toString())
+                : workDir;
+        Path destEnc = parentInWork.resolve(dirName + ".zip.ergou");
+        Path tempArchive = archiveDirectory(deepDir);
+        try {
+            if (tempArchive == null) {
+                throw new IOException("deep directory is empty: " + deepDir);
+            }
+            if (opts.split) {
+                Path chunkDir = destEnc.getParent().resolve(
+                        stripExt(destEnc.getFileName().toString()));
+                Path chunkBase = chunkDir.resolve(destEnc.getFileName().toString());
+                EncryptRequest req = buildRequest(tempArchive, chunkBase, opts, taskReporter);
+                req.setSplit(true);
+                req.setArchiveFormat(null);
+                Encryptor.encrypt(req);
+            } else {
+                EncryptRequest req = buildRequest(tempArchive, destEnc, opts, taskReporter);
+                req.setSplit(false);
+                req.setArchiveFormat(null);
+                Encryptor.encrypt(req);
+            }
+        } finally {
+            if (tempArchive != null) {
+                try {
+                    Files.deleteIfExists(tempArchive);
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * 处理单个解密单元（文件 / 分卷 / 嵌套归档）。
+     *
+     * @param u            单元
+     * @param dir          当前目录
+     * @param mirrorRoot   输出镜像根
+     * @param taskOpts     本任务选项
+     * @param stats        统计
+     * @param depth        当前深度
+     * @param allowNested  是否深入嵌套归档
+     * @throws Exception 处理失败
+     */
+    private static void decryptOneUnit(Unit u, Path dir, Path mirrorRoot,
+                                       DecryptOptions taskOpts, DecryptStats stats,
+                                       int depth, boolean allowNested) throws Exception {
+        Path relParent = dir.relativize(u.relativeTo);
+        Path destParent = mirrorRoot.resolve(relParent.toString());
+        if (u.isArchive) {
+            if (allowNested) {
+                DecryptOptions nestedOpts = cloneDecryptOptions(taskOpts);
+                nestedOpts.threadCount = 1;
+                decryptArchive(u.encFile, destParent, nestedOpts, stats, depth + 1);
+            } else {
+                Path copyOut = destParent.resolve(u.outputName);
+                Files.copy(u.encFile, copyOut, StandardCopyOption.REPLACE_EXISTING);
+                stats.archivesPassthrough.incrementAndGet();
+            }
+        } else if (u.isChunkDir) {
+            Path out = destParent.resolve(stripEncExt(u.outputName));
+            decryptRecombine(u.chunkBase, out, taskOpts);
+            stats.decrypted.incrementAndGet();
+        } else {
+            Path out = destParent.resolve(stripEncExt(u.outputName));
+            decryptSingle(u.encFile, out, taskOpts);
+            stats.decrypted.incrementAndGet();
+        }
+    }
+
+    /**
+     * 执行批任务队列：失败跳过；OOM 时停并行、GC 后改串行，串行再 OOM 则放弃余下。
+     *
+     * @param jobs       任务
+     * @param threads    文件级线程数
+     * @param encrypt    true 表示加密进度文案
+     * @param reporter   总进度
+     * @param progress   并行聚合器，可为 null
+     * @param completed  已完成计数
+     * @param total      任务总数
+     * @param result     汇总
+     * @throws InterruptedException 用户取消
+     */
+    private static void processJobs(List<BatchJob> jobs, int threads, boolean encrypt,
+                                    ProgressReporter reporter,
+                                    ParallelProgressAggregator progress,
+                                    AtomicInteger completed, int total,
+                                    BatchResult result) throws InterruptedException {
+        ConcurrentLinkedQueue<BatchJob> queue = new ConcurrentLinkedQueue<>(jobs);
+        AtomicBoolean oomDowngrade = new AtomicBoolean(false);
+        AtomicReference<InterruptedException> cancelled = new AtomicReference<>();
+
+        if (threads <= 1) {
+            drainJobs(queue, encrypt, reporter, progress, completed, total,
+                    result, oomDowngrade, cancelled, true);
+        } else {
+            ExecutorService executor = encrypt
+                    ? CryptoThreadPool.forEncrypt(threads)
+                    : CryptoThreadPool.forDecrypt(threads);
+            try {
+                List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+                for (int i = 0; i < threads; i++) {
+                    futures.add(executor.submit(() -> drainJobs(queue, encrypt, reporter, progress,
+                            completed, total, result, oomDowngrade, cancelled, false)));
+                }
+                for (java.util.concurrent.Future<?> f : futures) {
+                    try {
+                        f.get();
+                    } catch (java.util.concurrent.ExecutionException e) {
+                        Throwable c = e.getCause() != null ? e.getCause() : e;
+                        if (isCancel(c)) {
+                            cancelled.compareAndSet(null, new InterruptedException("cancelled"));
+                        } else {
+                            result.addFailure("(worker)", failureMessage(c));
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        cancelled.compareAndSet(null, e);
+                    }
+                }
+            } finally {
+                executor.shutdownNow();
+                try {
+                    executor.awaitTermination(5, TimeUnit.SECONDS);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            if (oomDowngrade.get() && !queue.isEmpty() && cancelled.get() == null
+                    && (reporter == null || !reporter.isCancelled())) {
+                result.setSerialReason(BatchResult.SerialReason.OOM_DOWNGRADE);
+                LogService.warn("FolderCrypt", "内存不足，余下 " + queue.size() + " 个任务改为单线程");
+                drainJobs(queue, encrypt, reporter, progress, completed, total,
+                        result, oomDowngrade, cancelled, true);
+            }
+        }
+
+        InterruptedException c = cancelled.get();
+        if (c != null) {
+            throw c;
+        }
+        if (reporter != null && reporter.isCancelled()) {
+            throw new InterruptedException("cancelled");
+        }
+        if (progress != null && progress.isCancelled()) {
+            throw new InterruptedException("cancelled");
+        }
+    }
+
+    /**
+     * 从队列取出任务并执行。
+     *
+     * @param queue        剩余任务
+     * @param encrypt      是否加密进度文案
+     * @param reporter     总进度
+     * @param progress     并行聚合器，可为 null
+     * @param completed    已完成计数
+     * @param total        任务总数
+     * @param result       汇总
+     * @param oomDowngrade 内存不足降级标志
+     * @param cancelled    取消槽
+     * @param serialMode   true 时 OOM 会放弃队列余下任务
+     */
+    private static void drainJobs(ConcurrentLinkedQueue<BatchJob> queue, boolean encrypt,
+                                  ProgressReporter reporter,
+                                  ParallelProgressAggregator progress,
+                                  AtomicInteger completed, int total,
+                                  BatchResult result, AtomicBoolean oomDowngrade,
+                                  AtomicReference<InterruptedException> cancelled,
+                                  boolean serialMode) {
+        while (true) {
+            if (cancelled.get() != null) {
+                return;
+            }
+            if ((reporter != null && reporter.isCancelled())
+                    || (progress != null && progress.isCancelled())) {
+                cancelled.compareAndSet(null, new InterruptedException("cancelled"));
+                return;
+            }
+            if (!serialMode && oomDowngrade.get()) {
+                return;
+            }
+            BatchJob job = queue.poll();
+            if (job == null) {
+                return;
+            }
+            ParallelProgressAggregator.TaskHandle handle =
+                    progress != null ? progress.openTask() : null;
+            try {
+                ProgressReporter taskReporter = handle != null ? handle : reporter;
+                job.body.run(taskReporter);
+                result.addSuccess(job.label);
+                int done = completed.incrementAndGet();
+                if (progress != null) {
+                    progress.setStatus(encrypt
+                            ? Messages.format("status.encrypting.progress", done, total, job.label)
+                            : Messages.format("status.decrypting.progress", done, total));
+                } else if (reporter != null) {
+                    reporter.setStatus(encrypt
+                            ? Messages.format("status.encrypting.progress", done, total, job.label)
+                            : Messages.format("status.decrypting.progress", done, total));
+                    reporter.setProgress((float) done / total, "");
+                }
+            } catch (InterruptedException e) {
+                cancelled.compareAndSet(null, e);
+                return;
+            } catch (Throwable t) {
+                if (isCancel(t)) {
+                    cancelled.compareAndSet(null, new InterruptedException("cancelled"));
+                    return;
+                }
+                String msg = failureMessage(t);
+                LogService.error("FolderCrypt", "文件失败 " + job.label + " | " + msg, t);
+                result.addFailure(job.label, msg);
+                if (isMemoryError(t)) {
+                    oomDowngrade.set(true);
+                    result.setSerialReason(BatchResult.SerialReason.OOM_DOWNGRADE);
+                    System.gc();
+                    if (serialMode) {
+                        BatchJob rest;
+                        while ((rest = queue.poll()) != null) {
+                            result.addFailure(rest.label, "skipped after OutOfMemoryError");
+                            LogService.error("FolderCrypt", "内存不足，跳过余下文件 " + rest.label);
+                        }
+                    }
+                    return;
+                }
+            } finally {
+                if (handle != null) {
+                    handle.close();
+                }
+            }
+        }
+    }
+
+    /**
+     * 批处理中的单个任务。
+     */
+    private static final class BatchJob {
+        /** 用于日志与汇总的标签（相对路径或文件名） */
+        final String label;
+        /** 任务体 */
+        final JobBody body;
+
+        /**
+         * @param label 标签
+         * @param body  任务体
+         */
+        BatchJob(String label, JobBody body) {
+            this.label = label;
+            this.body = body;
+        }
+    }
+
+    /**
+     * 单个批任务体。
+     */
+    @FunctionalInterface
+    private interface JobBody {
+        /**
+         * 执行任务。
+         *
+         * @param taskReporter 该任务进度回调
+         * @throws Exception 失败
+         */
+        void run(ProgressReporter taskReporter) throws Exception;
     }
 
     // ================================================================
@@ -1046,6 +1386,23 @@ public final class FolderCrypt {
          * 超出深度的目录会先被打成 ZIP 压缩包，再对该压缩包进行加密（内部文件不再逐一加密）。
          */
         public int encryptDepth = 2;
+        /**
+         * 批处理汇总（输出）。由 {@link FolderCrypt} 写入，调用方可在返回后读取。
+         */
+        public BatchResult batchResult;
+        /**
+         * Argon2 内存覆写（KiB）。null 表示使用默认 1 GiB。
+         * 移动端与单测可通过此字段降低内存占用。
+         */
+        public Integer argon2MemoryKib;
+        /**
+         * Argon2 迭代次数覆写。null 表示使用默认值。
+         */
+        public Integer argon2Passes;
+        /**
+         * Argon2 并行度覆写。null 表示使用默认值。
+         */
+        public Integer argon2Threads;
     }
 
     /**
@@ -1073,5 +1430,9 @@ public final class FolderCrypt {
          * 仅当输入为文件夹/压缩包时生效，单文件解密忽略此值。
          */
         public int threadCount = 1;
+        /**
+         * 批处理汇总（输出）。由 {@link FolderCrypt} 写入，调用方可在返回后读取。
+         */
+        public BatchResult batchResult;
     }
 }

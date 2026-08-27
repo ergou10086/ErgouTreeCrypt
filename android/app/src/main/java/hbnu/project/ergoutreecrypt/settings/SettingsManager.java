@@ -32,10 +32,12 @@ public final class SettingsManager {
     private static final boolean DEF_AUTO_CLEAR_PWD = false;
     private static final String DEF_THEME_MODE = "SYSTEM";
     private static final int DEF_THREAD_COUNT = 4;
+    private static final int DEF_BATCH_SERIAL_GIB = 10;
     private static final boolean DEF_ARCHIVE_PWD_FALLBACK = false;
     private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
     private static final String DEF_LOG_LEVEL = "INFO";
     private static final boolean DEF_LOG_CLEAR_ON_NEW_OP = true;
+    private static final boolean DEF_LOG_JVM_DIAGNOSTICS = false;
 
     // ---- 可写字段（in-memory，由 AndroidSettings 同步写入） ----
 
@@ -54,10 +56,14 @@ public final class SettingsManager {
     private static volatile boolean archiveCustomEncryption = DEF_ARCHIVE_CUSTOM_ENC;
 
     private static volatile int threadCount = DEF_THREAD_COUNT;
+    private static volatile int batchSerialThresholdGiB = DEF_BATCH_SERIAL_GIB;
     private static volatile LogLevel logLevel = LogLevel.INFO;
     private static volatile boolean logClearOnNewOp = DEF_LOG_CLEAR_ON_NEW_OP;
+    private static volatile boolean logJvmDiagnostics = DEF_LOG_JVM_DIAGNOSTICS;
     private static final int MIN_THREAD_COUNT = 1;
     private static final int MAX_THREAD_COUNT = 16;
+    private static final int MIN_BATCH_SERIAL_GIB = 1;
+    private static final int MAX_BATCH_SERIAL_GIB = 100;
 
     private SettingsManager() {
     }
@@ -135,6 +141,15 @@ public final class SettingsManager {
     }
 
     /**
+     * 批处理切换为单线程的总大小阈值（GiB）。
+     *
+     * @return 阈值 GiB，默认 10
+     */
+    public static int getBatchSerialThresholdGiB() {
+        return batchSerialThresholdGiB;
+    }
+
+    /**
      * 获取应用日志级别。
      *
      * @return {@link LogLevel#INFO}（默认）或 {@link LogLevel#TRACE}
@@ -150,6 +165,15 @@ public final class SettingsManager {
      */
     public static boolean isLogClearOnNewOp() {
         return logClearOnNewOp;
+    }
+
+    /**
+     * 是否开启 JVM 底层诊断日志。
+     *
+     * @return true 表示已开启
+     */
+    public static boolean isJvmDiagnostics() {
+        return logJvmDiagnostics;
     }
 
     // ---- Setters（由 AndroidSettings DataStore 变更时调用） ----
@@ -227,6 +251,20 @@ public final class SettingsManager {
     }
 
     /**
+     * 设置批处理单线程阈值（GiB），自动钳位到 1–100。
+     *
+     * @param v 阈值 GiB
+     */
+    public static void setBatchSerialThresholdGiB(int v) {
+        if (v < MIN_BATCH_SERIAL_GIB) {
+            v = MIN_BATCH_SERIAL_GIB;
+        } else if (v > MAX_BATCH_SERIAL_GIB) {
+            v = MAX_BATCH_SERIAL_GIB;
+        }
+        batchSerialThresholdGiB = v;
+    }
+
+    /**
      * 设置应用日志级别。
      *
      * @param v 级别；null 或非 TRACE 均视为 INFO
@@ -242,6 +280,15 @@ public final class SettingsManager {
      */
     public static void setLogClearOnNewOp(boolean v) {
         logClearOnNewOp = v;
+    }
+
+    /**
+     * 设置 JVM 底层诊断日志开关。
+     *
+     * @param v true 开启
+     */
+    public static void setJvmDiagnostics(boolean v) {
+        logJvmDiagnostics = v;
     }
 
     /**
@@ -267,8 +314,10 @@ public final class SettingsManager {
         archivePasswordFallback = bridge.archivePasswordFallback;
         archiveCustomEncryption = bridge.archiveCustomEncryption;
         threadCount = bridge.threadCount;
+        batchSerialThresholdGiB = bridge.batchSerialThresholdGiB;
         logLevel = LogLevel.fromName(bridge.logLevel);
         logClearOnNewOp = bridge.logClearOnNewOp;
+        logJvmDiagnostics = bridge.logJvmDiagnostics;
     }
 
     /**
@@ -291,7 +340,9 @@ public final class SettingsManager {
         public boolean archivePasswordFallback = DEF_ARCHIVE_PWD_FALLBACK;
         public boolean archiveCustomEncryption = DEF_ARCHIVE_CUSTOM_ENC;
         public int threadCount = DEF_THREAD_COUNT;
+        public int batchSerialThresholdGiB = DEF_BATCH_SERIAL_GIB;
         public String logLevel = DEF_LOG_LEVEL;
         public boolean logClearOnNewOp = DEF_LOG_CLEAR_ON_NEW_OP;
+        public boolean logJvmDiagnostics = DEF_LOG_JVM_DIAGNOSTICS;
     }
 }

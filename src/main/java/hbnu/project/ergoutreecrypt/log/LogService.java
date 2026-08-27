@@ -7,7 +7,8 @@ import java.util.List;
  *
  * <p>提供进程级静态入口，供各模块记录操作、阶段、进度与错误，而不依赖 UI 或设置实现。
  * 平台启动时通过 {@link #register(MemoryLogBuffer, LogSink)} 注入缓冲与可选文件接收器；
- * 未注册时所有写入静默丢弃。
+ * 未注册时所有写入静默丢弃。开启 {@link JvmDiagnostics} 后，错误事件携带完整堆栈，
+ * 会话边界会追加堆/GC 快照。
  *
  * <p>本类与加解密模块无循环依赖：业务只调用本门面，由桌面端负责注册、订阅与展示。
  *
@@ -72,8 +73,11 @@ public final class LogService {
 
     /**
      * 注销全部接收器并恢复默认配置。供测试与进程退出使用。
+     *
+     * <p>同时安静关闭 {@link JvmDiagnostics}，避免测试间泄漏未捕获异常处理器。
      */
     public static void reset() {
+        JvmDiagnostics.stopQuiet();
         buffer = null;
         extraSink = null;
         level = LogLevel.INFO;
@@ -149,6 +153,7 @@ public final class LogService {
         }
         String target = (fileName == null || fileName.isBlank()) ? "" : (": " + fileName);
         info("Session", "开始 " + sessionName + target);
+        JvmDiagnostics.logSnapshot("session-begin");
     }
 
     /**
@@ -158,6 +163,7 @@ public final class LogService {
      * @param elapsedMillis 耗时毫秒
      */
     public static void endSession(boolean success, long elapsedMillis) {
+        JvmDiagnostics.logSnapshot(success ? "session-end ok" : "session-end fail");
         String name = sessionName == null ? "?" : sessionName;
         String result = success ? "完成" : "失败";
         info("Session", result + " " + name, elapsedMillis);
@@ -170,6 +176,7 @@ public final class LogService {
      * @param elapsedMillis 耗时毫秒
      */
     public static void endSessionCancelled(long elapsedMillis) {
+        JvmDiagnostics.logSnapshot("session-end cancel");
         String name = sessionName == null ? "?" : sessionName;
         info("Session", "取消 " + name, elapsedMillis);
         sessionName = null;
@@ -320,23 +327,30 @@ public final class LogService {
      */
     private static void emit(LogLevel eventLevel, String category, String message,
                              Long elapsedMillis, Throwable throwable) {
-        if (!level.includes(eventLevel)) {
-            return;
-        }
-        LogEvent event = new LogEvent(
-                System.currentTimeMillis(),
-                eventLevel,
-                category == null ? "?" : category,
-                message == null ? "" : message,
-                elapsedMillis,
-                LogEvent.summarize(throwable));
-        MemoryLogBuffer current = buffer;
-        if (current != null) {
-            current.accept(event);
-        }
-        LogSink extra = extraSink;
-        if (extra != null) {
-            extra.accept(event);
+        try {
+            if (!level.includes(eventLevel)) {
+                return;
+            }
+            String summary = JvmDiagnostics.isEnabled()
+                    ? LogEvent.stackDump(throwable)
+                    : LogEvent.summarize(throwable);
+            LogEvent event = new LogEvent(
+                    System.currentTimeMillis(),
+                    eventLevel,
+                    category == null ? "?" : category,
+                    message == null ? "" : message,
+                    elapsedMillis,
+                    summary);
+            MemoryLogBuffer current = buffer;
+            if (current != null) {
+                current.accept(event);
+            }
+            LogSink extra = extraSink;
+            if (extra != null) {
+                extra.accept(event);
+            }
+        } catch (Throwable ignored) {
+            // 日志路径不得反向拖垮加解密
         }
     }
 }

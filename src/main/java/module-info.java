@@ -13,6 +13,9 @@ module hbnu.project.ergoutreecrypt {
     requires java.prefs;
     requires java.desktop;
     requires jdk.unsupported;
+    requires org.slf4j;
+    requires ch.qos.logback.classic;
+    requires ch.qos.logback.core;
 
     opens hbnu.project.ergoutreecrypt to javafx.fxml;
     opens hbnu.project.ergoutreecrypt.ui to javafx.fxml;

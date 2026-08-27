@@ -27,10 +27,12 @@ public final class SettingsManager {
     private static final String KEY_LAST_OUTPUT_DIR     = "last.output.dir";
     private static final String KEY_THEME_MODE          = "theme.mode";
     private static final String KEY_THREAD_COUNT        = "thread.count";
+    private static final String KEY_BATCH_SERIAL_GIB    = "batch.serial.threshold.gib";
     private static final String KEY_ARCHIVE_PWD_FALLBACK = "archive.password.fallback";
     private static final String KEY_ARCHIVE_CUSTOM_ENC  = "archive.custom.encryption";
     private static final String KEY_LOG_LEVEL           = "log.level";
     private static final String KEY_LOG_CLEAR_ON_NEW_OP = "log.clearOnNewOp";
+    private static final String KEY_LOG_JVM_DIAGNOSTICS = "log.jvmDiagnostics";
 
     // ---- 默认值 ----
     private static final boolean DEF_AUTO_DECOMPRESS  = true;
@@ -48,8 +50,12 @@ public final class SettingsManager {
     private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
     private static final String  DEF_LOG_LEVEL        = "INFO";
     private static final boolean DEF_LOG_CLEAR_ON_NEW_OP = true;
+    private static final boolean DEF_LOG_JVM_DIAGNOSTICS = false;
     private static final int     MIN_THREAD_COUNT     = 1;
     private static final int     MAX_THREAD_COUNT     = 16;
+    private static final int     DEF_BATCH_SERIAL_GIB = 10;
+    private static final int     MIN_BATCH_SERIAL_GIB = 1;
+    private static final int     MAX_BATCH_SERIAL_GIB = 100;
 
     private SettingsManager() {}
 
@@ -130,6 +136,40 @@ public final class SettingsManager {
     }
 
     /**
+     * 获取批处理切换为单线程的总大小阈值（GiB）。
+     *
+     * <p>一次文件夹 / 多文件操作的输入总大小达到该值时，文件级并行降为 1。
+     * 压缩包解压后解密始终单线程，不受此阈值影响。返回值钳制在
+     * [{@value #MIN_BATCH_SERIAL_GIB}, {@value #MAX_BATCH_SERIAL_GIB}]。
+     *
+     * @return 阈值 GiB，默认 {@value #DEF_BATCH_SERIAL_GIB}
+     */
+    public static int getBatchSerialThresholdGiB() {
+        int v = PREFS.getInt(KEY_BATCH_SERIAL_GIB, DEF_BATCH_SERIAL_GIB);
+        if (v < MIN_BATCH_SERIAL_GIB) {
+            return MIN_BATCH_SERIAL_GIB;
+        }
+        if (v > MAX_BATCH_SERIAL_GIB) {
+            return MAX_BATCH_SERIAL_GIB;
+        }
+        return v;
+    }
+
+    /**
+     * 设置批处理单线程阈值（GiB）。
+     *
+     * @param v 阈值，超出范围将被钳制
+     */
+    public static void setBatchSerialThresholdGiB(int v) {
+        if (v < MIN_BATCH_SERIAL_GIB) {
+            v = MIN_BATCH_SERIAL_GIB;
+        } else if (v > MAX_BATCH_SERIAL_GIB) {
+            v = MAX_BATCH_SERIAL_GIB;
+        }
+        PREFS.putInt(KEY_BATCH_SERIAL_GIB, v);
+    }
+
+    /**
      * 归档密码为空时，是否回退使用文件加密密码保护压缩包。
      *
      * <p>关闭（默认）时：归档密码留空 = 生成无密码明文归档。
@@ -206,5 +246,25 @@ public final class SettingsManager {
      */
     public static void setLogClearOnNewOp(boolean v) {
         PREFS.putBoolean(KEY_LOG_CLEAR_ON_NEW_OP, v);
+    }
+
+    /**
+     * 是否开启 JVM 底层诊断日志。
+     *
+     * <p>默认关闭。开启后记录堆快照、GC 累计、完整异常堆栈，并写入独立的 {@code jvm.log}。
+     *
+     * @return true 表示已开启
+     */
+    public static boolean isJvmDiagnostics() {
+        return PREFS.getBoolean(KEY_LOG_JVM_DIAGNOSTICS, DEF_LOG_JVM_DIAGNOSTICS);
+    }
+
+    /**
+     * 设置 JVM 底层诊断日志开关。
+     *
+     * @param v true 开启
+     */
+    public static void setJvmDiagnostics(boolean v) {
+        PREFS.putBoolean(KEY_LOG_JVM_DIAGNOSTICS, v);
     }
 }

@@ -514,14 +514,21 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 val resolvedOutDir = OutputDirResolver.historyDir(
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
+                val batchSummary = progress.statusText
+                val batchDetail = progress.detail
+                val partial = !progress.detail.isNullOrBlank() && progress.error != null
                 vm.reset()
                 val committed = commitOutput()
                 when (committed) {
                     null, true -> {
-                        resultTitle = "解密完成"
-                        resultMessage = buildSuccessMessage("解密", outNameNow)
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
+                        resultTitle = if (partial) "解密部分完成" else "解密完成"
+                        resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
+                            batchSummary
+                        } else {
+                            buildSuccessMessage("解密", outNameNow)
+                        }
+                        resultDetail = batchDetail
+                        resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
                         // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
                         withContext(Dispatchers.IO) {
                             HistoryService.record(
@@ -543,7 +550,11 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(progress.error)
-                val errDetail = progress.error
+                val errDetail = listOfNotNull(progress.detail, progress.error)
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .joinToString("\n")
+                    .ifBlank { progress.error }
                 vm.reset()
                 resultTitle = "解密失败"
                 resultMessage = errMsg

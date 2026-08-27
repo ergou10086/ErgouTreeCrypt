@@ -27,4 +27,7 @@ docs
 CLAUDE.md
 "*.apk" 
 "**/build/" 
-"**/shared-test/build/" 
+"**/shared-test/build/"
+
+
+temp/

@@ -169,6 +169,7 @@ public final class LogServiceTest {
         assertNotNull(event.exceptionSummary());
         assertTrue(event.exceptionSummary().contains("IllegalStateException"));
         assertTrue(event.exceptionSummary().contains("bad"));
+        assertFalse(event.exceptionSummary().contains(" at "));
     }
 
     /**

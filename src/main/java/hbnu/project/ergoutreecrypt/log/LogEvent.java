@@ -9,6 +9,7 @@ import java.time.format.DateTimeFormatter;
  *
  * <p>只携带排障所需的非敏感信息：时间、级别、分类、消息，以及可选的耗时与异常摘要。
  * 不得包含密码、派生密钥、MAC key、密钥文件内容或明文片段。
+ * 开启 JVM 底层日志时，{@code exceptionSummary} 可为多行堆栈。
  *
  * @param timestampEpochMillis 事件时间（Unix 毫秒）
  * @param level                日志级别
@@ -32,11 +33,12 @@ public record LogEvent(
             DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
     /**
-     * 格式化为单行文本，供界面展示与文件导出。
+     * 格式化为文本，供界面展示与文件导出。
      *
      * <p>形如 {@code 14:32:05.123  INFO  [Encryptor] 开始加密 demo.zip (12.3 MiB)}。
+     * 开启 JVM 诊断且带异常时，摘要可能跨多行。
      *
-     * @return 单行日志文本
+     * @return 日志文本
      */
     public String formatLine() {
         StringBuilder sb = new StringBuilder(96);
@@ -88,5 +90,41 @@ public record LogEvent(
             return type;
         }
         return type + ": " + msg;
+    }
+
+    /**
+     * 生成含线程名、堆栈与 cause 链的诊断文本。
+     *
+     * <p>供 JVM 底层日志开启时使用。帧数与 cause 深度有上限，避免 OOM 时日志再次撑爆内存。
+     *
+     * @param throwable 异常，可为 null
+     * @return 多行堆栈；throwable 为 null 时返回 null
+     */
+    public static String stackDump(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(512);
+        sb.append("thread=").append(Thread.currentThread().getName());
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth < 8) {
+            if (depth == 0) {
+                sb.append('\n').append(summarize(current));
+            } else {
+                sb.append("\nCaused by: ").append(summarize(current));
+            }
+            StackTraceElement[] frames = current.getStackTrace();
+            int limit = Math.min(frames.length, 48);
+            for (int i = 0; i < limit; i++) {
+                sb.append("\n  at ").append(frames[i]);
+            }
+            if (frames.length > limit) {
+                sb.append("\n  ... ").append(frames.length - limit).append(" more");
+            }
+            current = current.getCause();
+            depth++;
+        }
+        return sb.toString();
     }
 }

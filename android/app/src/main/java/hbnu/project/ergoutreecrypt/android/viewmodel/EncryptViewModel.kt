@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
  * @property canCancel    是否可取消
  * @property state        整体状态
  * @property error        错误信息
+ * @property detail       批处理汇总详情（部分失败列表等）
  */
 data class ProgressState(
     val statusText: String = "",
@@ -33,7 +34,8 @@ data class ProgressState(
     val info: String = "",
     val canCancel: Boolean = false,
     val state: State = State.IDLE,
-    val error: String? = null
+    val error: String? = null,
+    val detail: String? = null
 ) {
     enum class State { IDLE, RUNNING, DONE, ERROR, CANCELLED }
 }

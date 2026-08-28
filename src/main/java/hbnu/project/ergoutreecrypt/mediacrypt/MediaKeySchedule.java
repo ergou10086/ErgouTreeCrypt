@@ -49,7 +49,28 @@ public final class MediaKeySchedule implements AutoCloseable {
      */
     public static MediaKeySchedule derive(byte[] password, byte[] salt, byte[] hkdfSalt,
                                           boolean paranoid) {
-        byte[] master = Argon2Kdf.deriveKey(password, salt, paranoid);
+        return derive(password, salt, hkdfSalt, paranoid, null, null, null);
+    }
+
+    /**
+     * 派生密钥编排（支持 Argon2 参数覆写）。
+     *
+     * <p>当 override 参数为非 null 时使用覆写值（Android 移动端用低内存档位适配），
+     * 否则根据 paranoid 标志选择默认参数。桌面端沿用 4 参重载，行为不变。
+     *
+     * @param password            已归一化（NFC）的密码 UTF-8 字节；调用方负责其生命周期
+     * @param salt                16 字节 Argon2 salt
+     * @param hkdfSalt            32 字节 HKDF salt
+     * @param paranoid            是否使用偏执模式 Argon2 参数
+     * @param overrideMemoryKib   覆写内存参数（KiB），null 使用默认值
+     * @param overridePasses      覆写迭代次数，null 使用默认值
+     * @param overrideThreads     覆写并行线程数，null 使用默认值
+     */
+    public static MediaKeySchedule derive(byte[] password, byte[] salt, byte[] hkdfSalt,
+                                          boolean paranoid, Integer overrideMemoryKib,
+                                          Integer overridePasses, Integer overrideThreads) {
+        byte[] master = Argon2Kdf.deriveKey(password, salt, paranoid,
+                overrideMemoryKib, overridePasses, overrideThreads);
         try {
             HkdfStream hkdf = new HkdfStream(master, hkdfSalt);
             byte[] encKey = hkdf.read(ENC_KEY_LEN);

@@ -224,7 +224,8 @@ public final class Encryptor {
         String effectivePw = Passwordless.effectivePassword(req.getPassword());
         byte[] pwBytes = PasswordNormalizer.encodeForKdf(effectivePw);
         byte[] key = Argon2Kdf.deriveKey(pwBytes, ctx.header.getSalt(), req.isParanoid(),
-                req.getArgon2MemoryKib(), req.getArgon2Passes(), req.getArgon2Threads());
+                req.getArgon2MemoryKib(), req.getArgon2Passes(), req.getArgon2Threads(),
+                req.getKdfProgress());
         SecureZero.zero(pwBytes);
         ctx.setKey(key);
     }

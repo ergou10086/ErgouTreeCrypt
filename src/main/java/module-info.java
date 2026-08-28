@@ -9,6 +9,10 @@ module hbnu.project.ergoutreecrypt {
     requires org.bouncycastle.provider;
 
     requires org.apache.commons.compress;
+    // commons-compress 对 xz 仅声明 requires static（运行时可选），若本模块不强依赖，
+    // 解析 7z 时 Coders 静态初始化引用 org.tukaani.xz.FilterOptions 会抛 NoClassDefFoundError。
+    // 显式 require 以强制 JPMS 解析 xz 模块。
+    requires org.tukaani.xz;
     requires zip4j;
     requires java.prefs;
     requires java.desktop;

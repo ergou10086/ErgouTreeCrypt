@@ -85,6 +85,30 @@ public final class Argon2OffHeap {
     public static byte[] deriveKey(final byte[] password, final byte[] salt,
                                    final int memoryKiB, final int passes,
                                    final int parallelism, final int outputLen) {
+        return deriveKey(password, salt, memoryKiB, passes, parallelism, outputLen, null);
+    }
+
+    /**
+     * 离堆派生 Argon2id 密钥（支持进度/取消回调）。
+     *
+     * <p>{@code progress} 为 null 时行为与 6 参重载一致（桌面端）。移动端传回调
+     * 以在长派生期间回传 pass 粒度进度并响应取消。
+     *
+     * @param password    密码字节
+     * @param salt        Argon2 盐（至少 8 字节）
+     * @param memoryKiB   内存参数（KiB），须 ≥ 2×parallelism
+     * @param passes      迭代次数，须 ≥ 1
+     * @param parallelism 并行 lane 数，须 ≥ 1
+     * @param outputLen   输出字节数（≥ 4）
+     * @param progress    进度/取消回调，可为 null
+     * @return 派生密钥
+     * @throws IllegalArgumentException 参数非法
+     * @throws OutOfMemoryError         native 内存分配失败
+     */
+    public static byte[] deriveKey(final byte[] password, final byte[] salt,
+                                   final int memoryKiB, final int passes,
+                                   final int parallelism, final int outputLen,
+                                   final KdfProgress progress) {
         if (parallelism < 1) {
             throw new IllegalArgumentException("lanes must be greater than 1");
         }
@@ -120,7 +144,7 @@ public final class Argon2OffHeap {
             fillFirstBlocks(memory, seed, hashBytes, parallelism, laneLength);
             SecureZero.zero(h0);
 
-            fillMemory(memory, parallelism, passes, segmentLength, laneLength, memoryBlocks);
+            fillMemory(memory, parallelism, passes, segmentLength, laneLength, memoryBlocks, progress);
 
             long[] finalBlock = new long[BLOCK_LONGS];
             for (int lane = 0; lane < parallelism; lane++) {
@@ -270,12 +294,16 @@ public final class Argon2OffHeap {
      */
     static void fillMemory(final OffHeapMemory mem, final int lanes, final int passes,
                            final int segmentLength, final int laneLength,
-                           final int memoryBlocks) {
+                           final int memoryBlocks, final KdfProgress progress) {
         ExecutorService pool = Executors.newFixedThreadPool(lanes);
         try {
             for (int pass = 0; pass < passes; pass++) {
-                if (Thread.currentThread().isInterrupted()) {
+                if (Thread.currentThread().isInterrupted()
+                        || (progress != null && progress.isCancelled())) {
                     throw new IllegalStateException("Argon2 密钥派生已被取消");
+                }
+                if (progress != null) {
+                    progress.onProgress(pass + 1, passes);
                 }
                 for (int slice = 0; slice < SYNC_POINTS; slice++) {
                     final int p = pass;

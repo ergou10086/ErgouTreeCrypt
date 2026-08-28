@@ -69,7 +69,9 @@ public abstract class AbstractMediaCipher implements MediaCipher {
         Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
 
         byte[] plainMac = null;
-        try (MediaKeySchedule keys = MediaKeySchedule.derive(password, salt, hkdfSalt, options.paranoid());
+        try (MediaKeySchedule keys = MediaKeySchedule.derive(password, salt, hkdfSalt,
+                options.paranoid(), options.argon2MemoryKib(), options.argon2Passes(),
+                options.argon2Threads());
              FileChannel ch = FileChannel.open(output, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
 
             // 4. 可选：先算原文 payload MAC（在 XOR 之前）
@@ -88,7 +90,9 @@ public abstract class AbstractMediaCipher implements MediaCipher {
 
         // 6. 写入元数据载体（追加 chunk / PRIV 帧 / uuid box）
         MediaMetadata metadata = new MediaMetadata(format(), profile, options.paranoid(),
-                salt, hkdfSalt, nonce, plainMac);
+                salt, hkdfSalt, nonce, plainMac, null,
+                arg(options.argon2MemoryKib()), arg(options.argon2Passes()),
+                arg(options.argon2Threads()));
         writeMetadata(output, metadata, plan);
     }
 
@@ -108,8 +112,7 @@ public abstract class AbstractMediaCipher implements MediaCipher {
         }
 
         byte[] recomputedMac = null;
-        try (MediaKeySchedule keys = MediaKeySchedule.derive(password, metadata.salt(),
-                metadata.hkdfSalt(), metadata.paranoid());
+        try (MediaKeySchedule keys = deriveKeys(password, metadata);
              FileChannel ch = FileChannel.open(output, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
 
             Mac mac = metadata.hasIntegrity()
@@ -168,8 +171,7 @@ public abstract class AbstractMediaCipher implements MediaCipher {
 
             // 4. 派生密钥
             byte[] recomputedMac = null;
-            try (MediaKeySchedule keys = MediaKeySchedule.derive(password, metadata.salt(),
-                    metadata.hkdfSalt(), metadata.paranoid());
+            try (MediaKeySchedule keys = deriveKeys(password, metadata);
                  FileChannel ch = FileChannel.open(tempOutput,
                          StandardOpenOption.READ, StandardOpenOption.WRITE)) {
 
@@ -199,6 +201,47 @@ public abstract class AbstractMediaCipher implements MediaCipher {
                 }
             }
         }
+    }
+
+    // ==================== KDF 辅助 ====================
+
+    /**
+     * 将可空 Integer 覆写值归一化为非空 int（null 视为 0，表示未设置）。
+     *
+     * @param v 可空的覆写值
+     * @return 覆写值，null 时为 0
+     */
+    private static int arg(Integer v) {
+        return v == null ? 0 : v;
+    }
+
+    /**
+     * 依据元数据派生子密钥编排。
+     *
+     * <p>元数据含 Argon2 参数覆写（v2、移动端加密）时优先使用覆写值，
+     * 否则按 paranoid 标志使用默认参数（桌面端 1 GiB）。此方法把元数据中
+     * 的 {@code int} 覆写字段（0 表示未设置）转换为可空参数传入派生。
+     *
+     * @param password 已归一化密码 UTF-8 字节
+     * @param metadata 解析出的元数据
+     * @return 子密钥编排
+     */
+    private static MediaKeySchedule deriveKeys(byte[] password, MediaMetadata metadata) {
+        return MediaKeySchedule.derive(password, metadata.salt(), metadata.hkdfSalt(),
+                metadata.paranoid(),
+                argOrNull(metadata.argon2MemoryKib()),
+                argOrNull(metadata.argon2Passes()),
+                argOrNull(metadata.argon2Threads()));
+    }
+
+    /**
+     * 将非负 int 覆写值转换为可空 Integer（0 表示未设置，转为 null）。
+     *
+     * @param v 覆写值（0 表示未设置）
+     * @return 可空覆写值，0 时为 null
+     */
+    private static Integer argOrNull(int v) {
+        return v > 0 ? v : null;
     }
 
     // ==================== 子类需实现的格式相关钩子 ====================

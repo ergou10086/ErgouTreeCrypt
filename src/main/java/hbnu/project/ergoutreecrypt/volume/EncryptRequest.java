@@ -127,6 +127,11 @@ public final class EncryptRequest {
      */
     private Integer argon2Threads;
 
+    /**
+     * Argon2 密钥派生的进度/取消回调（移动端用于回传进度与响应取消），null 表示无需回调。
+     */
+    private hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress;
+
     public String getInputFile() {
         return inputFile;
     }
@@ -339,5 +344,23 @@ public final class EncryptRequest {
      */
     public void setArgon2Threads(Integer argon2Threads) {
         this.argon2Threads = argon2Threads;
+    }
+
+    /**
+     * 获取 Argon2 密钥派生的进度/取消回调，null 表示无需回调。
+     *
+     * @return 进度回调，可能为 null
+     */
+    public hbnu.project.ergoutreecrypt.crypto.KdfProgress getKdfProgress() {
+        return kdfProgress;
+    }
+
+    /**
+     * 设置 Argon2 密钥派生的进度/取消回调（移动端专用）。
+     *
+     * @param kdfProgress 进度回调，可为 null
+     */
+    public void setKdfProgress(hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress) {
+        this.kdfProgress = kdfProgress;
     }
 }

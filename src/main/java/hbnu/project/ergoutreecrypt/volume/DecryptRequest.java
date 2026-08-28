@@ -77,6 +77,11 @@ public final class DecryptRequest {
     private ProgressReporter reporter;
 
     /**
+     * Argon2 密钥派生的进度/取消回调（移动端用于回传进度与响应取消），null 表示无需回调。
+     */
+    private hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress;
+
+    /**
      * Reed-Solomon 编解码器实例。
      */
     private RsCodecs rsCodecs;
@@ -211,6 +216,24 @@ public final class DecryptRequest {
 
     public void setReporter(ProgressReporter r) {
         this.reporter = r;
+    }
+
+    /**
+     * 获取 Argon2 密钥派生的进度/取消回调，null 表示无需回调。
+     *
+     * @return 进度回调，可能为 null
+     */
+    public hbnu.project.ergoutreecrypt.crypto.KdfProgress getKdfProgress() {
+        return kdfProgress;
+    }
+
+    /**
+     * 设置 Argon2 密钥派生的进度/取消回调（移动端专用）。
+     *
+     * @param kdfProgress 进度回调，可为 null
+     */
+    public void setKdfProgress(hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress) {
+        this.kdfProgress = kdfProgress;
     }
 
     public RsCodecs getRsCodecs() {

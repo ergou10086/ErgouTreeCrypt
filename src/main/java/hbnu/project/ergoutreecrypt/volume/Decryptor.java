@@ -234,10 +234,12 @@ public final class Decryptor {
                     false, // paranoid 标志无效 — 参数已显式指定
                     ctx.header.getArgon2MemoryKib(),
                     ctx.header.getArgon2Passes(),
-                    ctx.header.getArgon2Threads());
+                    ctx.header.getArgon2Threads(),
+                    req.getKdfProgress());
         } else {
             boolean paranoid = ctx.header.getFlags().isParanoid();
-            key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(), paranoid);
+            key = Argon2Kdf.deriveKey(ctx.passwordBytes, ctx.header.getSalt(), paranoid,
+                    null, null, null, req.getKdfProgress());
         }
         ctx.setKey(key);
     }

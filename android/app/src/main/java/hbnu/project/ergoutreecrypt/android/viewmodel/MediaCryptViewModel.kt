@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.LoggingMediaProgress
+import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.log.LogService
@@ -64,7 +65,10 @@ class MediaCryptViewModel : ViewModel() {
         password: String,
         profile: MediaCryptProfile? = null,
         paranoid: Boolean = false,
-        storeIntegrity: Boolean = true
+        storeIntegrity: Boolean = true,
+        argon2MemoryKib: Int? = null,
+        argon2Passes: Int? = null,
+        argon2Threads: Int? = null
     ) {
         // 全局操作权占用失败：已有其他 Tab 的操作在运行
         val token = OperationCoordinator.tryAcquire() ?: return
@@ -82,6 +86,9 @@ class MediaCryptViewModel : ViewModel() {
                     .profile(profile)
                     .paranoid(paranoid)
                     .storeIntegrity(storeIntegrity)
+                    .argon2MemoryKib(argon2MemoryKib)
+                    .argon2Passes(argon2Passes)
+                    .argon2Threads(argon2Threads)
                     .build()
                 val pwdBytes = password.toByteArray(StandardCharsets.UTF_8)
                 val progressCallback = LoggingMediaProgress(createMediaProgress(), "MediaCrypt")
@@ -100,7 +107,7 @@ class MediaCryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = describeError(e)
                     )
                 }
             } finally {
@@ -183,7 +190,7 @@ class MediaCryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = describeError(e)
                     )
                 }
             } finally {

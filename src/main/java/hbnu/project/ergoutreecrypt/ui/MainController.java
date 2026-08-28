@@ -70,12 +70,10 @@ public class MainController {
     @FXML
     private Menu historyMenu;
     @FXML
-    private MenuItem historyMenuItem;
-    @FXML
     private Menu logsMenu;
 
-    /** 本次点击已由 MenuBar 拦截处理，避免 showing 回调再次 toggle。 */
-    private boolean logsMenuClickHandled;
+    /** 本次点击已由 MenuBar 拦截处理，避免 showing 回调再次触发。 */
+    private final java.util.Set<Menu> menuClickHandled = new java.util.HashSet<>();
 
     // ---- 标签页 ----
     @FXML
@@ -414,7 +412,8 @@ public class MainController {
         // 默认钓鱼文件按钮
         decoyFileDefaultBtn.setOnAction(e -> setDefaultDecoyFile());
 
-        installLogsMenuAsButton();
+        installMenuAsButton(historyMenu, this::onOpenHistory);
+        installMenuAsButton(logsMenu, this::onToggleLogs);
 
         setupInfoTooltips();
         applyTexts();
@@ -551,7 +550,6 @@ public class MainController {
         settingsMenuItem.setText(Messages.get("menu.settings.open"));
         aboutMenuItem.setText(Messages.get("menu.about"));
         historyMenu.setText(Messages.get("menu.history"));
-        historyMenuItem.setText(Messages.get("menu.history.open"));
         logsMenu.setText(Messages.get("menu.logs"));
         LogCompanionWindow.applyTextsIfOpen();
         splitCheck.setText(Messages.get("options.split"));
@@ -690,54 +688,51 @@ public class MainController {
     }
 
     /**
-     * 将顶栏「日志」菜单当作按钮：点击直接切换伴生窗，不弹出子菜单。
+     * 将顶栏菜单当作按钮：点击直接触发 {@code action}，不弹出子菜单。
      *
      * <p>仅含不可见菜单项时 JavaFX 不会触发 {@code showing}，因此必须在 MenuBar
      * 上拦截鼠标按下。若拦截未命中，再以 showing 回调作为后备。
+     *
+     * @param menu     菜单
+     * @param onActivate 点击时执行的动作
      */
-    private void installLogsMenuAsButton() {
-        menuBar.addEventFilter(MouseEvent.MOUSE_PRESSED, this::onLogsMenuBarPressed);
-        logsMenu.setOnShowing(e -> {
-            logsMenu.hide();
-            if (!logsMenuClickHandled) {
-                Platform.runLater(this::onToggleLogs);
+    private void installMenuAsButton(Menu menu, Runnable onActivate) {
+        menuBar.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            if (event.getButton() != MouseButton.PRIMARY) {
+                return;
+            }
+            if (!isClickOnMenu(menu, event)) {
+                return;
+            }
+            event.consume();
+            menuClickHandled.add(menu);
+            menu.hide();
+            onActivate.run();
+            Platform.runLater(() -> menuClickHandled.remove(menu));
+        });
+        menu.setOnShowing(e -> {
+            menu.hide();
+            if (!menuClickHandled.contains(menu)) {
+                onActivate.run();
             }
         });
     }
 
     /**
-     * 拦截顶栏「日志」按钮的按下事件，直接切换日志窗。
+     * 判断事件是否点在指定菜单按钮上。
      *
+     * @param menu  目标菜单
      * @param event 鼠标事件
+     * @return 点在目标菜单上时返回 {@code true}
      */
-    private void onLogsMenuBarPressed(MouseEvent event) {
-        if (event.getButton() != MouseButton.PRIMARY) {
-            return;
-        }
-        if (!isClickOnLogsMenu(event)) {
-            return;
-        }
-        event.consume();
-        logsMenuClickHandled = true;
-        logsMenu.hide();
-        onToggleLogs();
-        Platform.runLater(() -> logsMenuClickHandled = false);
-    }
-
-    /**
-     * 判断事件是否点在「日志」菜单按钮上。
-     *
-     * @param event 鼠标事件
-     * @return 点在日志菜单上时返回 {@code true}
-     */
-    private boolean isClickOnLogsMenu(MouseEvent event) {
-        String logsText = logsMenu.getText();
-        if (logsText == null || logsText.isBlank()) {
+    private boolean isClickOnMenu(Menu menu, MouseEvent event) {
+        String text = menu.getText();
+        if (text == null || text.isBlank()) {
             return false;
         }
         Node node = event.getTarget() instanceof Node n ? n : null;
         while (node != null && node != menuBar) {
-            if (node instanceof MenuButton button && logsText.equals(button.getText())) {
+            if (node instanceof MenuButton button && text.equals(button.getText())) {
                 return true;
             }
             node = node.getParent();

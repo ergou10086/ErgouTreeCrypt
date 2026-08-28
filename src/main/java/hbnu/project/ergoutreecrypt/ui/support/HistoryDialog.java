@@ -17,7 +17,6 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.input.MouseButton;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -30,7 +29,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 操作历史对话框，通过菜单栏"历史 → 打开操作历史..."打开。
+ * 操作历史对话框，通过菜单栏"历史"按钮打开。
  *
  * <p>以表格展示全部加解密操作记录（文件名 / 操作类型 / 操作时间），
  * 单击任意记录直接打开其输出文件所在的文件夹；输出文件夹已被删除或
@@ -114,17 +113,7 @@ public final class HistoryDialog {
         emptyLabel.setAlignment(Pos.CENTER);
         emptyLabel.visibleProperty().bind(Bindings.isEmpty(table.getItems()));
 
-        // ---- 清空按钮 ----
-        Button clearBtn = new Button(Messages.get("history.clear"));
-        clearBtn.getStyleClass().add("btn-ghost");
-        clearBtn.setOnAction(e -> {
-            HistoryService.clear();
-            table.getItems().clear();
-        });
-        HBox footer = new HBox(clearBtn);
-        footer.setAlignment(Pos.CENTER_RIGHT);
-
-        VBox content = new VBox(10, table, emptyLabel, footer);
+        VBox content = new VBox(10, table, emptyLabel);
         content.setPadding(new Insets(16, 20, 12, 20));
         VBox.setVgrow(table, Priority.ALWAYS);
 
@@ -148,6 +137,21 @@ public final class HistoryDialog {
 
         pane.getButtonTypes().add(
                 new ButtonType(Messages.get("dialog.close"), ButtonBar.ButtonData.OK_DONE));
+
+        // 「清空历史」按钮：插入按钮栏最左侧，与「关闭」同行；点击后只清空不关闭对话框
+        Button clearBtn = new Button(Messages.get("history.clear"));
+        clearBtn.getStyleClass().add("btn-ghost");
+        clearBtn.setOnAction(e -> {
+            HistoryService.clear();
+            table.getItems().clear();
+        });
+        dialog.setOnShown(e -> {
+            ButtonBar buttonBar = (ButtonBar) pane.lookup(".button-bar");
+            if (buttonBar != null && !buttonBar.getButtons().contains(clearBtn)) {
+                ButtonBar.setButtonData(clearBtn, ButtonBar.ButtonData.LEFT);
+                buttonBar.getButtons().add(0, clearBtn);
+            }
+        });
 
         dialog.showAndWait();
     }

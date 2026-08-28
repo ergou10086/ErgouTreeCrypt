@@ -174,7 +174,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "均衡模式 (256 MiB) 为推荐默认档，兼顾内存占用与速度。标准模式 (1 GiB) 与桌面端完全兼容但内存占用大。省电模式 (64 MiB) 适合低端设备。较低档位加密的文件可能无法在旧版桌面端解密。若所选档位超过设备可用内存，加解密操作会自动降档并提示。",
+                text = "自动模式为推荐默认档，按设备当前可用内存自动选取能在堆内秒级派生的最大档位，避免离堆派生导致的卡顿与闪退。均衡 (256 MiB) 与省电 (64 MiB) 供手动指定。较低档位加密的文件仍可在桌面端解密（参数随文件存储）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -182,9 +182,9 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
             // 三个档位平分整行宽度，小字号保证单行内放下
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 FilterChip(
-                    selected = argon2Mode == "STANDARD",
-                    onClick = { scope.launch { settings.setArgon2MobileMode("STANDARD") } },
-                    label = { Text("标准 1 GiB", style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    selected = argon2Mode == "AUTO",
+                    onClick = { scope.launch { settings.setArgon2MobileMode("AUTO") } },
+                    label = { Text("自动", style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                     modifier = Modifier.weight(1f)
                 )
                 FilterChip(

@@ -20,11 +20,17 @@ public final class MediaCryptOptions {
     private final MediaCryptProfile profile;
     private final boolean paranoid;
     private final boolean storeIntegrity;
+    private final Integer argon2MemoryKib;
+    private final Integer argon2Passes;
+    private final Integer argon2Threads;
 
     private MediaCryptOptions(Builder b) {
         this.profile = b.profile;
         this.paranoid = b.paranoid;
         this.storeIntegrity = b.storeIntegrity;
+        this.argon2MemoryKib = b.argon2MemoryKib;
+        this.argon2Passes = b.argon2Passes;
+        this.argon2Threads = b.argon2Threads;
     }
 
     /**
@@ -60,6 +66,33 @@ public final class MediaCryptOptions {
     }
 
     /**
+     * 覆写 Argon2id 内存参数（KiB），null 表示使用默认值。
+     *
+     * @return 内存参数（KiB），可能为 null
+     */
+    public Integer argon2MemoryKib() {
+        return argon2MemoryKib;
+    }
+
+    /**
+     * 覆写 Argon2id 迭代次数，null 表示使用默认值。
+     *
+     * @return 迭代次数，可能为 null
+     */
+    public Integer argon2Passes() {
+        return argon2Passes;
+    }
+
+    /**
+     * 覆写 Argon2id 并行线程数，null 表示使用默认值。
+     *
+     * @return 线程数，可能为 null
+     */
+    public Integer argon2Threads() {
+        return argon2Threads;
+    }
+
+    /**
      * 解析出针对指定格式实际生效的档位（处理 {@code null} 默认值并校验归属）。
      *
      * @throws IllegalArgumentException 指定档位不属于该格式
@@ -82,6 +115,9 @@ public final class MediaCryptOptions {
         private MediaCryptProfile profile = null;
         private boolean paranoid = false;
         private boolean storeIntegrity = true;
+        private Integer argon2MemoryKib = null;
+        private Integer argon2Passes = null;
+        private Integer argon2Threads = null;
 
         public Builder profile(MediaCryptProfile profile) {
             this.profile = profile;
@@ -95,6 +131,36 @@ public final class MediaCryptOptions {
 
         public Builder storeIntegrity(boolean storeIntegrity) {
             this.storeIntegrity = storeIntegrity;
+            return this;
+        }
+
+        /**
+         * 覆写 Argon2id 内存参数（KiB）。
+         *
+         * @param argon2MemoryKib 内存参数（KiB），null 表示默认
+         */
+        public Builder argon2MemoryKib(Integer argon2MemoryKib) {
+            this.argon2MemoryKib = argon2MemoryKib;
+            return this;
+        }
+
+        /**
+         * 覆写 Argon2id 迭代次数。
+         *
+         * @param argon2Passes 迭代次数，null 表示默认
+         */
+        public Builder argon2Passes(Integer argon2Passes) {
+            this.argon2Passes = argon2Passes;
+            return this;
+        }
+
+        /**
+         * 覆写 Argon2id 并行线程数。
+         *
+         * @param argon2Threads 线程数，null 表示默认
+         */
+        public Builder argon2Threads(Integer argon2Threads) {
+            this.argon2Threads = argon2Threads;
             return this;
         }
 

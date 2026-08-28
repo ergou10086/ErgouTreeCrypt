@@ -67,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
+import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
@@ -172,6 +173,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     var outDirUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOut by remember { mutableStateOf<PendingOutput?>(null) }
 
+    // 桌面端/高内存档单文件的 KDF 预检提示（null 表示无需提示）
+    var kdfWarning by remember { mutableStateOf<String?>(null) }
+
     // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
     var defaultOutPath by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -180,6 +184,25 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 is OutputDirResolver.Resolved.Direct -> r.path
                 is OutputDirResolver.Resolved.AppExternal -> r.path
                 is OutputDirResolver.Resolved.MediaStore -> OutputDirResolver.publicDownloadPath()
+            }
+        }
+    }
+
+    // 单文件 KDF 预检：读取卷头 Argon2 内存参数，高内存档给出"较慢/建议桌面端"提示
+    LaunchedEffect(inPath, isFolder) {
+        kdfWarning = null
+        val p = inPath ?: return@LaunchedEffect
+        if (isFolder) return@LaunchedEffect
+        val lower = p.lowercase()
+        if (!(lower.endsWith(".ergou") || lower.endsWith(".pcv"))) return@LaunchedEffect
+        kdfWarning = withContext(Dispatchers.IO) {
+            val memKib = KdfPreflight.peekArgon2MemoryKib(File(p).toPath())
+            when {
+                memKib == null ->
+                    "该文件未记录移动端密钥参数（桌面端 1 GiB 档），密钥派生可能耗时数分钟，建议在桌面端用较小档位重新加密。"
+                memKib > (256 shl 10) ->
+                    "该文件密钥派生需约 ${memKib shr 10} MiB 内存，移动端处理较慢，建议在桌面端用较小档位重新加密。"
+                else -> null
             }
         }
     }
@@ -676,8 +699,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     Button(
                         onClick = { if (mediaDecryptMode) doMediaDecrypt() else doDecrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        // 选择处理中或全局其他操作运行中禁用
-                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !busy
+                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用
+                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !busy
                     ) {
                         Icon(Icons.Default.LockOpen, null)
                         Text(if (mediaDecryptMode) "  格式保持解密" else "  解密")
@@ -829,7 +852,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
+                placeholder = { Text("请输入密码") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -847,7 +870,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
-                Text("未输入密码 — 使用系统默认约定密码解密", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                Text("请输入密码（移动端已移除无密码模式）", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
             }
 
             // 粘贴按钮（方角，自适应文字大小）
@@ -869,6 +892,16 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             ) {
                 Icon(Icons.Default.ContentPaste, null, Modifier.size(16.dp))
                 Text(" 粘贴", style = MaterialTheme.typography.labelMedium)
+            }
+
+            // 桌面端/高内存档 KDF 预检提示
+            if (kdfWarning != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    kdfWarning!!,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
 
             Spacer(Modifier.height(16.dp))

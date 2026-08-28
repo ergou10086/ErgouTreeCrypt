@@ -229,7 +229,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     var compressAfter by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(false) }
     var encDepth by remember { mutableStateOf(2) }
-    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.BALANCED) }
+    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
     var settingsLoaded by remember { mutableStateOf(false) }
 
     // 从 DataStore 加载默认设置（仅首次组合）
@@ -470,9 +470,10 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
-            req.argon2MemoryKib = argon2Mode.memoryKiB
-            req.argon2Passes = argon2Mode.passes
-            req.argon2Threads = argon2Mode.threads
+            val tier = argon2Mode.resolve()
+            req.argon2MemoryKib = tier.memoryKiB
+            req.argon2Passes = tier.passes
+            req.argon2Threads = tier.threads
             if (archiveFmt.isNotEmpty()) {
                 req.archiveFormat = archiveFmt
                 if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) {
@@ -511,13 +512,17 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
             val outFile = "$writeDir/${outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}"}"
+            val tier = argon2Mode.resolve()
             mediaVm.startEncrypt(
                 input = inPath!!,
                 output = outFile,
                 password = password,
                 profile = null, // 自动推荐档位
                 paranoid = mediaParanoid,
-                storeIntegrity = mediaIntegrity
+                storeIntegrity = mediaIntegrity,
+                argon2MemoryKib = tier.memoryKiB,
+                argon2Passes = tier.passes,
+                argon2Threads = tier.threads
             )
         }
     }
@@ -722,8 +727,8 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     Button(
                         onClick = { if (mediaMode) doMediaEncrypt() else doEncrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        // 允许无密码模式；选择处理中或全局其他操作运行中禁用
-                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading && !busy
+                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用
+                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading && !busy
                     ) {
                         Icon(Icons.Default.Lock, null)
                         Text(if (mediaMode) "  格式保持加密" else "  加密")
@@ -871,7 +876,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
+                placeholder = { Text("请输入密码") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -891,9 +896,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "未输入密码 — 文件将使用系统默认约定密码进行无密码加密",
+                    "请输入密码（移动端已移除无密码模式）",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.error
                 )
             } else {
                 PasswordStrengthMeter(password = password, modifier = Modifier.fillMaxWidth())
@@ -1047,9 +1052,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 // 三个档位平分整行宽度，小字号保证单行内放下
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FilterChip(
-                        selected = argon2Mode == Argon2MobileMode.STANDARD,
-                        onClick = { argon2Mode = Argon2MobileMode.STANDARD },
-                        label = { Text(Argon2MobileMode.STANDARD.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        selected = argon2Mode == Argon2MobileMode.AUTO,
+                        onClick = { argon2Mode = Argon2MobileMode.AUTO },
+                        label = { Text(Argon2MobileMode.AUTO.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                         enabled = !mediaMode,
                         modifier = Modifier.weight(1f)
                     )

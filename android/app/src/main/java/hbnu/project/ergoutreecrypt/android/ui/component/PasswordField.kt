@@ -79,7 +79,7 @@ fun PasswordField(
             label = { Text(label) },
             enabled = enabled,
             singleLine = true,
-            placeholder = { Text("可留空使用无密码模式") },
+            placeholder = { Text("请输入密码") },
             modifier = Modifier.fillMaxWidth(),
             visualTransformation = if (passwordVisible) {
                 VisualTransformation.None

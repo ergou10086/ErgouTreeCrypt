@@ -36,9 +36,19 @@ public final class MediaMetadata {
     public static final byte[] MAGIC = "EGTC-AVE".getBytes(StandardCharsets.US_ASCII);
 
     /**
-     * 当前元数据格式版本。
+     * 当前元数据格式版本（v2 新增 Argon2 参数块，向后兼容读取 v1）。
      */
-    public static final byte VERSION = 1;
+    public static final byte VERSION = 2;
+
+    /**
+     * v1 元数据版本（无 Argon2 参数块），仅用于向后兼容读取旧文件。
+     */
+    public static final byte VERSION_V1 = 1;
+
+    /**
+     * Argon2 参数块长度：4B memoryKiB（大端）+ 1B passes + 1B threads。
+     */
+    public static final int ARGON2_PARAMS_LEN = 6;
 
     /**
      * Argon2 salt 长度。
@@ -64,11 +74,17 @@ public final class MediaMetadata {
     private static final int OFF_SALT = 12;
     private static final int OFF_HKDF_SALT = OFF_SALT + SALT_LEN;       // 28
     private static final int OFF_NONCE = OFF_HKDF_SALT + HKDF_SALT_LEN; // 60
+    private static final int OFF_ARGON2 = OFF_NONCE + NONCE_LEN;        // 84
 
     /**
-     * 不含完整性 MAC 时的元数据总长。
+     * v1（无 Argon2 参数块）不含完整性 MAC 时的元数据总长。
      */
-    public static final int BASE_LEN = OFF_NONCE + NONCE_LEN;           // 84
+    public static final int BASE_LEN_V1 = OFF_NONCE + NONCE_LEN;        // 84
+
+    /**
+     * 不含完整性 MAC 时的元数据总长（v2，含 Argon2 参数块）。
+     */
+    public static final int BASE_LEN = OFF_ARGON2 + ARGON2_PARAMS_LEN;  // 90
 
     private static final int FLAG_PARANOID = 0x01;
     private static final int FLAG_HAS_INTEGRITY = 0x02;
@@ -93,6 +109,21 @@ public final class MediaMetadata {
     private final byte[] canary;
 
     /**
+     * Argon2 内存参数（KiB）。0 表示未设置，解密时使用 paranoid 标志推断默认值。
+     */
+    private final int argon2MemoryKib;
+
+    /**
+     * Argon2 迭代次数。0 表示未设置。
+     */
+    private final int argon2Passes;
+
+    /**
+     * Argon2 并行线程数。0 表示未设置。
+     */
+    private final int argon2Threads;
+
+    /**
      * 构造元数据。除 {@code plainMac} 外参数不得为空，长度必须匹配常量。
      *
      * @param plainMac 原文 MAC（64 字节）或 {@code null}（不存完整性校验）
@@ -111,6 +142,19 @@ public final class MediaMetadata {
     public MediaMetadata(MediaFormat format, MediaCryptProfile profile, boolean paranoid,
                          byte[] salt, byte[] hkdfSalt, byte[] nonce, byte[] plainMac,
                          byte[] canary) {
+        this(format, profile, paranoid, salt, hkdfSalt, nonce, plainMac, canary, 0, 0, 0);
+    }
+
+    /**
+     * 构造元数据（含金丝雀与 Argon2 参数覆写）。
+     *
+     * @param argon2MemoryKib Argon2 内存参数（KiB），0 表示未设置
+     * @param argon2Passes    Argon2 迭代次数，0 表示未设置
+     * @param argon2Threads   Argon2 并行线程数，0 表示未设置
+     */
+    public MediaMetadata(MediaFormat format, MediaCryptProfile profile, boolean paranoid,
+                         byte[] salt, byte[] hkdfSalt, byte[] nonce, byte[] plainMac,
+                         byte[] canary, int argon2MemoryKib, int argon2Passes, int argon2Threads) {
         if (format == null || profile == null) {
             throw new IllegalArgumentException("format / profile 不能为空");
         }
@@ -134,6 +178,9 @@ public final class MediaMetadata {
         this.nonce = nonce.clone();
         this.plainMac = plainMac == null ? null : plainMac.clone();
         this.canary = canary == null ? null : canary.clone();
+        this.argon2MemoryKib = argon2MemoryKib;
+        this.argon2Passes = argon2Passes;
+        this.argon2Threads = argon2Threads;
     }
 
     private static void requireLen(String name, byte[] v, int len) {
@@ -148,16 +195,22 @@ public final class MediaMetadata {
      * @throws MediaCryptException 魔数不符、版本不支持或长度不足
      */
     public static MediaMetadata fromBytes(byte[] data) throws MediaCryptException {
-        if (data == null || data.length < BASE_LEN) {
+        if (data == null || data.length < BASE_LEN_V1) {
             throw new MediaCryptException("元数据长度不足，可能不是本工具加密的文件");
         }
         if (!hasMagic(data)) {
             throw new MediaCryptException("元数据魔数不符，可能不是本工具加密的文件");
         }
         byte version = data[OFF_VERSION];
-        if (version != VERSION) {
+        boolean hasArgon2;
+        if (version == VERSION) {
+            hasArgon2 = true;
+        } else if (version == VERSION_V1) {
+            hasArgon2 = false;
+        } else {
             throw new MediaCryptException("不支持的元数据版本: " + version);
         }
+        int baseLen = hasArgon2 ? BASE_LEN : BASE_LEN_V1;
 
         MediaFormat format;
         MediaCryptProfile profile;
@@ -172,16 +225,30 @@ public final class MediaMetadata {
         boolean paranoid = (flags & FLAG_PARANOID) != 0;
         boolean hasMac = (flags & FLAG_HAS_INTEGRITY) != 0;
 
-        if (hasMac && data.length < BASE_LEN + MAC_LEN) {
+        if (hasMac && data.length < baseLen + MAC_LEN) {
             throw new MediaCryptException("元数据标记含完整性 MAC 但长度不足");
         }
 
         byte[] salt = Arrays.copyOfRange(data, OFF_SALT, OFF_SALT + SALT_LEN);
         byte[] hkdfSalt = Arrays.copyOfRange(data, OFF_HKDF_SALT, OFF_HKDF_SALT + HKDF_SALT_LEN);
         byte[] nonce = Arrays.copyOfRange(data, OFF_NONCE, OFF_NONCE + NONCE_LEN);
-        byte[] mac = hasMac ? Arrays.copyOfRange(data, BASE_LEN, BASE_LEN + MAC_LEN) : null;
 
-        return new MediaMetadata(format, profile, paranoid, salt, hkdfSalt, nonce, mac);
+        int argon2MemoryKib = 0;
+        int argon2Passes = 0;
+        int argon2Threads = 0;
+        if (hasArgon2) {
+            argon2MemoryKib = ((data[OFF_ARGON2] & 0xFF) << 24)
+                    | ((data[OFF_ARGON2 + 1] & 0xFF) << 16)
+                    | ((data[OFF_ARGON2 + 2] & 0xFF) << 8)
+                    | (data[OFF_ARGON2 + 3] & 0xFF);
+            argon2Passes = data[OFF_ARGON2 + 4] & 0xFF;
+            argon2Threads = data[OFF_ARGON2 + 5] & 0xFF;
+        }
+
+        byte[] mac = hasMac ? Arrays.copyOfRange(data, baseLen, baseLen + MAC_LEN) : null;
+
+        return new MediaMetadata(format, profile, paranoid, salt, hkdfSalt, nonce, mac, null,
+                argon2MemoryKib, argon2Passes, argon2Threads);
     }
 
     /**
@@ -223,6 +290,15 @@ public final class MediaMetadata {
         System.arraycopy(salt, 0, out, OFF_SALT, SALT_LEN);
         System.arraycopy(hkdfSalt, 0, out, OFF_HKDF_SALT, HKDF_SALT_LEN);
         System.arraycopy(nonce, 0, out, OFF_NONCE, NONCE_LEN);
+
+        // Argon2 参数块（memoryKiB 4B 大端 + passes 1B + threads 1B）
+        out[OFF_ARGON2] = (byte) (argon2MemoryKib >>> 24);
+        out[OFF_ARGON2 + 1] = (byte) (argon2MemoryKib >>> 16);
+        out[OFF_ARGON2 + 2] = (byte) (argon2MemoryKib >>> 8);
+        out[OFF_ARGON2 + 3] = (byte) argon2MemoryKib;
+        out[OFF_ARGON2 + 4] = (byte) argon2Passes;
+        out[OFF_ARGON2 + 5] = (byte) argon2Threads;
+
         if (hasMac) {
             System.arraycopy(plainMac, 0, out, BASE_LEN, MAC_LEN);
         }
@@ -239,6 +315,36 @@ public final class MediaMetadata {
 
     public boolean paranoid() {
         return paranoid;
+    }
+
+    /**
+     * Argon2 内存参数（KiB）；0 表示未设置，派生时使用默认值。
+     */
+    public int argon2MemoryKib() {
+        return argon2MemoryKib;
+    }
+
+    /**
+     * Argon2 迭代次数；0 表示未设置。
+     */
+    public int argon2Passes() {
+        return argon2Passes;
+    }
+
+    /**
+     * Argon2 并行线程数；0 表示未设置。
+     */
+    public int argon2Threads() {
+        return argon2Threads;
+    }
+
+    /**
+     * 是否包含有效的 Argon2 参数覆写。
+     *
+     * @return 任一字段 &gt; 0 返回 true
+     */
+    public boolean hasArgon2Params() {
+        return argon2MemoryKib > 0 || argon2Passes > 0 || argon2Threads > 0;
     }
 
     public boolean hasIntegrity() {

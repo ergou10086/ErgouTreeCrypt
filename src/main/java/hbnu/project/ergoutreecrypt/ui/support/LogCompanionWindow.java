@@ -9,17 +9,14 @@ import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollBar;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -41,8 +38,8 @@ import java.util.List;
  * 主窗口右侧的翻书式日志伴生窗。
  *
  * <p>以与主窗同等尺寸的无边框窗口贴靠在右侧（空间不足则改贴左侧），
- * 主窗移动或缩放时跟随，形成「两页书」的观感。内容为实时虚拟化日志列表，
- * 提供清空与导出。关闭本窗不影响主窗。
+ * 主窗移动或缩放时跟随，形成「两页书」的观感。内容为实时刷新的只读日志文本，
+ * 可鼠标拖动选择并复制，亦提供清空与导出。关闭本窗不影响主窗。
  *
  * @author ErgouTree
  * @since 2026/8/26
@@ -61,9 +58,6 @@ public final class LogCompanionWindow {
     /** 主窗。 */
     private final Stage owner;
 
-    /** 日志列表数据。 */
-    private final ObservableList<LogEvent> items = FXCollections.observableArrayList();
-
     /** 根容器，用于入场位移动画。 */
     private final VBox rootPane;
 
@@ -71,15 +65,17 @@ public final class LogCompanionWindow {
     private final StackPane rootStack;
 
     private final Label titleLabel;
-    private final Label emptyLabel;
     private final Button clearBtn;
     private final Button exportBtn;
-    private final ListView<LogEvent> listView;
+    private final TextArea logArea;
     private final Toast toast;
     private final LogListener logListener;
 
     /** 用户未上翻时自动滚到底部。 */
     private boolean stickToBottom = true;
+
+    /** 正在程序化滚动到底部，避免滚动回调误判为手动上翻。 */
+    private boolean programmaticScroll;
 
     /** 正在根据主窗同步位置，避免重入。 */
     private boolean docking;
@@ -109,16 +105,18 @@ public final class LogCompanionWindow {
         titleBar.setAlignment(Pos.CENTER_LEFT);
         titleBar.setPadding(new Insets(8, 4, 8, 16));
 
-        listView = new ListView<>(items);
-        listView.getStyleClass().add("log-list");
-        listView.setCellFactory(lv -> new LogCell());
-        emptyLabel = new Label();
-        emptyLabel.getStyleClass().add("field-hint");
-        listView.setPlaceholder(emptyLabel);
-        VBox.setVgrow(listView, Priority.ALWAYS);
+        logArea = new TextArea();
+        logArea.getStyleClass().add("log-textarea");
+        logArea.setEditable(false);
+        logArea.setWrapText(true);
+        VBox.setVgrow(logArea, Priority.ALWAYS);
 
-        listView.setOnScroll(e -> updateStickToBottom());
-        listView.setOnMouseReleased(e -> updateStickToBottom());
+        logArea.scrollTopProperty().addListener((obs, oldV, newV) -> {
+            if (programmaticScroll) {
+                return;
+            }
+            updateStickToBottom();
+        });
 
         clearBtn = new Button();
         clearBtn.getStyleClass().add("btn-ghost");
@@ -132,9 +130,9 @@ public final class LogCompanionWindow {
         footer.getStyleClass().add("log-footer");
         footer.setAlignment(Pos.CENTER_RIGHT);
 
-        VBox content = new VBox(8, listView, footer);
+        VBox content = new VBox(8, logArea, footer);
         content.getStyleClass().add("log-body");
-        VBox.setVgrow(listView, Priority.ALWAYS);
+        VBox.setVgrow(logArea, Priority.ALWAYS);
 
         rootPane = new VBox(titleBar, content);
         rootPane.getStyleClass().add("app-root");
@@ -164,7 +162,7 @@ public final class LogCompanionWindow {
         });
 
         applyTexts();
-        items.setAll(LogService.snapshot());
+        logArea.setText(LogService.exportText());
 
         logListener = new LogListener() {
             @Override
@@ -175,7 +173,7 @@ public final class LogCompanionWindow {
             @Override
             public void onCleared() {
                 Platform.runLater(() -> {
-                    items.clear();
+                    logArea.clear();
                     stickToBottom = true;
                 });
             }
@@ -345,10 +343,9 @@ public final class LogCompanionWindow {
     private void applyTexts() {
         stage.setTitle(Messages.get("logs.title"));
         titleLabel.setText(Messages.get("logs.title"));
-        emptyLabel.setText(Messages.get("logs.empty"));
+        logArea.setPromptText(Messages.get("logs.empty"));
         clearBtn.setText(Messages.get("logs.clear"));
         exportBtn.setText(Messages.get("logs.export"));
-        listView.refresh();
     }
 
     /**
@@ -357,9 +354,14 @@ public final class LogCompanionWindow {
      * @param event 新事件
      */
     private void appendEvent(LogEvent event) {
-        items.add(event);
+        logArea.appendText(event.formatLine() + "\n");
         if (stickToBottom) {
-            listView.scrollTo(items.size() - 1);
+            programmaticScroll = true;
+            try {
+                logArea.setScrollTop(Double.MAX_VALUE);
+            } finally {
+                programmaticScroll = false;
+            }
         }
     }
 
@@ -367,7 +369,7 @@ public final class LogCompanionWindow {
      * 根据垂直滚动条位置决定是否继续粘底。
      */
     private void updateStickToBottom() {
-        ScrollBar bar = (ScrollBar) listView.lookup(".scroll-bar:vertical");
+        ScrollBar bar = (ScrollBar) logArea.lookup(".scroll-bar:vertical");
         if (bar == null) {
             stickToBottom = true;
             return;
@@ -406,27 +408,4 @@ public final class LogCompanionWindow {
         }
     }
 
-    /**
-     * 按级别着色的日志行单元格。
-     */
-    private static final class LogCell extends ListCell<LogEvent> {
-
-        @Override
-        protected void updateItem(LogEvent item, boolean empty) {
-            super.updateItem(item, empty);
-            getStyleClass().removeAll("log-error", "log-warn", "log-info", "log-trace");
-            if (empty || item == null) {
-                setText(null);
-                return;
-            }
-            setText(item.formatLine());
-            setWrapText(true);
-            switch (item.level()) {
-                case ERROR -> getStyleClass().add("log-error");
-                case WARN -> getStyleClass().add("log-warn");
-                case TRACE -> getStyleClass().add("log-trace");
-                default -> getStyleClass().add("log-info");
-            }
-        }
-    }
 }

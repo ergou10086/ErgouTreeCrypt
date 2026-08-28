@@ -30,7 +30,8 @@
         <!-- ===== 菜单栏 ===== -->
         <MenuBar fx:id="menuBar" styleClass="app-menu" VBox.vgrow="NEVER">
             <Menu fx:id="historyMenu">
-                <MenuItem fx:id="historyMenuItem" onAction="#onOpenHistory"/>
+                <!-- 须保留至少一项可见项，否则部分 JavaFX 版本不会进入 showing；实际点击由控制器拦截，不弹出子菜单 -->
+                <MenuItem disable="true" text=""/>
             </Menu>
             <Menu fx:id="logsMenu">
                 <!-- 须保留至少一项可见项，否则部分 JavaFX 版本不会进入 showing；实际点击由控制器拦截，不弹出子菜单 -->

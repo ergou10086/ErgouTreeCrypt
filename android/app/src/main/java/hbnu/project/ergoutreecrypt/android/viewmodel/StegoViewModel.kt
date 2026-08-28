@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressListener
+import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard
@@ -134,7 +135,7 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = describeError(e)
                     )
                 }
             } finally {
@@ -215,7 +216,7 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = describeError(e)
                     )
                 }
             } finally {

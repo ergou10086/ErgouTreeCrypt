@@ -102,7 +102,7 @@ class AndroidSettings(context: Context) {
     // ==================== Android 专属键 ====================
 
     val argon2MobileMode: Flow<String> = dataStore.data.map {
-        it[KEY_ARGON2_MODE] ?: "BALANCED"
+        it[KEY_ARGON2_MODE] ?: "AUTO"
     }
 
     val useBiometric: Flow<Boolean> = dataStore.data.map {

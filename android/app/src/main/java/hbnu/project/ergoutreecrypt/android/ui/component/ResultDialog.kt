@@ -143,15 +143,18 @@ fun mapErrorToChineseMessage(error: String?): String {
         error.contains("tag mismatch", ignoreCase = true) ->
             "密码错误或文件已损坏，无法解密。请检查密码是否正确。"
 
-        // Argon2 内存不足
+        // Argon2 内存不足 / 派生失败
         error.contains("OutOfMemory", ignoreCase = true) ||
         error.contains("内存不足", ignoreCase = true) ||
+        error.contains("fatal Argon2", ignoreCase = true) ||
+        error.contains("zero key", ignoreCase = true) ||
+        (error.contains("Argon2", ignoreCase = true) && error.contains("内存", ignoreCase = true)) ||
         (error.contains("memory", ignoreCase = true) &&
          (error.contains("argon", ignoreCase = true) ||
           error.contains("Argon2", ignoreCase = true))) ->
-            "内存不足：操作所需内存超过设备可用堆。\n" +
-                "• 加密/隐写：请在设置中降低 Argon2 内存档位后重试（操作前会自动按设备内存降档）。\n" +
-                "• 解密/提取：文件创建时的 Argon2 内存参数已随文件固定，与当前档位无关，请改用桌面端处理。"
+            "内存不足或密钥派生失败：所需内存超过设备可用堆。\n" +
+                "• 加密/隐写：请改用「自动」档位（会按设备内存自动降档）。\n" +
+                "• 解密/提取：文件的 Argon2 参数在创建时已固定，请改用桌面端处理。"
 
         // 文件不存在/无法读取
         error.contains("NoSuchFile", ignoreCase = true) ||
@@ -162,8 +165,11 @@ fun mapErrorToChineseMessage(error: String?): String {
         // 权限被拒
         error.contains("Permission denied", ignoreCase = true) ||
         error.contains("Access denied", ignoreCase = true) ||
-        error.contains("SecurityException", ignoreCase = true) ->
-            "没有读取该文件的权限，请重新选择文件并授予权限。"
+        error.contains("AccessDenied", ignoreCase = true) ||
+        error.contains("SecurityException", ignoreCase = true) ||
+        error.contains("拒绝访问", ignoreCase = true) ||
+        error.contains("EACCES", ignoreCase = true) ->
+            "没有读取或写入该文件的权限（分区存储限制）。请通过文件选择器重新选择文件并授予权限，或改用应用可写的输出目录。"
 
         // 磁盘空间不足
         error.contains("No space", ignoreCase = true) ||

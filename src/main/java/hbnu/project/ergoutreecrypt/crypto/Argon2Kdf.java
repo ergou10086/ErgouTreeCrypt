@@ -162,6 +162,29 @@ public final class Argon2Kdf {
     public static byte[] deriveKey(byte[] password, byte[] salt, boolean paranoid,
                                    Integer overrideMemoryKib, Integer overridePasses,
                                    Integer overrideParallelism) {
+        return deriveKey(password, salt, paranoid, overrideMemoryKib, overridePasses,
+                overrideParallelism, null);
+    }
+
+    /**
+     * 从密码与 salt 派生 32 字节加密密钥（支持参数覆写与进度/取消回调）。
+     *
+     * <p>当 override 参数为非 null 时使用覆写值，否则根据 paranoid 标志选择默认值。
+     * {@code progress} 为 null 时行为与 6 参重载完全一致（桌面端）。
+     *
+     * @param password            已归一化（NFC）的密码 UTF-8 字节
+     * @param salt                16 字节 Argon2 salt
+     * @param paranoid            是否使用偏执模式参数（更多迭代与线程）
+     * @param overrideMemoryKib   覆写的内存参数（KiB），null 表示使用默认值
+     * @param overridePasses      覆写的迭代次数，null 表示使用默认值
+     * @param overrideParallelism 覆写的并行线程数，null 表示使用默认值
+     * @param progress            进度/取消回调，可为 null
+     * @return 32 字节派生密钥
+     * @throws IllegalStateException 若派生结果为全零，或等待许可时被中断/取消
+     */
+    public static byte[] deriveKey(byte[] password, byte[] salt, boolean paranoid,
+                                   Integer overrideMemoryKib, Integer overridePasses,
+                                   Integer overrideParallelism, KdfProgress progress) {
         int passes = overridePasses != null ? overridePasses
                 : (paranoid ? CryptoConstants.ARGON2_PARANOID_PASSES : CryptoConstants.ARGON2_NORMAL_PASSES);
         int memoryKiB = overrideMemoryKib != null ? overrideMemoryKib
@@ -180,7 +203,7 @@ public final class Argon2Kdf {
         int inflight = kdfInFlight.incrementAndGet();
         kdfMaxInFlight.accumulateAndGet(inflight, Math::max);
         try {
-            return deriveKeyUnlocked(password, salt, memoryKiB, passes, threads, waitMs);
+            return deriveKeyUnlocked(password, salt, memoryKiB, passes, threads, waitMs, progress);
         } finally {
             kdfInFlight.decrementAndGet();
             KDF_LOCK.release();
@@ -196,11 +219,12 @@ public final class Argon2Kdf {
      * @param passes    迭代次数
      * @param threads   lane 并行度
      * @param waitMs    获取许可等待的毫秒数
+     * @param progress  进度/取消回调，可为 null
      * @return 32 字节派生密钥
      */
     private static byte[] deriveKeyUnlocked(byte[] password, byte[] salt,
                                             int memoryKiB, int passes, int threads,
-                                            long waitMs) {
+                                            long waitMs, KdfProgress progress) {
         long t0 = System.nanoTime();
         boolean offHeap = !isHeapFeasible(memoryKiB);
         if (LogService.isTraceEnabled()) {
@@ -216,7 +240,7 @@ public final class Argon2Kdf {
         byte[] key;
         if (offHeap) {
             key = Argon2OffHeap.deriveKey(password, salt, memoryKiB, passes,
-                    threads, CryptoConstants.ARGON2_KEY_SIZE);
+                    threads, CryptoConstants.ARGON2_KEY_SIZE, progress);
         } else {
             Argon2Parameters params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                     .withVersion(Argon2Parameters.ARGON2_VERSION_13)

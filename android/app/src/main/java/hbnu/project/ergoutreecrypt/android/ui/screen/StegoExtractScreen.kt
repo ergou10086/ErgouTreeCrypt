@@ -234,7 +234,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     }
 
     val hasFile = stegoPath != null
-    val canStart = hasFile && !isRunning && !stegoLoading && !busy
+    val canStart = hasFile && password.isNotEmpty() && !isRunning && !stegoLoading && !busy
 
     // ---- 开始提取 ----
     fun doExtract() {
@@ -526,7 +526,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入隐写时使用的密码（可留空尝试无密码模式）") },
+                placeholder = { Text("请输入隐写时使用的密码") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -545,9 +545,9 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "未输入密码 — 将尝试使用系统默认约定密码进行无密码提取",
+                    "请输入密码（移动端已移除无密码模式）",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.error
                 )
             }
 

@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressReporter
+import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.log.LogService
@@ -82,6 +83,7 @@ class EncryptViewModel : ViewModel() {
         currentJob = viewModelScope.launch(Dispatchers.IO) {
             val reporter = LoggingProgressReporter(createProgressReporter(), "Volume")
             request.reporter = reporter
+            request.kdfProgress = createKdfProgress()
             LogService.beginSession("GENERIC_ENCRYPT", logFileName(request.inputFile))
             val t0 = System.nanoTime()
             var success = false
@@ -108,7 +110,7 @@ class EncryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.localizedMessage ?: e.javaClass.simpleName
+                        error = describeError(e)
                     )
                 }
             } catch (e: OutOfMemoryError) {
@@ -156,6 +158,25 @@ class EncryptViewModel : ViewModel() {
         _progress.update { p ->
             if (p.state == ProgressState.State.IDLE || p.state == ProgressState.State.RUNNING) p
             else ProgressState()
+        }
+    }
+
+    /**
+     * 创建 Argon2 密钥派生的进度/取消回调。
+     *
+     * <p>离堆派生（移动端解密桌面端 1 GiB 文件）可能持续数分钟，此回调把
+     * pass 粒度进度写入状态文案，让 UI 不再"卡在 0%"；取消信号与协程取消一致。
+     *
+     * @return KDF 进度回调
+     */
+    private fun createKdfProgress(): hbnu.project.ergoutreecrypt.crypto.KdfProgress {
+        return object : hbnu.project.ergoutreecrypt.crypto.KdfProgress {
+            override fun onProgress(pass: Int, totalPasses: Int) {
+                _progress.update { it.copy(statusText = "密钥派生中… 第 $pass/$totalPasses 轮") }
+            }
+
+            override fun isCancelled(): Boolean =
+                _progress.value.state == ProgressState.State.CANCELLED
         }
     }
 

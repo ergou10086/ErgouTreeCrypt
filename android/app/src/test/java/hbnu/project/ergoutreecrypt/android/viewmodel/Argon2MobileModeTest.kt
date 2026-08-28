@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.android.viewmodel
 
 import hbnu.project.ergoutreecrypt.android.platform.Argon2MobileMode
+import hbnu.project.ergoutreecrypt.android.platform.Tier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,16 +9,9 @@ import org.junit.Test
 /**
  * Argon2id 移动端参数档位测试。
  *
- * <p>验证 STANDARD / LIGHT 模式的参数正确性以及与桌面端 Normal 模式的兼容性。
- *
- * <p>对比基准（桌面端 CryptoConstants）：
- * <ul>
- *   <li>Normal: 4 passes, 1 GiB (1,048,576 KiB), 4 threads</li>
- *   <li>Paranoid: 8 passes, 1 GiB, 4 threads</li>
- * </ul>
- *
- * <p>Android STANDARD 模式使用与桌面端 Normal 完全相同的参数，
- * 保证在不含 Argon2Params 的 header 格式下跨平台互操作。
+ * <p>验证 AUTO / BALANCED / LIGHT 档位的参数正确性、AUTO 按堆自动降档、
+ * 未知键回退 AUTO 等行为。自 2026/8/28 起移除 1 GiB 的 STANDARD 档，
+ * 移动端默认使用 AUTO（保证堆内派生）。
  *
  * @author ErgouTree
  * @since 2026/8/11
@@ -25,112 +19,105 @@ import org.junit.Test
 class Argon2MobileModeTest {
 
     /**
-     * STANDARD 模式参数应与桌面端 Normal 一致。
-     *
-     * <p>这是跨平台互操作的基础保证：Android STANDARD 模式加密的文件，
-     * 桌面端以 Normal 模式解密应得到相同密钥。
+     * BALANCED 档位参数应为 256 MiB / 3 passes / 4 threads。
      */
     @Test
-    fun standardMode_matchesDesktopNormal() {
-        // STANDARD: mem=1 GiB KiB, passes=4, thr=4
-        val standardMem = 1 shl 20 // 1 GiB in KiB
-        val standardPasses = 4
-        val standardThreads = 4
-
-        assertEquals("STANDARD 内存参数应为 1 GiB (KiB)",
-            1_048_576, standardMem)
-        assertEquals("STANDARD passes 应与桌面端 Normal 一致", 4, standardPasses)
-        assertEquals("STANDARD threads 应与桌面端 Normal 一致", 4, standardThreads)
+    fun balancedMode_usesExpectedParams() {
+        val tier = Argon2MobileMode.BALANCED.tier!!
+        assertEquals("BALANCED 内存应为 256 MiB (KiB)", 256 shl 10, tier.memoryKiB)
+        assertEquals("BALANCED passes", 3, tier.passes)
+        assertEquals("BALANCED threads", 4, tier.threads)
     }
 
     /**
-     * LIGHT 模式参数应为低内存档。
+     * LIGHT 档位参数应为 64 MiB / 2 passes / 2 threads。
      */
     @Test
-    fun lightMode_usesLowMemory() {
-        val lightMem = 64 shl 10 // 64 MiB in KiB
-        val lightPasses = 2
-        val lightThreads = 2
-
-        assertEquals("LIGHT 内存应为 64 MiB (KiB)", 65_536, lightMem)
-        assertEquals("LIGHT passes", 2, lightPasses)
-        assertEquals("LIGHT threads", 2, lightThreads)
+    fun lightMode_usesExpectedParams() {
+        val tier = Argon2MobileMode.LIGHT.tier!!
+        assertEquals("LIGHT 内存应为 64 MiB (KiB)", 64 shl 10, tier.memoryKiB)
+        assertEquals("LIGHT passes", 2, tier.passes)
+        assertEquals("LIGHT threads", 2, tier.threads)
     }
 
     /**
-     * LIGHT 模式内存远小于 STANDARD。
+     * AUTO 档没有固定参数，须运行时解析。
      */
     @Test
-    fun lightMemory_isLessThanStandard() {
-        val standardMem = 1 shl 20
-        val lightMem = 64 shl 10
-        // 1 GiB / 64 MiB = 16 倍差距
-        assertTrue("LIGHT 内存应远小于 STANDARD", lightMem < standardMem)
-        assertEquals(16, standardMem / lightMem)
+    fun autoMode_hasNoFixedTier() {
+        assertEquals("AUTO 档不应有固定参数", null, Argon2MobileMode.AUTO.tier)
     }
 
     /**
-     * 验证 LIGHT 模式在低端设备上的可行性：64 MiB 内存分配应在大部分设备上可行。
+     * AUTO 在可用堆充足时应解析为最大档（256 MiB）。
      */
     @Test
-    fun lightMode_memoryFootprint_isRealistic() {
-        val lightMemBytes = (64 shl 10).toLong() * 1024 // 64 MiB in bytes
-        // 64 MiB 是 Argon2 的内存参数，实际需要的内存约为 64 MiB * 2（Block 数组 + 计算缓冲区）
-        val estimatedRequiredBytes = lightMemBytes * 2
-        // 64 MiB * 2 = 128 MiB，远低于 Android 设备的典型堆限制（256-512 MiB）
-        assertTrue("LIGHT 模式估算内存应 ≤ 256 MiB",
-            estimatedRequiredBytes <= 256L * 1024 * 1024)
+    fun autoMode_resolvesToLargestWhenHeapIsLarge() {
+        val hugeHeap = 4L * 1024 * 1024 * 1024
+        val tier = Argon2MobileMode.AUTO.resolve(hugeHeap)
+        assertEquals("堆充足时 AUTO 应选 256 MiB", 256 shl 10, tier.memoryKiB)
     }
 
     /**
-     * STANDARD 模式在设备上需要至少 2 GiB 可用内存，仅适合中高端设备。
+     * AUTO 在可用堆偏小时应降档为 64 MiB。
      */
     @Test
-    fun standardMode_memoryFootprint_requiresHighEndDevice() {
-        val stdMemBytes = (1 shl 20).toLong() * 1024 // 1 GiB in bytes
-        // 实际内存占用约为 Argon2 内存参数 × 2
-        val estimatedRequiredBytes = stdMemBytes * 2
-        assertTrue("STANDARD 模式估算内存应 ≥ 1 GiB",
-            estimatedRequiredBytes >= 1L * 1024 * 1024 * 1024)
+    fun autoMode_resolvesToLightWhenHeapIsTight() {
+        // 200 MiB 堆：装不下 256 MiB（需 352 MiB），应降到 64 MiB
+        val tightHeap = 200L * 1024 * 1024
+        val tier = Argon2MobileMode.AUTO.resolve(tightHeap)
+        assertEquals("200 MiB 堆应降档为 64 MiB", 64 shl 10, tier.memoryKiB)
     }
 
     /**
-     * 验证所有模式的 passes ≥ 1 且 threads ≥ 1。
+     * AUTO 在堆极小时应回退到最低档（32 MiB），保证总能完成派生。
      */
     @Test
-    fun allModes_haveValidParameters() {
-        data class ModeParams(val memKib: Int, val passes: Int, val threads: Int)
-
-        val modes = listOf(
-            ModeParams(1 shl 20, 4, 4), // STANDARD
-            ModeParams(256 shl 10, 3, 4), // BALANCED
-            ModeParams(64 shl 10, 2, 2) // LIGHT
-        )
-
-        for ((i, mode) in modes.withIndex()) {
-            assertTrue("模式 $i: 内存应 > 0", mode.memKib > 0)
-            assertTrue("模式 $i: passes 应 ≥ 1", mode.passes >= 1)
-            assertTrue("模式 $i: threads 应 ≥ 1", mode.threads >= 1)
-            // mem 必须是正数 KiB
-            assertTrue("模式 $i: memKiB 应 ≥ 65536 (64 MiB)", mode.memKib >= 64 shl 10)
-        }
+    fun autoMode_fallsBackToMinimumTier() {
+        val tinyHeap = 48L * 1024 * 1024
+        val tier = Argon2MobileMode.AUTO.resolve(tinyHeap)
+        assertEquals("极小堆应回退到 32 MiB", 32 shl 10, tier.memoryKiB)
     }
 
     /**
-     * 各档位估算所需堆应介于参数内存的 1~2 倍之间。
+     * 固定档位 resolve 应始终返回自身参数，不受堆影响。
+     */
+    @Test
+    fun fixedMode_ignoresHeap() {
+        val lightTier = Argon2MobileMode.LIGHT.resolve(0)
+        assertEquals("LIGHT 不受堆影响", 64 shl 10, lightTier.memoryKiB)
+    }
+
+    /**
+     * 未知键应回退到 AUTO。
+     */
+    @Test
+    fun fromKey_unknownFallsBackToAuto() {
+        assertEquals(Argon2MobileMode.AUTO, Argon2MobileMode.fromKey("NON_EXISTENT"))
+        assertEquals(Argon2MobileMode.AUTO, Argon2MobileMode.fromKey(null))
+        assertEquals(Argon2MobileMode.BALANCED, Argon2MobileMode.fromKey("BALANCED"))
+        assertEquals(Argon2MobileMode.LIGHT, Argon2MobileMode.fromKey("LIGHT"))
+    }
+
+    /**
+     * 所有固定档位的估算堆应介于参数内存的 1~2 倍之间。
      */
     @Test
     fun estimateRequiredHeapBytes_isWithinReasonableRange() {
-        for (mode in Argon2MobileMode.entries) {
-            val raw = mode.memoryKiB * 1024L
-            val estimated = mode.estimateRequiredHeapBytes()
-            assertTrue("${mode.key}: 估算值不应低于参数内存", estimated >= raw)
-            assertTrue("${mode.key}: 估算值不应超过参数内存的 2 倍", estimated <= raw * 2)
+        for (tier in listOf(
+            Tier(256 shl 10, 3, 4),
+            Tier(64 shl 10, 2, 2),
+            Tier(32 shl 10, 2, 2)
+        )) {
+            val raw = tier.memoryKiB * 1024L
+            val estimated = tier.estimateRequiredHeapBytes()
+            assertTrue("${tier.memoryKiB}: 估算值不应低于参数内存", estimated >= raw)
+            assertTrue("${tier.memoryKiB}: 估算值不应超过参数内存的 2 倍", estimated <= raw * 2)
         }
     }
 
     /**
-     * LIGHT 档需求（约 112 MiB）在正常测试 JVM 上应判定为堆内可行。
+     * LIGHT 档在正常测试 JVM 上应判定为堆内可行。
      */
     @Test
     fun lightMode_isFeasibleInHeap() {
@@ -143,9 +130,11 @@ class Argon2MobileModeTest {
     @Test
     fun feasibility_requiresMargin() {
         val required = Argon2MobileMode.LIGHT.estimateRequiredHeapBytes() + (32L shl 20)
+        val available = Runtime.getRuntime().maxMemory() -
+                (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
         assertEquals(
             "isFeasible 应与'需求 + 余量 ≤ 可用堆'一致",
-            required <= Runtime.getRuntime().maxMemory() - (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()),
+            required <= available,
             Argon2MobileMode.isFeasible(Argon2MobileMode.LIGHT)
         )
     }

@@ -196,7 +196,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var preferChunk by remember { mutableStateOf(true) }
 
     // Argon2 移动模式档位（复用全局设置，映射为隐写 KDF 覆写参数）
-    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.BALANCED) }
+    var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
 
     // 从 DataStore 加载 Argon2 档位（仅首次组合）
     LaunchedEffect(Unit) {
@@ -361,7 +361,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasSecret = secretPath != null
     val hasCarrier = carrierPath != null && carrierValid
-    val canStart = hasSecret && hasCarrier && !isRunning && !secretLoading && !carrierLoading && !busy
+    val canStart = hasSecret && hasCarrier && password.isNotEmpty() && !isRunning && !secretLoading && !carrierLoading && !busy
 
     // ---- 开始隐写 ----
     fun doHide() {
@@ -841,7 +841,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
+                placeholder = { Text("请输入密码") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -860,9 +860,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "未输入密码 — 文件将使用系统默认约定密码进行无密码加密",
+                    "请输入密码（移动端已移除无密码模式）",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.error
                 )
             } else {
                 PasswordStrengthMeter(password = password, modifier = Modifier.fillMaxWidth())

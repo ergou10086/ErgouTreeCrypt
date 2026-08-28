@@ -873,6 +873,21 @@ public class MainController {
         showFileInfo();
     }
 
+    /** 用于直接打开目标解压文件, 而非先打开本软件再去找文件路径时的处理 */
+    public void openStartupFile(Path path) {
+        if(path == null) {
+            return;
+        }
+        File file = path.toFile();
+        if(!file.isFile()){
+            return;
+        }
+
+        mainTabs.getSelectionModel().select(fileTab);
+        setSelectedFile(file);
+        passwordField.requestFocus();
+    }
+
     private void showFileInfo() {
         fileNameLabel.setText(selectedFile.getName());
         if (selectedFile.isDirectory()) {

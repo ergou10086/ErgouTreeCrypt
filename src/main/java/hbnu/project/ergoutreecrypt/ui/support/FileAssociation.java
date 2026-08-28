@@ -44,14 +44,16 @@ public final class FileAssociation {
      * @param iconPath 已落盘的 .ico 文件绝对路径
      * @return 是否注册成功
      */
-    public static boolean register(String iconPath) {
-        if (!isWindows()) {
+    public static boolean register(String iconPath, String openCommand) {
+        if (!isWindows() || openCommand == null || openCommand.isBlank()) {
             return false;
         }
         try {
             String extKey = "HKCU\\Software\\Classes\\" + EXT;
             String progKey = "HKCU\\Software\\Classes\\" + PROG_ID;
             String iconKey = progKey + "\\DefaultIcon";
+            String openKey = progKey + "\\shell\\open";
+            String commandKey = openKey + "\\command";
 
             // 1) .ergou → ProgID
             runReg("add", extKey, "/ve", "/d", PROG_ID, "/f");
@@ -59,6 +61,9 @@ public final class FileAssociation {
             runReg("add", progKey, "/ve", "/d", APP_NAME, "/f");
             // 3) DefaultIcon → .ico 路径（带 ,0 指定图标索引）
             runReg("add", iconKey, "/ve", "/d", iconPath + ",0", "/f");
+            // 4) 直接手动打开.ergou后缀文件的动作
+            runReg("add", openKey, "/ve", "/d", "打开(&O)", "/f");
+            runReg("add", commandKey, "/ve", "/d", openCommand, "/f");
 
             notifyShellIconChanged();
             return true;
@@ -105,8 +110,16 @@ public final class FileAssociation {
                 }
             }
 
-            // 3) 注册 .ergou 文件关联，使用转换后的文件图标
-            register(fileIconFile.toAbsolutePath().toString());
+            // 3) 注册 .ergou 文件关联，使用转换后的文件图标, 并注册对应的直接打开该文件时的命令
+            String openCommand = buildOpenCommand();
+            if(openCommand == null || openCommand.isBlank()) {
+                return;
+            }
+
+            if(isRegistered() && hasOpenCommand(openCommand) && bothExist) {
+                return;
+            }
+            register(fileIconFile.toAbsolutePath().toString(), openCommand);
         } catch (IOException ignored) {
             // 静默失败，不影响应用启动
         }
@@ -138,6 +151,49 @@ public final class FileAssociation {
         System.arraycopy(regArgs, 0, cmd, 1, regArgs.length);
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         p.waitFor(5, TimeUnit.SECONDS);
+    }
+
+    private static String buildOpenCommand() {
+        // 此函数只支持直接用.exe打开的情况, 若对.jar文件直接运行 则无效
+        return ProcessHandle.current()
+                .info()
+                .command()
+                .map(Path::of)
+                .filter(Files::isRegularFile)
+                .filter(FileAssociation::isAppExe)
+                .map(path -> quote(path.toAbsolutePath().toString()) + " \"%1\"")
+                .orElse(null);
+    }
+
+    private static boolean isAppExe(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".exe")
+                && !name.equals("java.exe")
+                && !name.equals("javaw.exe");
+    }
+
+    private static String quote(String value) {
+        return "\"" + value + "\"";
+    }
+
+    private static boolean hasOpenCommand(String expectedOpenCommand) {
+        if (expectedOpenCommand == null || expectedOpenCommand.isBlank()) {
+            return false;
+        }
+        try {
+            Process p = new ProcessBuilder(
+                    "reg", "query",
+                    "HKCU\\Software\\Classes\\" + PROG_ID + "\\shell\\open\\command",
+                    "/ve")
+                    .redirectErrorStream(true)
+                    .start();
+
+            String output = new String(p.getInputStream().readAllBytes());
+            p.waitFor(3, TimeUnit.SECONDS);
+            return p.exitValue() == 0 && output.contains(expectedOpenCommand);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

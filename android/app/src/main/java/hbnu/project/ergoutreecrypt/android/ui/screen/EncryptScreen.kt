@@ -600,31 +600,34 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
                 vm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = "加密完成"
-                        resultMessage = buildSuccessMessage("加密", outNameNow)
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
-                        // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.GENERIC_ENCRYPT,
-                                outNameNow,
-                                "$resolvedOutDir/$outNameNow",
-                                savedTreeUri
-                            )
+                // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
+                scope.launch {
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = "加密完成"
+                            resultMessage = buildSuccessMessage("加密", outNameNow)
+                            resultDetail = null
+                            resultType = ResultType.SUCCESS
+                            // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.GENERIC_ENCRYPT,
+                                    outNameNow,
+                                    "$resolvedOutDir/$outNameNow",
+                                    savedTreeUri
+                                )
+                            }
+                        }
+                        false -> {
+                            resultTitle = "加密完成但保存失败"
+                            resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "加密完成但保存失败"
-                        resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(progress.error)
@@ -657,31 +660,34 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
                 mediaVm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = "格式保持加密完成"
-                        resultMessage = buildSuccessMessage("加密", outNameNow)
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
-                        // 记录操作历史（格式保持加密）
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.FPE_ENCRYPT,
-                                outNameNow,
-                                "$resolvedOutDir/$outNameNow",
-                                savedTreeUri
-                            )
+                // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
+                scope.launch {
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = "格式保持加密完成"
+                            resultMessage = buildSuccessMessage("加密", outNameNow)
+                            resultDetail = null
+                            resultType = ResultType.SUCCESS
+                            // 记录操作历史（格式保持加密）
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.FPE_ENCRYPT,
+                                    outNameNow,
+                                    "$resolvedOutDir/$outNameNow",
+                                    savedTreeUri
+                                )
+                            }
+                        }
+                        false -> {
+                            resultTitle = "格式保持加密完成但保存失败"
+                            resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "格式保持加密完成但保存失败"
-                        resultMessage = "加密已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(mediaProgress.error)

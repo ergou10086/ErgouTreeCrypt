@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.volume;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -55,6 +56,11 @@ public final class FolderCrypt {
      * 单卷加密文件扩展名。
      */
     public static final String ENC_EXT = ".ergou";
+
+    /**
+     * 解压归档时密码重试上限：连续输入错误密码达到该次数后放弃。
+     */
+    private static final int MAX_ARCHIVE_PASSWORD_ATTEMPTS = 3;
 
     private static final Pattern CHUNK_RE = Pattern.compile("^(.*)\\.([0-9]+)$");
 
@@ -289,14 +295,67 @@ public final class FolderCrypt {
                 reporter.setStatus(Messages.get("status.extracting"), ProgressPhase.ARCHIVE);
                 reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
             }
-            String archPwd = ArchivePacker.resolveArchivePassword(
-                    opts.archivePassword, opts.password);
-            ArchiveExtractor.extractPreserving(archive, extractDir, archPwd, reporter);
+            String archPwd = resolveArchivePassword(archive, opts);
+            int attempts = 0;
+            while (true) {
+                try {
+                    ArchiveExtractor.extractPreserving(archive, extractDir, archPwd, reporter);
+                    break;
+                } catch (IOException e) {
+                    if (opts.archivePasswordProvider != null
+                            && ArchiveExtractor.isPasswordRelatedError(e)
+                            && attempts < MAX_ARCHIVE_PASSWORD_ATTEMPTS - 1) {
+                        attempts++;
+                        archPwd = opts.archivePasswordProvider.providePassword(archive, true);
+                        if (archPwd == null || archPwd.isEmpty()) {
+                            throw new IOException("Archive password required but not provided");
+                        }
+                        continue;
+                    }
+                    throw e;
+                }
+            }
             // 解压结果可能是普通加密文件、分卷碎片子目录、嵌套压缩包或多层目录结构，统一交给目录解密逻辑。
             decryptDirectory(extractDir, outputDir, base, opts, stats, depth, true);
         } finally {
             deleteRecursively(extractDir);
         }
+    }
+
+    /**
+     * 解析解压归档所需密码：优先取选项中的归档密码（含回退到加密密码），
+     * 为空且归档需要密码时通过密码提供者（弹窗）获取；用户放弃时抛出异常。
+     *
+     * @param archive 待解压的归档路径
+     * @param opts    解密选项
+     * @return 用于解压的归档密码；归档不需要密码时返回 null
+     * @throws IOException 归档需要密码但用户放弃输入
+     */
+    private static String resolveArchivePassword(Path archive, DecryptOptions opts)
+            throws IOException {
+        String archPwd = ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password);
+        if (archPwd != null && !archPwd.isEmpty()) {
+            return archPwd;
+        }
+        ArchivePasswordProvider provider = opts.archivePasswordProvider;
+        if (provider == null) {
+            return null;
+        }
+        boolean needsPassword;
+        try {
+            needsPassword = ArchiveExtractor.hasEncryptedEntries(archive);
+        } catch (IOException e) {
+            // 检测失败时保守地视为需要密码，交由弹窗询问
+            needsPassword = true;
+        }
+        if (!needsPassword) {
+            return null;
+        }
+        String password = provider.providePassword(archive, false);
+        if (password == null || password.isEmpty()) {
+            throw new IOException("Archive password required but not provided");
+        }
+        return password;
     }
 
     /**
@@ -399,7 +458,7 @@ public final class FolderCrypt {
                                                 ProgressReporter reporter) throws Exception {
         int limit = archiveDepthLimit(opts);
         ArchivePostExtract.extractNewArchives(mirrorRoot, depth, limit, reporter,
-                postExtractListener(opts, stats, reporter));
+                postExtractListener(opts, stats, reporter), opts.archivePasswordProvider);
     }
 
     /**
@@ -417,7 +476,8 @@ public final class FolderCrypt {
         }
         try {
             ArchivePostExtract.extractIfArchive(decrypted, 0, archiveDepthLimit(opts),
-                    opts.reporter, postExtractListener(opts, stats, opts.reporter));
+                    opts.reporter, postExtractListener(opts, stats, opts.reporter),
+                    opts.archivePasswordProvider);
         } catch (InterruptedException e) {
             throw e;
         } catch (Exception e) {
@@ -752,6 +812,7 @@ public final class FolderCrypt {
         DecryptOptions cloned = new DecryptOptions();
         cloned.password = opts.password;
         cloned.archivePassword = opts.archivePassword;
+        cloned.archivePasswordProvider = opts.archivePasswordProvider;
         cloned.forceDecrypt = opts.forceDecrypt;
         cloned.recursiveExtract = opts.recursiveExtract;
         cloned.extractThenDecrypt = opts.extractThenDecrypt;
@@ -1463,6 +1524,11 @@ public final class FolderCrypt {
     public static final class DecryptOptions {
         public String password;
         public String archivePassword;
+        /**
+         * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，
+         * 通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
+         */
+        public ArchivePasswordProvider archivePasswordProvider;
         public boolean forceDecrypt;
         /**
          * 是否加深嵌套压缩包处理层数。

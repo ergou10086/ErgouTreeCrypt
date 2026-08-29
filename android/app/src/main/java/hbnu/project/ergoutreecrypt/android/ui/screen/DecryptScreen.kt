@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,7 +49,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -95,15 +98,19 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
 import hbnu.project.ergoutreecrypt.fileops.Splitter
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -113,6 +120,26 @@ private val TIP_AUTO_UNZIP = "输入为明文压缩包时，先解压再解密�
 private val TIP_DECRYPT_THEN_EXTRACT = "针对 zip.ergou / 7z.ergou 等加密归档：解密后保留明文压缩包，并解压到同名文件夹且保留内部目录结构。不会解密解压出来的 .ergou 文件。"
 private val TIP_VERIFY = "勾选后仅校验文件完整性，不进行解密。校验通过表示文件未被篡改。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
+
+/**
+ * 归档密码弹窗的状态载体。
+ *
+ * <p>核心层在后台线程通过 {@link ArchivePasswordProvider} 请求密码，本对象在 UI 线程
+ * 展示 {@link AlertDialog}，用户输入后通过 {@link #result} 将结果回传给等待的线程。
+ *
+ * @param archiveName 需要密码的压缩包文件名
+ * @param retry       是否为重试（上一次密码错误）
+ */
+private class PasswordPrompt(
+    val archiveName: String,
+    val retry: Boolean,
+) {
+    /** 等待用户输入的结果通道；null 表示放弃 / 取消。 */
+    val result = CompletableDeferred<String?>()
+
+    /** 对话框内输入框的当前内容。 */
+    var input by mutableStateOf("")
+}
 
 private fun fmtSize(bytes: Long): String {
     if (bytes <= 0) return "0 B"
@@ -239,6 +266,29 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     }
     // 压缩包密码（选填，解压时使用）
     var archivePassword by remember { mutableStateOf("") }
+
+    // 归档密码弹窗状态与提供者：核心层在后台线程遇到需要密码的压缩包时，
+    // 通过该回调请求密码，本界面弹出 AlertDialog 收集用户输入后回传
+    var passwordPrompt by remember { mutableStateOf<PasswordPrompt?>(null) }
+    val archivePasswordProvider = remember {
+        ArchivePasswordProvider { archive, retry ->
+            val prompt = PasswordPrompt(archive.fileName.toString(), retry)
+            passwordPrompt = prompt
+            try {
+                runBlocking { prompt.result.await() }
+            } catch (e: CancellationException) {
+                null
+            }
+        }
+    }
+
+    // 界面离开组合时若仍在等待密码输入，立即结束等待，避免后台线程悬挂
+    DisposableEffect(Unit) {
+        onDispose {
+            passwordPrompt?.result?.complete(null)
+            passwordPrompt = null
+        }
+    }
 
     // ---- 音视频格式保持解密 ----
     var mediaDecryptMode by remember { mutableStateOf(false) }
@@ -452,6 +502,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     outputDir = writeDir,
                     password = password,
                     archivePassword = archivePassword.ifEmpty { null },
+                    archivePasswordProvider = archivePasswordProvider,
                     forceDecrypt = force,
                     recursiveExtract = false,
                     extractThenDecrypt = autoUnzip,
@@ -466,6 +517,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             val outFile = "$writeDir/${outName ?: "decrypted_output"}"
             req.outputFile = outFile
             req.password = password
+            req.archivePassword = archivePassword.ifEmpty { null }
+            req.archivePasswordProvider = archivePasswordProvider
             req.setForceDecrypt(force)
             req.setDecryptThenExtract(decryptThenExtract)
             req.setRecursiveExtract(false)
@@ -572,35 +625,39 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     val batchDetail = progress.detail
                     val partial = !progress.detail.isNullOrBlank() && progress.error != null
                     vm.reset()
-                    val committed = commitOutput()
-                    when (committed) {
-                        null, true -> {
-                            resultTitle = if (partial) "解密部分完成" else "解密完成"
-                            resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
-                                batchSummary
-                            } else {
-                                buildSuccessMessage("解密", outNameNow)
+                    // reset() 会改变 LaunchedEffect 的 key 并取消当前协程，挂起工作必须放到
+                    // 独立协程里执行，否则 commitOutput / 历史记录 / 结果弹窗会被取消丢失
+                    scope.launch {
+                        val committed = commitOutput()
+                        when (committed) {
+                            null, true -> {
+                                resultTitle = if (partial) "解密部分完成" else "解密完成"
+                                resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
+                                    batchSummary
+                                } else {
+                                    buildSuccessMessage("解密", outNameNow)
+                                }
+                                resultDetail = batchDetail
+                                resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
+                                // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
+                                withContext(Dispatchers.IO) {
+                                    HistoryService.record(
+                                        OperationType.GENERIC_DECRYPT,
+                                        outNameNow,
+                                        "$resolvedOutDir/$outNameNow",
+                                        savedTreeUri
+                                    )
+                                }
                             }
-                            resultDetail = batchDetail
-                            resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
-                            // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
-                            withContext(Dispatchers.IO) {
-                                HistoryService.record(
-                                    OperationType.GENERIC_DECRYPT,
-                                    outNameNow,
-                                    "$resolvedOutDir/$outNameNow",
-                                    savedTreeUri
-                                )
+                            false -> {
+                                resultTitle = "解密完成但保存失败"
+                                resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                                resultDetail = null
+                                resultType = ResultType.ERROR
                             }
                         }
-                        false -> {
-                            resultTitle = "解密完成但保存失败"
-                            resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                            resultDetail = null
-                            resultType = ResultType.ERROR
-                        }
+                        showResultDialog = true
                     }
-                    showResultDialog = true
                 }
             }
             ProgressState.State.ERROR -> {
@@ -638,31 +695,34 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
                 mediaVm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = "格式保持解密完成"
-                        resultMessage = buildSuccessMessage("解密", outNameNow)
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
-                        // 记录操作历史（格式保持解密）
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.FPE_DECRYPT,
-                                outNameNow,
-                                "$resolvedOutDir/$outNameNow",
-                                savedTreeUri
-                            )
+                // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
+                scope.launch {
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = "格式保持解密完成"
+                            resultMessage = buildSuccessMessage("解密", outNameNow)
+                            resultDetail = null
+                            resultType = ResultType.SUCCESS
+                            // 记录操作历史（格式保持解密）
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.FPE_DECRYPT,
+                                    outNameNow,
+                                    "$resolvedOutDir/$outNameNow",
+                                    savedTreeUri
+                                )
+                            }
+                        }
+                        false -> {
+                            resultTitle = "格式保持解密完成但保存失败"
+                            resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "格式保持解密完成但保存失败"
-                        resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(mediaProgress.error)
@@ -695,6 +755,52 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             type = resultType,
             onDismiss = { showResultDialog = false },
             confirmLabel = "确定"
+        )
+    }
+
+    // 归档密码弹窗：核心层在后台线程请求密码，用户输入后回传；取消则视为放弃
+    passwordPrompt?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = {
+                passwordPrompt = null
+                prompt.result.complete(null)
+            },
+            title = { Text(if (prompt.retry) "归档密码错误" else "需要归档密码") },
+            text = {
+                Column {
+                    Text(
+                        if (prompt.retry) {
+                            "密码错误，请重新输入压缩包「${prompt.archiveName}」的归档密码。"
+                        } else {
+                            "压缩包「${prompt.archiveName}」需要密码。请输入归档密码（若创建时未单独设置归档密码，请使用加密时的密码）。"
+                        }
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = prompt.input,
+                        onValueChange = { prompt.input = it },
+                        label = { Text("压缩包密码") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        passwordPrompt = null
+                        prompt.result.complete(prompt.input.ifBlank { null })
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        passwordPrompt = null
+                        prompt.result.complete(null)
+                    }
+                ) { Text("取消") }
+            }
         )
     }
 
@@ -946,7 +1052,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
                 // ---- 解压后解密（格式保持解密下不支持，需单独先解压再解密） ----
                 OptionRow("解压后解密", autoUnzip, { autoUnzip = it }, TIP_AUTO_UNZIP, enabled = !mediaDecryptMode)
-                if (autoUnzip && !mediaDecryptMode) {
+                if ((autoUnzip || decryptThenExtract) && !mediaDecryptMode) {
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = archivePassword,

@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.volume;
 
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 
 import java.util.List;
 
@@ -25,6 +26,17 @@ public final class DecryptRequest {
      * 解密密码（可为空字符串表示无密码模式）。
      */
     private String password;
+
+    /**
+     * 归档密码：解密后解压时用于解压受密码保护的明文归档，可为 null 或空。
+     */
+    private String archivePassword;
+
+    /**
+     * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，
+     * 通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
+     */
+    private ArchivePasswordProvider archivePasswordProvider;
 
     /**
      * 密钥文件路径列表，可为 null 或空。
@@ -108,6 +120,42 @@ public final class DecryptRequest {
 
     public void setPassword(String p) {
         this.password = p;
+    }
+
+    /**
+     * 获取归档密码（解密后解压时用于解压受密码保护的明文归档）。
+     *
+     * @return 归档密码，可为 null 或空
+     */
+    public String getArchivePassword() {
+        return archivePassword;
+    }
+
+    /**
+     * 设置归档密码。
+     *
+     * @param p 归档密码，可为 null 或空
+     */
+    public void setArchivePassword(String p) {
+        this.archivePassword = p;
+    }
+
+    /**
+     * 获取归档密码提供者（弹窗回调）。
+     *
+     * @return 密码提供者，可为 null
+     */
+    public ArchivePasswordProvider getArchivePasswordProvider() {
+        return archivePasswordProvider;
+    }
+
+    /**
+     * 设置归档密码提供者。
+     *
+     * @param provider 密码提供者，可为 null
+     */
+    public void setArchivePasswordProvider(ArchivePasswordProvider provider) {
+        this.archivePasswordProvider = provider;
     }
 
     public List<String> getKeyfiles() {

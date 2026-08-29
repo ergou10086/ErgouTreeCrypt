@@ -294,32 +294,35 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     ctx, outDir, stegoPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
                 vm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = "提取完成"
-                        resultMessage = "隐藏文件已成功提取。\n文件名：$extractedName"
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
-                        // 记录操作历史（隐写提取）
-                        val extractedFile = extractedName.ifEmpty { "extracted" }
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.STEGO_EXTRACT,
-                                extractedFile,
-                                "$resolvedOutDir/$extractedFile",
-                                savedTreeUri
-                            )
+                // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
+                scope.launch {
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = "提取完成"
+                            resultMessage = "隐藏文件已成功提取。\n文件名：$extractedName"
+                            resultDetail = null
+                            resultType = ResultType.SUCCESS
+                            // 记录操作历史（隐写提取）
+                            val extractedFile = extractedName.ifEmpty { "extracted" }
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.STEGO_EXTRACT,
+                                    extractedFile,
+                                    "$resolvedOutDir/$extractedFile",
+                                    savedTreeUri
+                                )
+                            }
+                        }
+                        false -> {
+                            resultTitle = "提取完成但保存失败"
+                            resultMessage = "文件已提取，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "提取完成但保存失败"
-                        resultMessage = "文件已提取，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(progress.error)

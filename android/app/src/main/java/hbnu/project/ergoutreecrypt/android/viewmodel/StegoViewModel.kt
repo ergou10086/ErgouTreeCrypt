@@ -139,15 +139,22 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } finally {
-                val elapsed = logElapsedMillis(t0)
-                when {
-                    cancelled -> LogService.endSessionCancelled(elapsed)
-                    success -> LogService.endSession(true, elapsed)
-                    else -> LogService.endSession(false, elapsed)
-                }
+                // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
+                val elapsed = logElapsedMillis(t0)
+                try {
+                    when {
+                        cancelled -> LogService.endSessionCancelled(elapsed)
+                        success -> LogService.endSession(true, elapsed)
+                        else -> LogService.endSession(false, elapsed)
+                    }
+                } catch (_: Throwable) {
+                    // 日志收尾失败不影响操作权释放
+                }
             }
         }
+        // 兜底释放：协程无论以何种方式结束（含 setup 抛异常/作用域销毁）都归还操作权，防止 busy 悬挂导致按钮永久置灰
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**
@@ -220,15 +227,22 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     )
                 }
             } finally {
-                val elapsed = logElapsedMillis(t0)
-                when {
-                    cancelled -> LogService.endSessionCancelled(elapsed)
-                    success -> LogService.endSession(true, elapsed)
-                    else -> LogService.endSession(false, elapsed)
-                }
+                // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
+                val elapsed = logElapsedMillis(t0)
+                try {
+                    when {
+                        cancelled -> LogService.endSessionCancelled(elapsed)
+                        success -> LogService.endSession(true, elapsed)
+                        else -> LogService.endSession(false, elapsed)
+                    }
+                } catch (_: Throwable) {
+                    // 日志收尾失败不影响操作权释放
+                }
             }
         }
+        // 兜底释放：协程无论以何种方式结束（含 setup 抛异常/作用域销毁）都归还操作权，防止 busy 悬挂导致按钮永久置灰
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**

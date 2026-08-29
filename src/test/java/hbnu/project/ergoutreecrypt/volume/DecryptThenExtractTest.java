@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.volume;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.junit.jupiter.api.Test;
@@ -162,6 +163,183 @@ class DecryptThenExtractTest {
 
             assertTrue(Files.isRegularFile(dec.resolve("locked.zip")));
             assertNull(findPath(dec, "secret.txt"));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 带密码 zip + 提供者给出正确密码：解密后解压应成功解出内容。
+     */
+    @Test
+    void passwordProtectedZip_providerSuppliesPassword_extracts() throws Exception {
+        Path tmp = Files.createTempDirectory("dte-prov-ok-");
+        try {
+            byte[] secret = "secret-plain".getBytes(StandardCharsets.UTF_8);
+            Path src = tmp.resolve("src");
+            Files.createDirectories(src);
+            Path secretFile = src.resolve("secret.txt");
+            Files.write(secretFile, secret);
+            Path zip = tmp.resolve("locked.zip");
+            ArchivePacker.packEntries(zip, src, List.of(secretFile),
+                    ArchivePacker.Format.ZIP, "arch-pw");
+
+            Path enc = tmp.resolve("locked.zip.ergou");
+            encryptOne(zip, enc);
+
+            Path dec = tmp.resolve("dec");
+            Files.createDirectories(dec);
+            FolderCrypt.DecryptOptions opts = decryptThenExtractOpts(false);
+            opts.archivePasswordProvider = (a, retry) -> "arch-pw";
+            FolderCrypt.decryptAuto(enc, dec, opts);
+
+            assertTrue(Files.isRegularFile(dec.resolve("locked.zip")));
+            assertArrayEquals(secret, Files.readAllBytes(dec.resolve("locked/secret.txt")));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 带密码 zip + 提供者先给错密码，重试（retry=true）给正确密码：应成功解压并确认重试。
+     */
+    @Test
+    void passwordProtectedZip_wrongThenCorrectPassword_retriesPrompt() throws Exception {
+        Path tmp = Files.createTempDirectory("dte-prov-retry-");
+        try {
+            byte[] secret = "secret-plain".getBytes(StandardCharsets.UTF_8);
+            Path src = tmp.resolve("src");
+            Files.createDirectories(src);
+            Path secretFile = src.resolve("secret.txt");
+            Files.write(secretFile, secret);
+            Path zip = tmp.resolve("locked.zip");
+            ArchivePacker.packEntries(zip, src, List.of(secretFile),
+                    ArchivePacker.Format.ZIP, "arch-pw");
+
+            Path enc = tmp.resolve("locked.zip.ergou");
+            encryptOne(zip, enc);
+
+            Path dec = tmp.resolve("dec");
+            Files.createDirectories(dec);
+            java.util.concurrent.atomic.AtomicBoolean retried = new java.util.concurrent.atomic.AtomicBoolean();
+            FolderCrypt.DecryptOptions opts = decryptThenExtractOpts(false);
+            opts.archivePasswordProvider = (a, retry) -> {
+                if (!retry) {
+                    return "wrong";
+                }
+                retried.set(true);
+                return "arch-pw";
+            };
+            FolderCrypt.decryptAuto(enc, dec, opts);
+
+            assertTrue(retried.get(), "第一次密码错误后应以 retry=true 再次询问");
+            assertArrayEquals(secret, Files.readAllBytes(dec.resolve("locked/secret.txt")));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 带密码 zip + 提供者放弃（返回 null）：跳过解压，压缩包保留，不出现明文内容。
+     */
+    @Test
+    void passwordProtectedZip_providerDeclines_skippedAndKept() throws Exception {
+        Path tmp = Files.createTempDirectory("dte-prov-skip-");
+        try {
+            byte[] secret = "secret-plain".getBytes(StandardCharsets.UTF_8);
+            Path src = tmp.resolve("src");
+            Files.createDirectories(src);
+            Path secretFile = src.resolve("secret.txt");
+            Files.write(secretFile, secret);
+            Path zip = tmp.resolve("locked.zip");
+            ArchivePacker.packEntries(zip, src, List.of(secretFile),
+                    ArchivePacker.Format.ZIP, "arch-pw");
+
+            Path enc = tmp.resolve("locked.zip.ergou");
+            encryptOne(zip, enc);
+
+            Path dec = tmp.resolve("dec");
+            Files.createDirectories(dec);
+            FolderCrypt.DecryptOptions opts = decryptThenExtractOpts(false);
+            opts.archivePasswordProvider = (a, retry) -> null;
+            FolderCrypt.decryptAuto(enc, dec, opts);
+
+            assertTrue(Files.isRegularFile(dec.resolve("locked.zip")));
+            assertNull(findPath(dec, "secret.txt"));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 解压后解密：明文加密 zip 内的 .ergou，通过提供者获得归档密码后成功解密内部文件。
+     */
+    @Test
+    void extractThenDecrypt_providerSuppliesArchivePassword_decryptsInner() throws Exception {
+        Path tmp = Files.createTempDirectory("dte-etd-pw-");
+        try {
+            byte[] data = rand(55);
+            Path f = tmp.resolve("doc.txt");
+            Files.write(f, data);
+            Path e = tmp.resolve("doc.txt.ergou");
+            encryptOne(f, e);
+
+            Path locked = tmp.resolve("locked.zip");
+            ArchivePacker.packEntries(locked, tmp, List.of(e),
+                    ArchivePacker.Format.ZIP, "arch-pw");
+
+            Path dec = tmp.resolve("dec");
+            Files.createDirectories(dec);
+            FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
+            opts.password = PW;
+            opts.rsCodecs = new RsCodecs();
+            opts.extractThenDecrypt = true;
+            opts.decryptThenExtract = false;
+            opts.archivePasswordProvider = (a, retry) -> "arch-pw";
+            FolderCrypt.decryptAuto(locked, dec, opts);
+
+            assertArrayEquals(data, Files.readAllBytes(dec.resolve("locked/doc.txt")));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 解压后解密：提供者先给错密码，重试（retry=true）给正确密码后成功解密内部文件。
+     */
+    @Test
+    void extractThenDecrypt_wrongThenCorrectArchivePassword_retries() throws Exception {
+        Path tmp = Files.createTempDirectory("dte-etd-retry-");
+        try {
+            byte[] data = rand(60);
+            Path f = tmp.resolve("doc.txt");
+            Files.write(f, data);
+            Path e = tmp.resolve("doc.txt.ergou");
+            encryptOne(f, e);
+
+            Path locked = tmp.resolve("locked.zip");
+            ArchivePacker.packEntries(locked, tmp, List.of(e),
+                    ArchivePacker.Format.ZIP, "arch-pw");
+
+            Path dec = tmp.resolve("dec");
+            Files.createDirectories(dec);
+            java.util.concurrent.atomic.AtomicBoolean retried = new java.util.concurrent.atomic.AtomicBoolean();
+            FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
+            opts.password = PW;
+            opts.rsCodecs = new RsCodecs();
+            opts.extractThenDecrypt = true;
+            opts.decryptThenExtract = false;
+            opts.archivePasswordProvider = (a, retry) -> {
+                if (!retry) {
+                    return "wrong";
+                }
+                retried.set(true);
+                return "arch-pw";
+            };
+            FolderCrypt.decryptAuto(locked, dec, opts);
+
+            assertTrue(retried.get(), "归档密码错误后应以 retry=true 再次询问");
+            assertArrayEquals(data, Files.readAllBytes(dec.resolve("locked/doc.txt")));
         } finally {
             rmrf(tmp);
         }

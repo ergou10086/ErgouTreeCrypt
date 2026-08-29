@@ -36,6 +36,11 @@ public final class ArchivePostExtract {
      */
     public static final int RECURSIVE_MAX_DEPTH = 5;
 
+    /**
+     * 归档密码重试上限：连续输入错误密码达到该次数后放弃解压该归档。
+     */
+    private static final int MAX_PASSWORD_ATTEMPTS = 3;
+
     private ArchivePostExtract() {
     }
 
@@ -88,7 +93,25 @@ public final class ArchivePostExtract {
      */
     public static void extractIfArchive(Path decryptedFile, int maxDepth,
                                         ProgressReporter reporter) throws Exception {
-        extractIfArchive(decryptedFile, 0, maxDepth, reporter, null);
+        extractIfArchive(decryptedFile, 0, maxDepth, reporter, null, null);
+    }
+
+    /**
+     * 若 {@code decryptedFile} 是明文归档，则解压到同名文件夹。
+     *
+     * <p>带密码归档且提供了密码提供者时，通过提供者获取密码并解压；
+     * 用户放弃输入时跳过该归档并保留原文件。
+     *
+     * @param decryptedFile     解密得到的文件
+     * @param maxDepth          最大嵌套层数
+     * @param reporter          进度回调，可为 null
+     * @param passwordProvider  归档密码提供者（弹窗），可为 null
+     * @throws Exception 解压失败或用户取消
+     */
+    public static void extractIfArchive(Path decryptedFile, int maxDepth,
+                                        ProgressReporter reporter,
+                                        ArchivePasswordProvider passwordProvider) throws Exception {
+        extractIfArchive(decryptedFile, 0, maxDepth, reporter, null, passwordProvider);
     }
 
     /**
@@ -104,13 +127,34 @@ public final class ArchivePostExtract {
     public static void extractIfArchive(Path decryptedFile, int depth, int maxDepth,
                                         ProgressReporter reporter, Listener listener)
             throws Exception {
+        extractIfArchive(decryptedFile, depth, maxDepth, reporter, listener, null);
+    }
+
+    /**
+     * 若 {@code decryptedFile} 是明文归档，则解压到同名文件夹。
+     *
+     * <p>带密码归档且提供了密码提供者时，通过提供者获取密码并解压；
+     * 用户放弃输入时跳过该归档并保留原文件。
+     *
+     * @param decryptedFile     解密得到的文件
+     * @param depth             当前层数（最外层为 0）
+     * @param maxDepth          最大嵌套层数
+     * @param reporter          进度回调，可为 null
+     * @param listener          结果回调，可为 null
+     * @param passwordProvider  归档密码提供者（弹窗），可为 null
+     * @throws Exception 解压失败或用户取消
+     */
+    public static void extractIfArchive(Path decryptedFile, int depth, int maxDepth,
+                                        ProgressReporter reporter, Listener listener,
+                                        ArchivePasswordProvider passwordProvider)
+            throws Exception {
         if (decryptedFile == null || !Files.isRegularFile(decryptedFile)) {
             return;
         }
         if (!ArchiveExtractor.isArchive(decryptedFile)) {
             return;
         }
-        extractToNamedFolder(decryptedFile, depth, maxDepth, reporter, listener);
+        extractToNamedFolder(decryptedFile, depth, maxDepth, reporter, listener, passwordProvider);
     }
 
     /**
@@ -128,6 +172,27 @@ public final class ArchivePostExtract {
     public static void extractNewArchives(Path root, int depth, int maxDepth,
                                           ProgressReporter reporter, Listener listener)
             throws Exception {
+        extractNewArchives(root, depth, maxDepth, reporter, listener, null);
+    }
+
+    /**
+     * 扫描目录中新出现的明文归档并解压到各自的同名文件夹，保留压缩包。
+     *
+     * <p>解压失败时跳过该归档并保留原文件，不中断其余归档。带密码归档且提供了
+     * 密码提供者时，通过提供者获取密码并解压。
+     *
+     * @param root             扫描根目录
+     * @param depth            当前层数（最外层为 0）
+     * @param maxDepth         最大嵌套层数
+     * @param reporter         进度回调，可为 null
+     * @param listener         结果回调，可为 null
+     * @param passwordProvider 归档密码提供者（弹窗），可为 null
+     * @throws Exception 用户取消
+     */
+    public static void extractNewArchives(Path root, int depth, int maxDepth,
+                                          ProgressReporter reporter, Listener listener,
+                                          ArchivePasswordProvider passwordProvider)
+            throws Exception {
         if (root == null || !Files.isDirectory(root) || depth >= maxDepth) {
             return;
         }
@@ -139,7 +204,7 @@ public final class ArchivePostExtract {
                 throw new InterruptedException("cancelled");
             }
             try {
-                extractToNamedFolder(archive, depth, maxDepth, reporter, listener);
+                extractToNamedFolder(archive, depth, maxDepth, reporter, listener, passwordProvider);
             } catch (InterruptedException e) {
                 throw e;
             } catch (Exception e) {
@@ -155,7 +220,8 @@ public final class ArchivePostExtract {
     /**
      * 将明文归档解压到兄弟同名文件夹，保留压缩包，并按深度限制递归处理内部嵌套归档。
      *
-     * <p>带密码归档采用快速失败：跳过解压、不创建空目录、保留原包。
+     * <p>带密码归档：提供了密码提供者时通过弹窗获取密码（密码错误自动重试），
+     * 用户放弃输入时跳过解压、保留原包；未提供密码提供者时快速失败跳过。
      * 本方法不解密 {@code .ergou} 文件。
      *
      * @param archive  明文归档
@@ -168,6 +234,28 @@ public final class ArchivePostExtract {
     public static void extractToNamedFolder(Path archive, int depth, int maxDepth,
                                             ProgressReporter reporter, Listener listener)
             throws Exception {
+        extractToNamedFolder(archive, depth, maxDepth, reporter, listener, null);
+    }
+
+    /**
+     * 将明文归档解压到兄弟同名文件夹，保留压缩包，并按深度限制递归处理内部嵌套归档。
+     *
+     * <p>带密码归档且提供了密码提供者时，通过弹窗获取密码（密码错误自动重试），
+     * 用户放弃输入时跳过解压、保留原包；未提供密码提供者时快速失败跳过。
+     * 本方法不解密 {@code .ergou} 文件。
+     *
+     * @param archive          明文归档
+     * @param depth            当前层数（最外层为 0）
+     * @param maxDepth         最大嵌套层数
+     * @param reporter         进度回调，可为 null
+     * @param listener         结果回调，可为 null
+     * @param passwordProvider 归档密码提供者（弹窗），可为 null
+     * @throws Exception 解压失败或用户取消
+     */
+    public static void extractToNamedFolder(Path archive, int depth, int maxDepth,
+                                            ProgressReporter reporter, Listener listener,
+                                            ArchivePasswordProvider passwordProvider)
+            throws Exception {
         if (archive == null || !Files.isRegularFile(archive)) {
             return;
         }
@@ -178,18 +266,53 @@ public final class ArchivePostExtract {
             throw new InterruptedException("cancelled");
         }
         if (isPasswordProtected(archive)) {
-            if (listener != null) {
-                listener.onSkipped(archive, Messages.get("status.archive.passwordProtected"));
+            if (passwordProvider == null) {
+                skipPasswordProtected(archive, reporter, listener);
+                return;
             }
-            if (reporter != null) {
-                reporter.setStatus(Messages.format("status.skipped",
-                        archive.getFileName(),
-                        Messages.get("status.archive.passwordProtected")),
-                        ProgressPhase.ARCHIVE);
+            int attempts = 0;
+            while (true) {
+                String password = passwordProvider.providePassword(archive, attempts > 0);
+                if (password == null || password.isEmpty()) {
+                    skipPasswordProtected(archive, reporter, listener);
+                    return;
+                }
+                try {
+                    extractToNamedFolderInner(archive, depth, maxDepth, reporter, listener,
+                            password, passwordProvider);
+                    return;
+                } catch (InterruptedException e) {
+                    throw e;
+                } catch (Exception e) {
+                    if (ArchiveExtractor.isPasswordRelatedError(e)
+                            && attempts < MAX_PASSWORD_ATTEMPTS - 1) {
+                        attempts++;
+                        continue;
+                    }
+                    throw e;
+                }
             }
-            return;
         }
+        extractToNamedFolderInner(archive, depth, maxDepth, reporter, listener, null, passwordProvider);
+    }
 
+    /**
+     * 实际解压到同名文件夹（已持有最终密码），并按深度限制递归处理内部嵌套归档。
+     *
+     * @param archive          明文归档
+     * @param depth            当前层数（最外层为 0）
+     * @param maxDepth         最大嵌套层数
+     * @param reporter         进度回调，可为 null
+     * @param listener         结果回调，可为 null
+     * @param password         归档密码（可为 null/空）
+     * @param passwordProvider 归档密码提供者，用于递归时传递给嵌套归档
+     * @throws Exception 解压失败或用户取消
+     */
+    private static void extractToNamedFolderInner(Path archive, int depth, int maxDepth,
+                                                  ProgressReporter reporter, Listener listener,
+                                                  String password,
+                                                  ArchivePasswordProvider passwordProvider)
+            throws Exception {
         Path parent = archive.getParent();
         if (parent == null) {
             parent = Path.of(".");
@@ -201,7 +324,7 @@ public final class ArchivePostExtract {
             reporter.setStatus(Messages.format("status.extracting.file",
                     archive.getFileName()), ProgressPhase.ARCHIVE);
         }
-        ArchiveExtractor.extractPreserving(archive, destDir, null, reporter);
+        ArchiveExtractor.extractPreserving(archive, destDir, password, reporter);
         if (listener != null) {
             listener.onExtracted(archive, destDir);
         }
@@ -209,7 +332,27 @@ public final class ArchivePostExtract {
                 + " → " + destDir.getFileName());
 
         if (depth + 1 < maxDepth) {
-            extractNewArchives(destDir, depth + 1, maxDepth, reporter, listener);
+            extractNewArchives(destDir, depth + 1, maxDepth, reporter, listener, passwordProvider);
+        }
+    }
+
+    /**
+     * 跳过带密码归档：通知监听器与进度回调，保留原文件。
+     *
+     * @param archive  明文归档
+     * @param reporter 进度回调，可为 null
+     * @param listener 结果回调，可为 null
+     */
+    private static void skipPasswordProtected(Path archive, ProgressReporter reporter,
+                                              Listener listener) {
+        if (listener != null) {
+            listener.onSkipped(archive, Messages.get("status.archive.passwordProtected"));
+        }
+        if (reporter != null) {
+            reporter.setStatus(Messages.format("status.skipped",
+                    archive.getFileName(),
+                    Messages.get("status.archive.passwordProtected")),
+                    ProgressPhase.ARCHIVE);
         }
     }
 

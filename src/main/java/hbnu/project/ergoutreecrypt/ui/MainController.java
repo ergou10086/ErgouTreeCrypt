@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.ui;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
@@ -28,6 +29,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 主界面控制器：负责拖拽选文件、密码与高级选项收集、加解密任务的提交与进度展示。
@@ -252,6 +254,8 @@ public class MainController {
     @FXML
     private Label decryptThenExtractInfo;
     @FXML
+    private PasswordField decryptArchivePasswordField;
+    @FXML
     private CheckBox verifyFirstCheck;
     @FXML
     private Label verifyFirstInfo;
@@ -347,6 +351,11 @@ public class MainController {
         compressAfterCheck.selectedProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         compressFormatCombo.valueProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         updateArchivePasswordVisibility();
+
+        // 解密归档密码框：解压后解密 / 解密后解压任一勾选时显示
+        autoUnzipCheck.selectedProperty().addListener((o, a, b) -> updateDecryptArchivePasswordVisibility());
+        decryptThenExtractCheck.selectedProperty().addListener((o, a, b) -> updateDecryptArchivePasswordVisibility());
+        updateDecryptArchivePasswordVisibility();
 
         // 应用默认设置到 UI
         paranoidCheck.setSelected(SettingsManager.isDefaultParanoid());
@@ -498,6 +507,52 @@ public class MainController {
         archivePasswordField.setPromptText(Messages.get(key));
     }
 
+    /**
+     * 更新解密归档密码框的可见性：解压后解密 / 解密后解压任一勾选时显示。
+     */
+    private void updateDecryptArchivePasswordVisibility() {
+        boolean show = autoUnzipCheck.isSelected() || decryptThenExtractCheck.isSelected();
+        decryptArchivePasswordField.setManaged(show);
+        decryptArchivePasswordField.setVisible(show);
+    }
+
+    /**
+     * 读取解密归档密码框的输入。
+     *
+     * @return 非空密码；输入为空时返回 null
+     */
+    private String readDecryptArchivePassword() {
+        String text = decryptArchivePasswordField.getText();
+        return text == null || text.isEmpty() ? null : text;
+    }
+
+    /**
+     * 创建归档密码提供者：优先复用密码框中的输入，否则在后台线程弹窗询问用户。
+     *
+     * <p>核心层在后台线程调用该回调，弹窗需切回 FX 线程并以
+     * {@link CompletableFuture} 阻塞等待用户输入。
+     *
+     * @return 归档密码提供者
+     */
+    private ArchivePasswordProvider createArchivePasswordProvider() {
+        return (archive, retry) -> {
+            if (!retry) {
+                String prefilled = readDecryptArchivePassword();
+                if (prefilled != null) {
+                    return prefilled;
+                }
+            }
+            CompletableFuture<String> future = new CompletableFuture<>();
+            Platform.runLater(() -> future.complete(showArchivePasswordDialog(retry)));
+            try {
+                return future.get();
+            } catch (Exception e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        };
+    }
+
     // ================================================================
     // 文案 / 主题 / 语言
     // ================================================================
@@ -582,6 +637,7 @@ public class MainController {
         forceDecryptCheck.setText(Messages.get("options.forceDecrypt"));
         autoUnzipCheck.setText(Messages.get("options.autoUnzip"));
         decryptThenExtractCheck.setText(Messages.get("options.decryptThenExtract"));
+        decryptArchivePasswordField.setPromptText(Messages.get("options.decryptArchivePassword.placeholder"));
         verifyFirstCheck.setText(Messages.get("options.verifyFirst"));
         recursiveExtractCheck.setText(Messages.get("options.recursiveExtract"));
         keyfilesLabel.setText(Messages.get("options.keyfiles"));
@@ -1253,6 +1309,8 @@ public class MainController {
         req.setInputFile(in);
         req.setOutputFile(out);
         req.setPassword(pwd == null ? "" : pwd);
+        req.setArchivePassword(readDecryptArchivePassword());
+        req.setArchivePasswordProvider(createArchivePasswordProvider());
         req.setForceDecrypt(forceDecryptCheck.isSelected());
         req.setDecryptThenExtract(decryptThenExtractCheck.isSelected());
         req.setRecursiveExtract(recursiveExtractCheck.isSelected());
@@ -1269,7 +1327,7 @@ public class MainController {
             if (req.isDecryptThenExtract()) {
                 ArchivePostExtract.extractIfArchive(Path.of(req.getOutputFile()),
                         ArchivePostExtract.maxDepth(req.isRecursiveExtract()),
-                        reporter);
+                        reporter, req.getArchivePasswordProvider());
             }
             Path finalOut = Path.of(req.getOutputFile());
             HistoryService.record(OperationType.GENERIC_DECRYPT,
@@ -1291,7 +1349,8 @@ public class MainController {
 
         FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
         opts.password = pwd == null ? "" : pwd;
-        opts.archivePassword = null;
+        opts.archivePassword = readDecryptArchivePassword();
+        opts.archivePasswordProvider = createArchivePasswordProvider();
         opts.forceDecrypt = forceDecryptCheck.isSelected();
         opts.recursiveExtract = recursiveExtractCheck.isSelected();
         opts.extractThenDecrypt = autoUnzipCheck.isSelected();
@@ -1311,7 +1370,7 @@ public class MainController {
                     String effectiveArch = ArchivePacker.resolveArchivePassword(
                             opts.archivePassword, opts.password);
                     if (effectiveArch == null || effectiveArch.isEmpty()) {
-                        String archPwd = showArchivePasswordDialog();
+                        String archPwd = showArchivePasswordDialog(false);
                         if (archPwd == null || archPwd.isEmpty()) {
                             return;
                         }
@@ -1335,31 +1394,10 @@ public class MainController {
         opts.reporter = reporter;
 
         final Path finalOutDir = outDir;
+        // 归档密码的运行时询问（嵌套归档、预检遗漏、密码错误重试）统一由
+        // opts.archivePasswordProvider 处理，无需在此处捕获重试。
         taskRunner.submit("GENERIC_DECRYPT", input.getFileName().toString(), () -> {
-            try {
-                FolderCrypt.decryptAuto(input, finalOutDir, opts);
-            } catch (Exception firstErr) {
-                // 若预检遗漏了加密条目（如部分 TAR.GZ），运行时仍可弹窗重试
-                boolean needPassword = firstErr instanceof ArchiveExtractor.PasswordNeededException
-                        || MainViewSupport.isEncryptionRelated(firstErr);
-                if (!needPassword) {
-                    throw firstErr;
-                }
-                java.util.concurrent.CompletableFuture<String> future =
-                        new java.util.concurrent.CompletableFuture<>();
-                Platform.runLater(() -> future.complete(showArchivePasswordDialog()));
-                String archPwd;
-                try {
-                    archPwd = future.get();
-                } catch (Exception ignored) {
-                    throw new IOException("Archive password required but dialog interrupted", firstErr);
-                }
-                if (archPwd == null || archPwd.isEmpty()) {
-                    throw new IOException("Archive password required but not provided", firstErr);
-                }
-                opts.archivePassword = archPwd;
-                FolderCrypt.decryptAuto(input, finalOutDir, opts);
-            }
+            FolderCrypt.decryptAuto(input, finalOutDir, opts);
         }, () -> {
             HistoryService.record(OperationType.GENERIC_DECRYPT,
                     input.getFileName().toString(), finalOutDir.toString(), null);
@@ -1367,11 +1405,17 @@ public class MainController {
         }, err -> showBatchError(opts.batchResult, err));
     }
 
-    private String showArchivePasswordDialog() {
+    /**
+     * 弹出归档密码输入对话框。
+     *
+     * @param retry 是否为重试（上一次密码错误），文案据此切换
+     * @return 用户输入的密码；未输入或取消时返回空字符串
+     */
+    private String showArchivePasswordDialog(boolean retry) {
         javafx.scene.control.TextInputDialog dlg = new javafx.scene.control.TextInputDialog();
         dlg.initOwner(stage());
-        dlg.setTitle(Messages.get("archivePassword.title"));
-        dlg.setHeaderText(Messages.get("archivePassword.prompt"));
+        dlg.setTitle(Messages.get(retry ? "archivePassword.title.retry" : "archivePassword.title"));
+        dlg.setHeaderText(Messages.get(retry ? "archivePassword.prompt.retry" : "archivePassword.prompt"));
         dlg.setContentText(Messages.get("archivePassword.label"));
         return dlg.showAndWait().orElse("");
     }

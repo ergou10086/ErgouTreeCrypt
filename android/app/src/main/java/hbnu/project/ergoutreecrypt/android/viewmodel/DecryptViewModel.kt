@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.log.LogService
+import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
 import hbnu.project.ergoutreecrypt.volume.FolderCrypt
@@ -80,7 +81,8 @@ class DecryptViewModel : ViewModel() {
                         ArchivePostExtract.extractIfArchive(
                             out,
                             ArchivePostExtract.maxDepth(request.isRecursiveExtract),
-                            reporter
+                            reporter,
+                            request.archivePasswordProvider
                         )
                     }
                 }
@@ -115,15 +117,22 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                val elapsed = logElapsedMillis(t0)
-                when {
-                    cancelled -> LogService.endSessionCancelled(elapsed)
-                    success -> LogService.endSession(true, elapsed)
-                    else -> LogService.endSession(false, elapsed)
-                }
+                // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
+                val elapsed = logElapsedMillis(t0)
+                try {
+                    when {
+                        cancelled -> LogService.endSessionCancelled(elapsed)
+                        success -> LogService.endSession(true, elapsed)
+                        else -> LogService.endSession(false, elapsed)
+                    }
+                } catch (_: Throwable) {
+                    // 日志收尾失败不影响操作权释放
+                }
             }
         }
+        // 兜底释放：协程无论以何种方式结束（含 setup 抛异常/作用域销毁）都归还操作权，防止 busy 悬挂导致按钮永久置灰
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**
@@ -205,15 +214,22 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                val elapsed = logElapsedMillis(t0)
-                when {
-                    cancelled -> LogService.endSessionCancelled(elapsed)
-                    success -> LogService.endSession(true, elapsed)
-                    else -> LogService.endSession(false, elapsed)
-                }
+                // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
+                val elapsed = logElapsedMillis(t0)
+                try {
+                    when {
+                        cancelled -> LogService.endSessionCancelled(elapsed)
+                        success -> LogService.endSession(true, elapsed)
+                        else -> LogService.endSession(false, elapsed)
+                    }
+                } catch (_: Throwable) {
+                    // 日志收尾失败不影响操作权释放
+                }
             }
         }
+        // 兜底释放：协程无论以何种方式结束（含 setup 抛异常/作用域销毁）都归还操作权，防止 busy 悬挂导致按钮永久置灰
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**
@@ -222,21 +238,23 @@ class DecryptViewModel : ViewModel() {
      * <p>与桌面端 {@code MainController.startAutoDecrypt} 对齐，桥接共享核心
      * {@link FolderCrypt#decryptAuto}，避免把归档文件误当作单卷送入 {@link hbnu.project.ergoutreecrypt.volume.Decryptor}。
      *
-     * @param input            输入路径（归档 / 目录 / 分卷碎片）
-     * @param outputDir        输出目录
-     * @param password         加密密码
-     * @param archivePassword  归档密码（可为 null/空）
-     * @param forceDecrypt     是否强制解密
-     * @param recursiveExtract    是否加深嵌套压缩包处理层数（2 → 5）
-     * @param extractThenDecrypt  是否解压后解密（明文压缩包先解压再解密）
-     * @param decryptThenExtract  是否解密后解压（加密归档解密后再解压到同名文件夹）
-     * @param keyfiles            密钥文件路径列表
+     * @param input                  输入路径（归档 / 目录 / 分卷碎片）
+     * @param outputDir              输出目录
+     * @param password               加密密码
+     * @param archivePassword        归档密码（可为 null/空）
+     * @param archivePasswordProvider 归档密码提供者（弹窗询问），可为 null
+     * @param forceDecrypt           是否强制解密
+     * @param recursiveExtract       是否加深嵌套压缩包处理层数（2 → 5）
+     * @param extractThenDecrypt     是否解压后解密（明文压缩包先解压再解密）
+     * @param decryptThenExtract     是否解密后解压（加密归档解密后再解压到同名文件夹）
+     * @param keyfiles               密钥文件路径列表
      */
     fun startAutoDecrypt(
         input: String,
         outputDir: String,
         password: String,
         archivePassword: String?,
+        archivePasswordProvider: ArchivePasswordProvider?,
         forceDecrypt: Boolean,
         recursiveExtract: Boolean,
         extractThenDecrypt: Boolean,
@@ -255,6 +273,7 @@ class DecryptViewModel : ViewModel() {
             val opts = FolderCrypt.DecryptOptions()
             opts.password = password
             opts.archivePassword = archivePassword
+            opts.archivePasswordProvider = archivePasswordProvider
             opts.forceDecrypt = forceDecrypt
             opts.recursiveExtract = recursiveExtract
             opts.extractThenDecrypt = extractThenDecrypt
@@ -318,15 +337,22 @@ class DecryptViewModel : ViewModel() {
                     )
                 }
             } finally {
-                val elapsed = logElapsedMillis(t0)
-                when {
-                    cancelled -> LogService.endSessionCancelled(elapsed)
-                    success -> LogService.endSession(true, elapsed)
-                    else -> LogService.endSession(false, elapsed)
-                }
+                // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
+                val elapsed = logElapsedMillis(t0)
+                try {
+                    when {
+                        cancelled -> LogService.endSessionCancelled(elapsed)
+                        success -> LogService.endSession(true, elapsed)
+                        else -> LogService.endSession(false, elapsed)
+                    }
+                } catch (_: Throwable) {
+                    // 日志收尾失败不影响操作权释放
+                }
             }
         }
+        // 兜底释放：协程无论以何种方式结束（含 setup 抛异常/作用域销毁）都归还操作权，防止 busy 悬挂导致按钮永久置灰
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**

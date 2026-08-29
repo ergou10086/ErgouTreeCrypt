@@ -1111,6 +1111,26 @@ public final class ArchiveExtractor {
         }
     }
 
+    // ==================== 密码相关判定 ====================
+
+    /**
+     * 判断异常是否为归档密码相关，用于密码错误时提示重新输入。
+     *
+     * <p>错误信息含「password」关键词（如 zip4j 的 Wrong password、
+     * 本工具的 Archive password incorrect...）即视为密码相关；损坏、权限等
+     * 非密码错误不应触发重复输入密码。
+     *
+     * @param t 异常，可为 null
+     * @return true 表示错误与归档密码相关
+     */
+    public static boolean isPasswordRelatedError(Throwable t) {
+        if (t == null) {
+            return false;
+        }
+        String msg = t.getMessage();
+        return msg != null && msg.toLowerCase().contains("password");
+    }
+
     // ==================== 密码需求异常 ====================
 
     /**

@@ -240,6 +240,8 @@
                                                 <CheckBox fx:id="decryptThenExtractCheck" styleClass="check"/>
                                                 <Label fx:id="decryptThenExtractInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
+                                            <PasswordField fx:id="decryptArchivePasswordField" styleClass="text-input"
+                                                          managed="false" visible="false"/>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="verifyFirstCheck" styleClass="check"/>
                                                 <Label fx:id="verifyFirstInfo" styleClass="info-icon" text="i"/>

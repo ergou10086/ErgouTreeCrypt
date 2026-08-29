@@ -433,31 +433,34 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                     ctx, outDir, secretPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
                 vm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = "隐写完成"
-                        resultMessage = "文件已成功隐藏到载体中。\n输出文件：$outNameNow"
-                        resultDetail = null
-                        resultType = ResultType.SUCCESS
-                        // 记录操作历史（隐写加密）
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.STEGO_ENCODE,
-                                outNameNow,
-                                "$resolvedOutDir/$outNameNow",
-                                savedTreeUri
-                            )
+                // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
+                scope.launch {
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = "隐写完成"
+                            resultMessage = "文件已成功隐藏到载体中。\n输出文件：$outNameNow"
+                            resultDetail = null
+                            resultType = ResultType.SUCCESS
+                            // 记录操作历史（隐写加密）
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.STEGO_ENCODE,
+                                    outNameNow,
+                                    "$resolvedOutDir/$outNameNow",
+                                    savedTreeUri
+                                )
+                            }
+                        }
+                        false -> {
+                            resultTitle = "隐写完成但保存失败"
+                            resultMessage = "隐写已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "隐写完成但保存失败"
-                        resultMessage = "隐写已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(progress.error)

@@ -19,6 +19,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -117,6 +118,10 @@ public class FileStegoController {
     @FXML private HBox fsCompressRow;
     @FXML private CheckBox fsCompressCheck;
     @FXML private Label fsCompressInfo;
+    @FXML private HBox fsCompressLevelRow;
+    @FXML private Label fsCompressLevelLabel;
+    @FXML private Slider fsCompressLevelSlider;
+    @FXML private Label fsCompressLevelValueLabel;
     @FXML private HBox fsIntegrityRow;
     @FXML private CheckBox fsIntegrityCheck;
     @FXML private Label fsIntegrityInfo;
@@ -199,10 +204,25 @@ public class FileStegoController {
         fsParanoidCheck.selectedProperty().addListener((obs, old, val) -> updateCapacityDisplay());
         fsCompressCheck.selectedProperty().addListener((obs, old, val) -> updateCapacityDisplay());
 
+        // 加密前压缩：压缩级别滑条绑定
+        fsCompressLevelRow.managedProperty().bind(fsCompressCheck.selectedProperty());
+        fsCompressLevelRow.visibleProperty().bind(fsCompressCheck.selectedProperty());
+        fsCompressLevelSlider.valueProperty().addListener((obs, old, val) ->
+                fsCompressLevelValueLabel.setText(String.valueOf(currentCompressLevel())));
+
         setupDragDrop();
         applyTexts();
         updateModeUI();
         updateOptionLinkage();
+    }
+
+    /**
+     * 读取压缩级别滑条的当前整数值（四舍五入）。
+     *
+     * @return 压缩级别（1–22）
+     */
+    private int currentCompressLevel() {
+        return (int) Math.round(fsCompressLevelSlider.getValue());
     }
 
     // ================================================================
@@ -506,6 +526,7 @@ public class FileStegoController {
         FileStegoOptions options = FileStegoOptions.builder()
                 .paranoid(fsParanoidCheck.isSelected())
                 .compressed(fsCompressCheck.isSelected())
+                .compressionLevel(currentCompressLevel())
                 .storeIntegrity(fsIntegrityCheck.isSelected())
                 .stealth(fsStealthCheck.isSelected() && getPasswordLength() > 0)
                 .obfuscateSize(fsObfuscateCheck.isSelected())
@@ -759,6 +780,7 @@ public class FileStegoController {
         fsOptionsLabel.setText(Messages.get("fileStego.options.label"));
         fsParanoidCheck.setText(Messages.get("fileStego.option.paranoid"));
         fsCompressCheck.setText(Messages.get("fileStego.option.compress"));
+        fsCompressLevelLabel.setText(Messages.get("options.compress.level"));
         fsIntegrityCheck.setText(Messages.get("fileStego.option.integrity"));
         fsStealthCheck.setText(Messages.get("fileStego.option.stealth"));
         fsObfuscateCheck.setText(Messages.get("fileStego.option.obfuscate"));

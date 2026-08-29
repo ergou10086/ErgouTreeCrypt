@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.volume;
 
+import com.github.luben.zstd.ZstdOutputStream;
 import hbnu.project.ergoutreecrypt.crypto.Argon2Kdf;
 import hbnu.project.ergoutreecrypt.crypto.CipherSuite;
 import hbnu.project.ergoutreecrypt.crypto.CryptoConstants;
@@ -131,24 +132,37 @@ public final class Encryptor {
      */
     private static void encryptPreprocess(OperationContext ctx, EncryptRequest req) throws Exception {
         List<String> files = req.getInputFiles();
-        if (files != null && !files.isEmpty()) {
-            if (files.size() > 1 || req.isCompress()) {
-                ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
-                Path tmp = Files.createTempFile("ergou", ".tmp");
-                ctx.tempFile = tmp.toString();
-                try (OutputStream out = Files.newOutputStream(tmp)) {
+        boolean hasMultipleFiles = files != null && files.size() > 1;
+        String singleFile = (files != null && files.size() == 1) ? files.get(0) : req.getInputFile();
+
+        // 需要临时文件的情况：多文件合并，或启用加密前压缩（单文件也需压缩）
+        if (hasMultipleFiles || req.isCompress()) {
+            ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
+            Path tmp = Files.createTempFile("ergou", ".tmp");
+            ctx.tempFile = tmp.toString();
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                if (req.isCompress()) {
+                    // 加密前压缩：用 ZstdOutputStream 包裹临时输出流
+                    try (ZstdOutputStream zos = new ZstdOutputStream(out, req.getCompressionLevel())) {
+                        if (hasMultipleFiles) {
+                            for (String f : files) {
+                                Files.copy(Path.of(f), zos);
+                            }
+                        } else {
+                            Files.copy(Path.of(singleFile), zos);
+                        }
+                    }
+                } else {
                     for (String f : files) {
                         Files.copy(Path.of(f), out);
                     }
                 }
-                ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
-                ctx.inputFile = ctx.tempFile;
-                return;
             }
-            ctx.inputFile = files.get(0);
-        } else {
-            ctx.inputFile = req.getInputFile();
+            ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
+            ctx.inputFile = ctx.tempFile;
+            return;
         }
+        ctx.inputFile = singleFile;
     }
 
     // ==================== Phase 2: Generate values ====================
@@ -188,6 +202,12 @@ public final class Encryptor {
             if (req.getArgon2Threads() != null) {
                 ctx.header.setArgon2Threads(req.getArgon2Threads());
             }
+        }
+
+        // v2.16：启用加密前压缩时升级 header 版本并写入压缩标志（优先于 v2.15）
+        if (req.isCompress()) {
+            ctx.header.setVersion(VolumeHeader.VERSION_V216);
+            ctx.header.setCompressed(true);
         }
         Flags flags = new Flags(
                 req.isParanoid(),

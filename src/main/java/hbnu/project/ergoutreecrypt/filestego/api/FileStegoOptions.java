@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.filestego.api;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
+
 /**
  * 文件隐写选项——用户层调用 {@code FileStegoCodec.hide} 时的完整可选参数。
  *
@@ -17,6 +19,9 @@ public final class FileStegoOptions {
 
     /** 是否在加密前对原始文件进行 Zstandard 压缩。 */
     private final boolean compressed;
+
+    /** Zstandard 压缩档位（仅在 compressed=true 时生效）。 */
+    private final int compressionLevel;
 
     /** 是否存储完整性校验（Payload MAC + Header MAC）。 */
     private final boolean storeIntegrity;
@@ -56,6 +61,7 @@ public final class FileStegoOptions {
     private FileStegoOptions(final Builder builder) {
         this.paranoid = builder.paranoid;
         this.compressed = builder.compressed;
+        this.compressionLevel = builder.compressionLevel;
         this.storeIntegrity = builder.storeIntegrity;
         this.stealth = builder.stealth;
         this.obfuscateSize = builder.obfuscateSize;
@@ -79,6 +85,15 @@ public final class FileStegoOptions {
      */
     public boolean isCompressed() {
         return compressed;
+    }
+
+    /**
+     * 获取 Zstandard 压缩档位。
+     *
+     * @return 压缩档位（1–22）
+     */
+    public int compressionLevel() {
+        return compressionLevel;
     }
 
     /**
@@ -153,6 +168,7 @@ public final class FileStegoOptions {
         return StegoEncodeOptions.builder()
                 .paranoid(paranoid)
                 .compressed(compressed)
+                .compressionLevel(compressionLevel)
                 .hasIntegrity(storeIntegrity)
                 .hasHeaderMac(storeIntegrity)
                 .argon2Params(argon2Params)
@@ -193,6 +209,7 @@ public final class FileStegoOptions {
     public static final class Builder {
         private boolean paranoid;
         private boolean compressed;
+        private int compressionLevel = ZstdCompressor.DEFAULT_LEVEL;
         private boolean storeIntegrity = true;
         private boolean stealth;
         private boolean obfuscateSize;
@@ -222,6 +239,17 @@ public final class FileStegoOptions {
          */
         public Builder compressed(final boolean c) {
             this.compressed = c;
+            return this;
+        }
+
+        /**
+         * 设置 Zstandard 压缩档位。
+         *
+         * @param level 压缩档位（1–22）
+         * @return this
+         */
+        public Builder compressionLevel(final int level) {
+            this.compressionLevel = ZstdCompressor.clampLevel(level);
             return this;
         }
 

@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.filestego.api;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
+
 /**
  * Payload 编码选项——传递给 {@code PayloadCodec.encode} 的加密相关可选参数。
  *
@@ -17,6 +19,9 @@ public final class StegoEncodeOptions {
     /** 是否在加密前对原始文件进行压缩。 */
     private final boolean compressed;
 
+    /** Zstandard 压缩档位（仅在 compressed=true 时生效）。 */
+    private final int compressionLevel;
+
     /** 是否存储完整性校验（Payload MAC）。 */
     private final boolean hasIntegrity;
 
@@ -31,6 +36,7 @@ public final class StegoEncodeOptions {
     private StegoEncodeOptions(final Builder builder) {
         this.paranoid = builder.paranoid;
         this.compressed = builder.compressed;
+        this.compressionLevel = builder.compressionLevel;
         this.hasIntegrity = builder.hasIntegrity;
         this.hasHeaderMac = builder.hasHeaderMac;
         this.argon2Params = builder.argon2Params;
@@ -44,6 +50,15 @@ public final class StegoEncodeOptions {
     /** @return 是否加密前压缩 */
     public boolean isCompressed() {
         return compressed;
+    }
+
+    /**
+     * 获取 Zstandard 压缩档位。
+     *
+     * @return 压缩档位（1–22）
+     */
+    public int compressionLevel() {
+        return compressionLevel;
     }
 
     /** @return 是否存储完整性校验 */
@@ -77,6 +92,7 @@ public final class StegoEncodeOptions {
     public static final class Builder {
         private boolean paranoid;
         private boolean compressed;
+        private int compressionLevel = ZstdCompressor.DEFAULT_LEVEL;
         private boolean hasIntegrity = true;
         private boolean hasHeaderMac = true;
         private Argon2Params argon2Params;
@@ -90,6 +106,17 @@ public final class StegoEncodeOptions {
         /** 设置是否加密前压缩。 */
         public Builder compressed(final boolean c) {
             this.compressed = c;
+            return this;
+        }
+
+        /**
+         * 设置 Zstandard 压缩档位。
+         *
+         * @param level 压缩档位（1–22）
+         * @return this
+         */
+        public Builder compressionLevel(final int level) {
+            this.compressionLevel = ZstdCompressor.clampLevel(level);
             return this;
         }
 

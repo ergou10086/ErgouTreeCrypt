@@ -26,6 +26,14 @@ public final class VolumeHeader {
     public static final String VERSION_V215 = "v2.15";
 
     /**
+     * v2.16 协议版本（含加密前压缩标志）。
+     *
+     * <p>当加密端启用「加密前压缩」时，header 版本升级到 v2.16，新增单字节
+     * 压缩标志（RS1 编码）。解密端据此在解密后对载荷做 Zstandard 解压。
+     */
+    public static final String VERSION_V216 = "v2.16";
+
+    /**
      * 注释最大长度（UTF-8 字节数上限）。
      */
     public static final int MAX_COMMENT_LEN = 99999;
@@ -141,6 +149,13 @@ public final class VolumeHeader {
     private int argon2Threads;
 
     /**
+     * 载荷是否在加密前经过 Zstandard 压缩。
+     *
+     * <p>仅 v2.16+ header 包含此字段；解密端据此决定是否解压。
+     */
+    private boolean compressed;
+
+    /**
      * 创建空 header（字段均为默认值/零长度数组），供 Reader 填充。
      */
     public VolumeHeader() {
@@ -224,6 +239,20 @@ public final class VolumeHeader {
     public void setArgon2Threads(int argon2Threads) { this.argon2Threads = argon2Threads; }
 
     /**
+     * 获取载荷是否在加密前经过 Zstandard 压缩。
+     *
+     * @return true 表示需要解压
+     */
+    public boolean isCompressed() { return compressed; }
+
+    /**
+     * 设置载荷是否在加密前经过 Zstandard 压缩。
+     *
+     * @param compressed 是否压缩
+     */
+    public void setCompressed(boolean compressed) { this.compressed = compressed; }
+
+    /**
      * 是否包含有效的 Argon2 参数覆写。
      *
      * <p>任一字段 &gt; 0 即视为有效覆写。全为 0 表示使用默认参数（由 paranoid 标志决定）。
@@ -240,7 +269,16 @@ public final class VolumeHeader {
      * @return 若版本为 {@value #VERSION_V215} 或更高则返回 true
      */
     public boolean isV215() {
-        return VERSION_V215.equals(version);
+        return VERSION_V215.compareTo(version) <= 0;
+    }
+
+    /**
+     * 是否为 v2.16+ 协议版本（含加密前压缩标志）。
+     *
+     * @return 若版本为 {@value #VERSION_V216} 或更高则返回 true
+     */
+    public boolean isV216() {
+        return VERSION_V216.compareTo(version) <= 0;
     }
 
     @Override

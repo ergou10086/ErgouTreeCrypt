@@ -22,6 +22,17 @@ class FolderCryptRoundtripTest {
         return b;
     }
 
+    /**
+     * 生成高冗余、易压缩的确定性数据。
+     */
+    private static byte[] compressible(int n) {
+        byte[] b = new byte[n];
+        for (int i = 0; i < n; i++) {
+            b[i] = (byte) (i % 16);
+        }
+        return b;
+    }
+
     private static void rmrf(Path dir) throws Exception {
         if (!Files.exists(dir)) return;
         try (Stream<Path> w = Files.walk(dir)) {
@@ -103,6 +114,43 @@ class FolderCryptRoundtripTest {
             FolderCrypt.decryptAuto(encFolder, decOut, dop);
 
             assertArrayEquals(a, Files.readAllBytes(decOut.resolve("docs/note.txt")));
+        } finally {
+            rmrf(tmp);
+        }
+    }
+
+    /**
+     * 文件夹中每个文件加密前压缩（Zstandard），解密后逐字节还原。
+     */
+    @Test
+    void folderCompressRoundtrip() throws Exception {
+        Path tmp = Files.createTempDirectory("fc-compress-");
+        try {
+            Path in = tmp.resolve("src");
+            Files.createDirectories(in);
+            byte[] a = compressible(512 * 1024);
+            Files.write(in.resolve("data.bin"), a);
+
+            Path encOut = tmp.resolve("encout");
+            Files.createDirectories(encOut);
+            FolderCrypt.EncryptOptions eo = new FolderCrypt.EncryptOptions();
+            eo.password = "compress-pw";
+            eo.compress = true;
+            eo.compressionLevel = 3;
+            eo.rsCodecs = new RsCodecs();
+            FolderCrypt.encryptFolder(in, encOut, eo);
+
+            Path encFolder = encOut.resolve("src");
+            assertTrue(Files.exists(encFolder.resolve("data.bin.ergou")));
+
+            Path decOut = tmp.resolve("decout");
+            Files.createDirectories(decOut);
+            FolderCrypt.DecryptOptions dop = new FolderCrypt.DecryptOptions();
+            dop.password = "compress-pw";
+            dop.rsCodecs = new RsCodecs();
+            FolderCrypt.decryptAuto(encFolder, decOut, dop);
+
+            assertArrayEquals(a, Files.readAllBytes(decOut.resolve("src/data.bin")));
         } finally {
             rmrf(tmp);
         }

@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -189,6 +190,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 高级选项（与桌面端 FileStegoOptions 对齐） ----
     var paranoid by remember { mutableStateOf(false) }
     var compressed by remember { mutableStateOf(false) }
+    var compressLevel by remember { mutableStateOf(3) }
     var storeIntegrity by remember { mutableStateOf(true) }
     var stealth by remember { mutableStateOf(false) }
     var obfuscateSize by remember { mutableStateOf(false) }
@@ -387,6 +389,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             val opts = FileStegoOptions.builder()
                 .paranoid(paranoid)
                 .compressed(compressed)
+                .compressionLevel(compressLevel)
                 .storeIntegrity(storeIntegrity)
                 .stealth(stealth)
                 .obfuscateSize(obfuscateSize)
@@ -860,7 +863,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "请输入密码（移动端已移除无密码模式）",
+                    "请输入密码",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -908,6 +911,19 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
 
                 // ---- 加密前压缩 ----
                 OptionRow("加密前压缩（Zstandard）", compressed, { compressed = it }, TIP_STEGO_COMPRESS)
+                if (compressed) {
+                    Spacer(Modifier.height(4.dp))
+                    Column(modifier = Modifier.padding(start = 36.dp)) {
+                        Text("压缩级别：$compressLevel", style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = compressLevel.toFloat(),
+                            onValueChange = { compressLevel = it.toInt() },
+                            valueRange = 1f..22f,
+                            steps = 20,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
 
                 // ---- 完整性校验 ----

@@ -84,6 +84,16 @@ public final class HeaderLayout {
      */
     public static final int ARGON2_PARAMS_ENC_SIZE = 18;
 
+    /**
+     * 压缩标志源字段（v2.16+）：1 字节（0/1）。
+     */
+    public static final int COMPRESS_FLAG_SRC_SIZE = 1;
+
+    /**
+     * 压缩标志编码后尺寸：1→3（RS1）。
+     */
+    public static final int COMPRESS_FLAG_ENC_SIZE = 3;
+
     // ==================== 基础尺寸计算 ====================
 
     /**
@@ -102,6 +112,13 @@ public final class HeaderLayout {
      */
     public static final int BASE_HEADER_SIZE_V215 =
             BASE_HEADER_SIZE + ARGON2_PARAMS_ENC_SIZE;
+
+    /**
+     * 不含注释的基础 header 大小（v2.16+）。
+     * 807 + 3 = 810 字节。
+     */
+    public static final int BASE_HEADER_SIZE_V216 =
+            BASE_HEADER_SIZE_V215 + COMPRESS_FLAG_ENC_SIZE;
 
     // ==================== RS 编码前的源字段尺寸 ====================
 
@@ -146,8 +163,14 @@ public final class HeaderLayout {
      * @return 总 header 字节数
      */
     public static int headerSize(int commentsLen, String version) {
-        int base = "v2.15".compareTo(version) <= 0
-                ? BASE_HEADER_SIZE_V215 : BASE_HEADER_SIZE;
+        int base;
+        if ("v2.16".compareTo(version) <= 0) {
+            base = BASE_HEADER_SIZE_V216;
+        } else if ("v2.15".compareTo(version) <= 0) {
+            base = BASE_HEADER_SIZE_V215;
+        } else {
+            base = BASE_HEADER_SIZE;
+        }
         return base + commentsLen * COMMENT_CHAR_ENC_SIZE;
     }
 
@@ -179,6 +202,9 @@ public final class HeaderLayout {
                 + NONCE_ENC_SIZE;
         if ("v2.15".compareTo(version) <= 0) {
             offset += ARGON2_PARAMS_ENC_SIZE;
+        }
+        if ("v2.16".compareTo(version) <= 0) {
+            offset += COMPRESS_FLAG_ENC_SIZE;
         }
         return offset;
     }

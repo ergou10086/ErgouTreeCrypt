@@ -136,6 +136,7 @@ dependencies {
     implementation(libs.commons.compress)
     implementation(libs.zip4j)
     implementation(libs.tukaani.xz)
+    implementation(libs.zstd.jni)
 
     // ============================================================
     // AndroidX 基础

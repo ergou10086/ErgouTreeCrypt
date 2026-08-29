@@ -102,6 +102,12 @@ public final class HeaderWriter {
             totalWritten += writeAll(ReedSolomon.encode(rs.rs6, argon2Raw));
         }
 
+        // 8c. 压缩标志（仅 v2.16+）：RS1(1→3)
+        if (h.isV216()) {
+            byte[] compressRaw = new byte[] { (byte) (h.isCompressed() ? 1 : 0) };
+            totalWritten += writeAll(ReedSolomon.encode(rs.rs1, compressRaw));
+        }
+
         // 9. keyHash 占位符: 192 字节零
         totalWritten += writeAll(new byte[HeaderLayout.KEY_HASH_ENC_SIZE]);
 

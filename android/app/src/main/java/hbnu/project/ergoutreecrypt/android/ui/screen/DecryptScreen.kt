@@ -870,7 +870,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
-                Text("请输入密码（移动端已移除无密码模式）", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                Text("请输入密码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
             }
 
             // 粘贴按钮（方角，自适应文字大小）

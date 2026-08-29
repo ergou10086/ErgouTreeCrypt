@@ -545,7 +545,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "请输入密码（移动端已移除无密码模式）",
+                    "请输入密码",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error
                 )

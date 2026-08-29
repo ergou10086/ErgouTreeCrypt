@@ -14,6 +14,7 @@ module hbnu.project.ergoutreecrypt {
     // 显式 require 以强制 JPMS 解析 xz 模块。
     requires org.tukaani.xz;
     requires zip4j;
+    requires com.github.luben.zstd_jni;
     requires java.prefs;
     requires java.desktop;
     requires jdk.unsupported;
@@ -29,6 +30,7 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.ui;
     exports hbnu.project.ergoutreecrypt.ui.support;
     exports hbnu.project.ergoutreecrypt.crypto;
+    exports hbnu.project.ergoutreecrypt.compress;
     exports hbnu.project.ergoutreecrypt.encoding;
     exports hbnu.project.ergoutreecrypt.fileops;
     exports hbnu.project.ergoutreecrypt.header;

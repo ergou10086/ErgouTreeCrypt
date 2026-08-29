@@ -41,6 +41,11 @@ public final class Flags {
     private boolean dualDeniable;
 
     /**
+     * 载荷是否在加密前经过 Zstandard 压缩（仅 EGTD 扩展标志使用）。
+     */
+    private boolean compressed;
+
+    /**
      * 创建全 false 的默认标志位。
      */
     public Flags() {
@@ -83,6 +88,20 @@ public final class Flags {
     public void setDualDeniable(boolean dualDeniable) { this.dualDeniable = dualDeniable; }
 
     /**
+     * 获取载荷是否在加密前经过 Zstandard 压缩。
+     *
+     * @return true 表示解密后需要解压
+     */
+    public boolean isCompressed() { return compressed; }
+
+    /**
+     * 设置载荷是否在加密前经过 Zstandard 压缩。
+     *
+     * @param compressed 是否压缩
+     */
+    public void setCompressed(boolean compressed) { this.compressed = compressed; }
+
+    /**
      * 转换为 5 字节数组，按位置顺序：paranoid, useKeyfiles, keyfileOrdered, reedSolomon, padded。
      * true → 1, false → 0。供标准卷头序列化使用。
      *
@@ -109,13 +128,13 @@ public final class Flags {
     }
 
     /**
-     * 转换为 6 字节数组（含 dualDeniable），供双卷可否认加密 MetaBlock 使用。
-     * 格式同 {@link #toBytes()}，末尾追加 dualDeniable。
+     * 转换为 7 字节数组（含 dualDeniable 与 compressed），供双卷可否认加密 MetaBlock 使用。
+     * 格式同 {@link #toBytes()}，末尾依次追加 dualDeniable、compressed。
      *
-     * @return 6 字节标志位数组
+     * @return 7 字节标志位数组
      */
     public byte[] toBytesExtended() {
-        byte[] b = new byte[6];
+        byte[] b = new byte[7];
         if (paranoid) {
             b[0] = 1;
         }
@@ -133,6 +152,9 @@ public final class Flags {
         }
         if (dualDeniable) {
             b[5] = 1;
+        }
+        if (compressed) {
+            b[6] = 1;
         }
         return b;
     }
@@ -158,6 +180,9 @@ public final class Flags {
         if (b.length >= 6) {
             f.dualDeniable = b[5] == 1;
         }
+        if (b.length >= 7) {
+            f.compressed = b[6] == 1;
+        }
         return f;
     }
 
@@ -174,7 +199,8 @@ public final class Flags {
                 && keyfileOrdered == f.keyfileOrdered
                 && reedSolomon == f.reedSolomon
                 && padded == f.padded
-                && dualDeniable == f.dualDeniable;
+                && dualDeniable == f.dualDeniable
+                && compressed == f.compressed;
     }
 
     @Override
@@ -185,6 +211,7 @@ public final class Flags {
         result = 31 * result + (reedSolomon ? 1 : 0);
         result = 31 * result + (padded ? 1 : 0);
         result = 31 * result + (dualDeniable ? 1 : 0);
+        result = 31 * result + (compressed ? 1 : 0);
         return result;
     }
 
@@ -195,6 +222,7 @@ public final class Flags {
                 + ", keyfileOrdered=" + keyfileOrdered
                 + ", reedSolomon=" + reedSolomon
                 + ", padded=" + padded
-                + ", dualDeniable=" + dualDeniable + '}';
+                + ", dualDeniable=" + dualDeniable
+                + ", compressed=" + compressed + '}';
     }
 }

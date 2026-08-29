@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.volume;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 
 import java.util.List;
@@ -80,6 +81,11 @@ public final class EncryptRequest {
      * 是否先压缩再加密（单文件内部压缩）。
      */
     private boolean compress;
+
+    /**
+     * Zstandard 压缩档位（1–22，仅在 compress=true 时生效）。
+     */
+    private int compressionLevel = ZstdCompressor.DEFAULT_LEVEL;
 
     /**
      * 是否将输出切分为固定大小的分卷碎片。
@@ -242,6 +248,24 @@ public final class EncryptRequest {
 
     public void setCompress(boolean c) {
         this.compress = c;
+    }
+
+    /**
+     * 获取 Zstandard 压缩档位。
+     *
+     * @return 压缩档位（1–22）
+     */
+    public int getCompressionLevel() {
+        return compressionLevel;
+    }
+
+    /**
+     * 设置 Zstandard 压缩档位。
+     *
+     * @param level 压缩档位（1–22，越界自动收敛）
+     */
+    public void setCompressionLevel(int level) {
+        this.compressionLevel = ZstdCompressor.clampLevel(level);
     }
 
     public boolean isSplit() {

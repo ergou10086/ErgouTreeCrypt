@@ -713,6 +713,8 @@ public final class FolderCrypt {
         req.setParanoid(opts.paranoid);
         req.setReedSolomon(opts.reedSolomon);
         req.setDeniability(opts.deniability);
+        req.setCompress(opts.compress);
+        req.setCompressionLevel(opts.compressionLevel);
         req.setChunkSize(opts.chunkSize);
         req.setRsCodecs(opts.rsCodecs != null ? opts.rsCodecs : new RsCodecs());
         req.setArgon2MemoryKib(opts.argon2MemoryKib);
@@ -1407,6 +1409,14 @@ public final class FolderCrypt {
         public boolean paranoid;
         public boolean reedSolomon;
         public boolean deniability;
+        /**
+         * 加密前压缩（Zstandard），对文件夹中每个文件单独生效。
+         */
+        public boolean compress;
+        /**
+         * Zstandard 压缩档位（1–22，仅 compress=true 时生效）。
+         */
+        public int compressionLevel = 3;
         public boolean split;
         public int chunkSize;            // 每卷大小，单位 MiB
         public String archiveFormat;     // null/"" 表示不压缩

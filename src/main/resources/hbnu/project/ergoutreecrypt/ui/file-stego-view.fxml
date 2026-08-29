@@ -8,6 +8,7 @@
 <?import javafx.scene.control.ProgressBar?>
 <?import javafx.scene.control.RadioButton?>
 <?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
@@ -116,6 +117,16 @@
                         <HBox fx:id="fsCompressRow" spacing="8" alignment="CENTER_LEFT">
                             <CheckBox fx:id="fsCompressCheck" styleClass="check"/>
                             <Label fx:id="fsCompressInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                        <HBox fx:id="fsCompressLevelRow" spacing="8" alignment="CENTER_LEFT"
+                              managed="false" visible="false">
+                            <Label fx:id="fsCompressLevelLabel" styleClass="field-label"
+                                   text="压缩级别"/>
+                            <Slider fx:id="fsCompressLevelSlider" min="1.0" max="22.0"
+                                    value="3.0" blockIncrement="1.0" snapToTicks="true"
+                                    prefWidth="220"/>
+                            <Label fx:id="fsCompressLevelValueLabel" styleClass="field-hint"
+                                   text="3"/>
                         </HBox>
                         <HBox fx:id="fsIntegrityRow" spacing="8" alignment="CENTER_LEFT">
                             <CheckBox fx:id="fsIntegrityCheck" styleClass="check" selected="true"/>

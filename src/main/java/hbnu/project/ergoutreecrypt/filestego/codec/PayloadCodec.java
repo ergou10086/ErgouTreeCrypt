@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.filestego.codec;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.crypto.*;
 import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params;
 import hbnu.project.ergoutreecrypt.filestego.api.PayloadException;
@@ -152,10 +153,11 @@ public final class PayloadCodec {
             byte[] serpentKey = options.isParanoid()
                     ? hkdf.read(SERPENT_KEY_LEN) : null;
 
-            // 步骤 4：加密
+            // 步骤 4：可选加密前 Zstandard 压缩，再加密
             byte[] work = plaintext;
-            // TODO: M4 阶段添加 Zstandard 压缩支持
-            // if (options.isCompressed()) work = ZstdCompressor.compress(work);
+            if (options.isCompressed()) {
+                work = ZstdCompressor.compress(work, options.compressionLevel());
+            }
 
             ciphertext = encryptPayload(encKey, nonce, serpentKey, serpentIv, work);
 
@@ -357,8 +359,10 @@ public final class PayloadCodec {
                 SecureZero.zero(masterKey);
             }
 
-            // TODO: M4 阶段添加 Zstandard 解压支持
-            // if (isCompressed) plaintext = ZstdCompressor.decompress(plaintext);
+            // 步骤：若加密前压缩过，则解压还原
+            if (isCompressed) {
+                plaintext = ZstdCompressor.decompress(plaintext);
+            }
 
             return new DecodeResult(plaintext, header);
         } else {
@@ -386,8 +390,10 @@ public final class PayloadCodec {
                 SecureZero.zero(masterKey);
             }
 
-            // TODO: M4 阶段添加 Zstandard 解压支持
-            // if (isCompressed) plaintext = ZstdCompressor.decompress(plaintext);
+            // 步骤：若加密前压缩过，则解压还原
+            if (isCompressed) {
+                plaintext = ZstdCompressor.decompress(plaintext);
+            }
 
             return new DecodeResult(plaintext, header);
         }
@@ -494,13 +500,25 @@ public final class PayloadCodec {
                 // 步骤 6：流式加密密文 + 增量 Payload MAC（MAC 在密文后，末尾追加）
                 Mac payloadMac = options.hasIntegrity()
                         ? MacFactory.create(macKey, false) : null;
+                // 加密前压缩：先把明文流式压缩到临时文件，再对压缩后的临时文件加密
+                Path encryptSource = plaintextFile;
+                Path compressedTemp = null;
                 try {
-                    streamEncrypt(plaintextFile, fos, encKey, nonce, serpentKey, serpentIv,
-                            payloadMac, Files.size(plaintextFile), listener);
+                    if (options.isCompressed()) {
+                        compressedTemp = Files.createTempFile("ergou-stego", ".zst");
+                        ZstdCompressor.compress(Files.newInputStream(plaintextFile),
+                                Files.newOutputStream(compressedTemp), options.compressionLevel());
+                        encryptSource = compressedTemp;
+                    }
+                    streamEncrypt(encryptSource, fos, encKey, nonce, serpentKey, serpentIv,
+                            payloadMac, Files.size(encryptSource), listener);
                     if (payloadMac != null) {
                         fos.write(payloadMac.doFinal());
                     }
                 } finally {
+                    if (compressedTemp != null) {
+                        Files.deleteIfExists(compressedTemp);
+                    }
                     if (payloadMac != null) {
                         payloadMac.close();
                     }
@@ -591,6 +609,7 @@ public final class PayloadCodec {
             int flags = Short.toUnsignedInt(fixed.getShort());
             boolean hasHeaderMac = (flags & FLAG_HAS_HEADER_MAC) != 0;
             boolean hasIntegrity = (flags & FLAG_HAS_INTEGRITY) != 0;
+            boolean isCompressed = (flags & FLAG_COMPRESSED) != 0;
             int metaLength = Short.toUnsignedInt(fixed.getShort());
             if (metaLength < 0 || metaLength > fileSize - HEADER_FIXED_SIZE) {
                 throw new PayloadException("Metadata 长度异常: " + metaLength);
@@ -638,23 +657,35 @@ public final class PayloadCodec {
 
                 // 步骤 7：流式解密 + 增量 Payload MAC 校验
                 Mac payloadMac = hasIntegrity ? MacFactory.create(macKey, false) : null;
+                // 加密前压缩时：先解密到临时文件，再解压到最终输出
+                Path decryptTarget = isCompressed
+                        ? Files.createTempFile("ergou-stego", ".zst") : plaintextOut;
                 try {
                     try {
-                        streamDecrypt(fin, ciphertextLen, plaintextOut, encKey, nonce,
+                        streamDecrypt(fin, ciphertextLen, decryptTarget, encKey, nonce,
                                 serpentKey, serpentIv, payloadMac, listener);
                     } catch (PayloadException | IOException e) {
                         // 解密中途失败：删除未完成的明文输出
+                        Files.deleteIfExists(decryptTarget);
                         Files.deleteIfExists(plaintextOut);
                         throw e;
                     }
                     if (payloadMac != null) {
                         byte[] computedMac = payloadMac.doFinal();
                         if (!constantTimeEquals(computedMac, storedPayloadMac)) {
+                            Files.deleteIfExists(decryptTarget);
                             Files.deleteIfExists(plaintextOut);
                             throw new PayloadException("Payload MAC 验证失败——数据可能被篡改");
                         }
                     }
+                    if (isCompressed) {
+                        ZstdCompressor.decompress(Files.newInputStream(decryptTarget),
+                                Files.newOutputStream(plaintextOut));
+                    }
                 } finally {
+                    if (isCompressed) {
+                        Files.deleteIfExists(decryptTarget);
+                    }
                     if (payloadMac != null) {
                         payloadMac.close();
                     }

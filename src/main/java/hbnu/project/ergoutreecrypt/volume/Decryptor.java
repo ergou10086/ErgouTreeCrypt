@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.volume;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.crypto.Argon2Kdf;
 import hbnu.project.ergoutreecrypt.crypto.CipherSuite;
 import hbnu.project.ergoutreecrypt.crypto.CryptoConstants;
@@ -444,6 +445,16 @@ public final class Decryptor {
                 Files.deleteIfExists(Path.of(req.getOutputFile() + ".incomplete"));
                 throw new IOException("MAC verification failed — file may be corrupted");
             }
+        }
+
+        // 加密前压缩：解密后的 .incomplete 为压缩数据，先解压还原
+        if (ctx.header.isCompressed()) {
+            Path incomplete = Path.of(req.getOutputFile() + ".incomplete");
+            Path decompressed = Path.of(req.getOutputFile() + ".incomplete.decompressed");
+            ZstdCompressor.decompress(Files.newInputStream(incomplete),
+                    Files.newOutputStream(decompressed));
+            Files.deleteIfExists(incomplete);
+            Files.move(decompressed, incomplete, StandardCopyOption.REPLACE_EXISTING);
         }
 
         // 原子重命名 .incomplete → 最终输出

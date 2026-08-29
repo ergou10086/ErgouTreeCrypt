@@ -159,6 +159,33 @@ class FileStegoRoundtripTest {
         assertArrayEquals(original, restored, "还原内容应与原文一致");
     }
 
+    /**
+     * 加密前压缩（Zstandard）往返：多个档位下 hide → extract 内容一致。
+     */
+    @Test
+    void pngChunkRoundtripCompressed(@TempDir final Path dir) throws Exception {
+        for (int level : new int[] {1, 3, 22}) {
+            Path carrier = createPng(dir, "carrier_l" + level + ".png");
+            // 随机数据（不可压缩）用于验证压缩路径对任意输入的往返正确性
+            Path secret = createSecret(dir, "secret_l" + level + ".bin", 64 * 1024);
+            byte[] original = Files.readAllBytes(secret);
+            Path stego = dir.resolve("stego_l" + level + ".png");
+
+            FileStegoOptions options = FileStegoOptions.builder()
+                    .preferChunk(true)
+                    .compressed(true)
+                    .compressionLevel(level)
+                    .build();
+
+            codec.hide(carrier, secret, stego, PASSWORD, options);
+            Path outDir = dir.resolve("out_l" + level);
+            Path extracted = codec.extract(stego, outDir, PASSWORD);
+
+            assertArrayEquals(original, Files.readAllBytes(extracted),
+                    "level " + level + " compressed roundtrip should match");
+        }
+    }
+
     // ---- ZIP ----
 
     @Test

@@ -209,6 +209,15 @@ public final class HeaderReader {
             decodeArgon2Params(h, argon2Enc);
         }
 
+        // 8c. 压缩标志（仅 v2.16+）：RS1(3→1)
+        if (h.isV216()) {
+            byte[] compressEnc = new byte[HeaderLayout.COMPRESS_FLAG_ENC_SIZE];
+            n = readFull(compressEnc);
+            bytesRead += n;
+            ReedSolomon.DecodeResult cd = ReedSolomon.decode(rs.rs1, compressEnc, false);
+            h.setCompressed(cd.data.length > 0 && cd.data[0] == 1);
+        }
+
         // 9. keyHash: RS64(192→64)
         byte[] keyHashEnc = new byte[HeaderLayout.KEY_HASH_ENC_SIZE];
         n = readFull(keyHashEnc);

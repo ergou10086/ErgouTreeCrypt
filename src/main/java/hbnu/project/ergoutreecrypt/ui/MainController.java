@@ -210,6 +210,14 @@ public class MainController {
     @FXML
     private Label compressInfo;
     @FXML
+    private HBox compressLevelRow;
+    @FXML
+    private Label compressLevelLabel;
+    @FXML
+    private Slider compressLevelSlider;
+    @FXML
+    private Label compressLevelValueLabel;
+    @FXML
     private CheckBox compressAfterCheck;
     @FXML
     private Label compressAfterInfo;
@@ -301,6 +309,15 @@ public class MainController {
         node.setManaged(visible);
     }
 
+    /**
+     * 读取压缩级别滑条的当前整数值（四舍五入）。
+     *
+     * @return 压缩级别（1–22）
+     */
+    private int currentCompressLevel() {
+        return (int) Math.round(compressLevelSlider.getValue());
+    }
+
     @FXML
     private void initialize() {
         toast = new Toast(rootStack);
@@ -315,6 +332,12 @@ public class MainController {
         encryptDepthSpinner.setValueFactory(
                 new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 10, 2));
         encryptDepthSpinner.setEditable(true);
+
+        // 加密前压缩：压缩级别滑条绑定
+        compressLevelRow.managedProperty().bind(compressCheck.selectedProperty());
+        compressLevelRow.visibleProperty().bind(compressCheck.selectedProperty());
+        compressLevelSlider.valueProperty().addListener((o, a, b) ->
+                compressLevelValueLabel.setText(String.valueOf(currentCompressLevel())));
 
         // 加密后压缩：格式下拉绑定
         compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
@@ -542,6 +565,7 @@ public class MainController {
         fakePasswordVisibleField.setPromptText(Messages.get("options.deniability.fakePassword.placeholder"));
         fakeConfirmField.setPromptText(Messages.get("options.deniability.fakePassword.confirm.placeholder"));
         compressCheck.setText(Messages.get("options.compress"));
+        compressLevelLabel.setText(Messages.get("options.compress.level"));
         compressAfterCheck.setText(Messages.get("options.compressAfter"));
         compressFormatCombo.setValue(SettingsManager.getDefaultCompressFormat());
         updateArchivePasswordVisibility();
@@ -1141,6 +1165,8 @@ public class MainController {
             opts.paranoid = paranoidCheck.isSelected();
             opts.reedSolomon = reedSolomonCheck.isSelected();
             opts.deniability = deniabilityCheck.isSelected();
+            opts.compress = compressCheck.isSelected();
+            opts.compressionLevel = currentCompressLevel();
             opts.split = splitCheck.isSelected();
             opts.chunkSize = splitSizeSpinner.getValue();
             opts.archiveFormat = archiveFormat;
@@ -1186,6 +1212,7 @@ public class MainController {
             req.setDeniability(false);
         }
         req.setCompress(compressCheck.isSelected());
+        req.setCompressionLevel(currentCompressLevel());
         req.setArchiveFormat(archiveFormat);
         req.setArchivePassword(archivePwd);
         req.setSplit(splitCheck.isSelected());

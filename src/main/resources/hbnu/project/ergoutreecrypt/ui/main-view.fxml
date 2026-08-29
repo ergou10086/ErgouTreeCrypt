@@ -187,6 +187,17 @@
                                                 <CheckBox fx:id="compressCheck" styleClass="check"/>
                                                 <Label fx:id="compressInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
+                                            <HBox fx:id="compressLevelRow" alignment="CENTER_LEFT"
+                                                  spacing="10" managed="false" visible="false">
+                                                <Label fx:id="compressLevelLabel"
+                                                       styleClass="field-label" text="压缩级别"/>
+                                                <Slider fx:id="compressLevelSlider" min="1.0"
+                                                        max="22.0" value="3.0"
+                                                        blockIncrement="1.0"
+                                                        snapToTicks="true" prefWidth="220"/>
+                                                <Label fx:id="compressLevelValueLabel"
+                                                       styleClass="field-hint" text="3"/>
+                                            </HBox>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="compressAfterCheck" styleClass="check"/>
                                                 <Label fx:id="compressAfterInfo" styleClass="info-icon" text="i"/>

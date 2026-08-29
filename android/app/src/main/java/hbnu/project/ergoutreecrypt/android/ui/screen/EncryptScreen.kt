@@ -226,6 +226,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     var reedSolomon by remember { mutableStateOf(false) }
     var deniability by remember { mutableStateOf(false) }
     var compressBefore by remember { mutableStateOf(false) }
+    var compressLevel by remember { mutableStateOf(3) }
     var compressAfter by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(false) }
     var encDepth by remember { mutableStateOf(2) }
@@ -466,7 +467,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             req.setParanoid(paranoid)
             req.setReedSolomon(reedSolomon)
             req.setCompress(compressBefore)
-            if (compressAfter) req.setCompress(true)
+            req.setCompressionLevel(compressLevel)
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
@@ -896,7 +897,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "请输入密码（移动端已移除无密码模式）",
+                    "请输入密码",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -988,6 +989,19 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
 
                 // ---- 压缩后加密 ----
                 OptionRow("压缩后加密", compressBefore, { compressBefore = it }, TIP_COMPRESS, enabled = !mediaMode)
+                if (compressBefore && !mediaMode) {
+                    Spacer(Modifier.height(4.dp))
+                    Column(modifier = Modifier.padding(start = 36.dp)) {
+                        Text("压缩级别：$compressLevel", style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = compressLevel.toFloat(),
+                            onValueChange = { compressLevel = it.toInt() },
+                            valueRange = 1f..22f,
+                            steps = 20,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
 
                 // ---- 加密后压缩（格式保持加密下仍可用，对齐桌面端 avCompressAfterCheck） ----

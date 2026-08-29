@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.volume;
 
+import com.github.luben.zstd.ZstdOutputStream;
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.crypto.*;
 import hbnu.project.ergoutreecrypt.encoding.Padding;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
@@ -74,9 +76,14 @@ public final class DualDeniability {
     static final byte[] MAGIC = {'E', 'G', 'T', 'D'};
 
     /**
-     * 当前格式版本。
+     * 当前格式版本（v2：MetaBlock 扩展标志含 compressed，7 字节）。
      */
-    static final byte CURRENT_VERSION = 0x01;
+    static final byte CURRENT_VERSION = 0x02;
+
+    /**
+     * v1 格式版本（MetaBlock 扩展标志为 6 字节，无 compressed），仅用于向后兼容读取旧文件。
+     */
+    static final byte VERSION_V1 = 0x01;
 
     /**
      * MetaBlock 明文载荷大小（加密前）。
@@ -160,9 +167,9 @@ public final class DualDeniability {
     private static final int ORIGNAME_OFFSET = 234;
 
     /**
-     * 最大原始文件名长度（UTF-8 字节），保证 flags(6) + padding 能填满 512 字节。
+     * 最大原始文件名长度（UTF-8 字节），保证 flags(7) + padding 能填满 512 字节。
      */
-    static final int MAX_FILENAME_BYTES = METABLOCK_PLAIN_SIZE - ORIGNAME_OFFSET - 6;
+    static final int MAX_FILENAME_BYTES = METABLOCK_PLAIN_SIZE - ORIGNAME_OFFSET - 7;
 
     /**
      * canary 令牌在 MetaBlock 明文中的偏移（固定在填充区内，距末尾 16 字节）。
@@ -199,32 +206,49 @@ public final class DualDeniability {
         boolean reedSolomon = req.isReedSolomon();
         RsCodecs rs = req.getRsCodecs();
 
-        // 预处理：多文件合并 / 压缩
+        // 预处理：多文件合并 / 加密前压缩
         String realInput = realFile;
         String decoyInput = decoyFile;
         String tempReal = null;
         String tempDecoy = null;
         List<String> files = req.getInputFiles();
-        if (files != null && !files.isEmpty()) {
-            if (reporter != null) {
-                reporter.setStatus(Messages.get("status.compressing.real.multi"), ProgressPhase.ARCHIVE);
-            }
-            Path tmp = Files.createTempFile("ergou_real", ".tmp");
-            try (OutputStream out = Files.newOutputStream(tmp)) {
-                for (String f : files) {
-                    Files.copy(Path.of(f), out);
-                }
-            }
-            tempReal = tmp.toString();
-            realInput = tempReal;
-        } else if (req.isCompress()) {
+        boolean compress = req.isCompress();
+        boolean multi = files != null && !files.isEmpty();
+
+        if (multi || compress) {
             if (reporter != null) {
                 reporter.setStatus(Messages.get("status.compressing.real"), ProgressPhase.ARCHIVE);
             }
             Path tmp = Files.createTempFile("ergou_real", ".tmp");
-            Files.copy(Path.of(realFile), tmp);
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                if (compress) {
+                    // 加密前压缩：用 ZstdOutputStream 包裹临时输出流
+                    try (ZstdOutputStream zos = new ZstdOutputStream(out, req.getCompressionLevel())) {
+                        if (multi) {
+                            for (String f : files) {
+                                Files.copy(Path.of(f), zos);
+                            }
+                        } else {
+                            Files.copy(Path.of(realFile), zos);
+                        }
+                    }
+                } else {
+                    for (String f : files) {
+                        Files.copy(Path.of(f), out);
+                    }
+                }
+            }
             tempReal = tmp.toString();
             realInput = tempReal;
+        }
+
+        // 加密前压缩：decoy 内容同样压缩
+        if (compress) {
+            Path tmp = Files.createTempFile("ergou_decoy", ".tmp");
+            ZstdCompressor.compress(Files.newInputStream(Path.of(decoyFile)),
+                    Files.newOutputStream(tmp), req.getCompressionLevel());
+            tempDecoy = tmp.toString();
+            decoyInput = tempDecoy;
         }
 
         try {
@@ -233,9 +257,9 @@ public final class DualDeniability {
 
             // 生成 MetaBlock 密码学参数（不含 authTag，稍后填入）
             MetaBlockParams decoyParams = MetaBlockParams.generate(decoySize, paranoid, reedSolomon,
-                    Path.of(decoyFile).getFileName().toString());
+                    Path.of(decoyFile).getFileName().toString(), compress);
             MetaBlockParams realParams = MetaBlockParams.generate(realSize, paranoid, reedSolomon,
-                    Path.of(realFile).getFileName().toString());
+                    Path.of(realFile).getFileName().toString(), compress);
 
             // 第一步：先加密数据区域到临时文件，获取 authTag
             if (reporter != null) {
@@ -412,6 +436,8 @@ public final class DualDeniability {
             if (version < 0) {
                 throw new IOException("unexpected EOF reading version");
             }
+            // v1 的扩展标志为 6 字节，v2 起为 7 字节（含 compressed）
+            int flagsLen = version <= VERSION_V1 ? 6 : 7;
             byte[] hdrSizeBuf = new byte[4];
             readExact(fin, hdrSizeBuf);
             int hdrSize = ByteBuffer.wrap(hdrSizeBuf).order(ByteOrder.LITTLE_ENDIAN).getInt();
@@ -431,7 +457,7 @@ public final class DualDeniability {
             // 先尝试 MetaBlock-1（钓鱼槽位）
             // MetaBlock 密钥派生使用非偏执模式（偏执由数据区独立控制）
             for (byte[] cand : candidates) {
-                MetaBlockParams params = MetaBlock.tryDecryptAndVerify(mb1Enc, cand, false);
+                MetaBlockParams params = MetaBlock.tryDecryptAndVerify(mb1Enc, cand, false, flagsLen);
                 if (params != null) {
                     boolean paranoid = params.flags.isParanoid();
                     if (reporter != null) {
@@ -445,7 +471,7 @@ public final class DualDeniability {
 
             // 再尝试 MetaBlock-2（隐藏槽位）
             for (byte[] cand : candidates) {
-                MetaBlockParams params = MetaBlock.tryDecryptAndVerify(mb2Enc, cand, false);
+                MetaBlockParams params = MetaBlock.tryDecryptAndVerify(mb2Enc, cand, false, flagsLen);
                 if (params != null) {
                     boolean paranoid = params.flags.isParanoid();
                     if (reporter != null) {
@@ -710,6 +736,10 @@ public final class DualDeniability {
          */
         Flags flags;
         /**
+         * 载荷是否在加密前经过 Zstandard 压缩。
+         */
+        boolean compressed;
+        /**
          * 金丝雀令牌（16 字节），由 MetaBlock 的 salt 派生，用于篡改检测。
          */
         byte[] canary;
@@ -717,14 +747,15 @@ public final class DualDeniability {
         /**
          * 生成随机密码学参数。
          *
-         * @param dataLen     明文数据长度
+         * @param dataLen     明文数据长度（压缩后长度）
          * @param paranoid    偏执模式
          * @param reedSolomon RS 纠错
          * @param origName    原始文件名
+         * @param compressed  是否加密前压缩
          * @return 填充了随机值的参数实例
          */
         static MetaBlockParams generate(long dataLen, boolean paranoid, boolean reedSolomon,
-                                        String origName) {
+                                        String origName, boolean compressed) {
             MetaBlockParams p = new MetaBlockParams();
             p.keyHash = new byte[KEYHASH_SIZE];
             p.salt = RandomBytes.generate(SALT_SIZE);
@@ -734,17 +765,21 @@ public final class DualDeniability {
             p.authTag = new byte[AUTHTAG_SIZE];
             p.dataLength = dataLen;
             p.origName = origName;
-            p.flags = new Flags(paranoid, false, false, reedSolomon, false);
+            p.compressed = compressed;
+            Flags f = new Flags(paranoid, false, false, reedSolomon, false);
+            f.setCompressed(compressed);
+            p.flags = f;
             return p;
         }
 
         /**
          * 从 MetaBlock 明文（512 字节）反序列化。
          *
-         * @param plain 解密后的 MetaBlock 明文
+         * @param plain    解密后的 MetaBlock 明文
+         * @param flagsLen 扩展标志字节数（v1=6，v2=7）
          * @return 解析出的参数实例
          */
-        static MetaBlockParams deserialize(byte[] plain) {
+        static MetaBlockParams deserialize(byte[] plain, int flagsLen) {
             MetaBlockParams p = new MetaBlockParams();
             p.keyHash = Arrays.copyOfRange(plain, KEYHASH_OFFSET, KEYHASH_OFFSET + KEYHASH_SIZE);
             p.salt = Arrays.copyOfRange(plain, SALT_OFFSET, SALT_OFFSET + SALT_SIZE);
@@ -763,8 +798,9 @@ public final class DualDeniability {
             }
             p.origName = new String(plain, ORIGNAME_OFFSET, nameLen, StandardCharsets.UTF_8);
             int flagsOff = ORIGNAME_OFFSET + nameLen;
-            byte[] flagBytes = Arrays.copyOfRange(plain, flagsOff, flagsOff + 6);
+            byte[] flagBytes = Arrays.copyOfRange(plain, flagsOff, flagsOff + flagsLen);
             p.flags = Flags.fromBytes(flagBytes);
+            p.compressed = p.flags.isCompressed();
             // 读取 canary 令牌（固定在距末尾 16 字节处）
             p.canary = Arrays.copyOfRange(plain, CANARY_OFFSET, CANARY_OFFSET + 16);
             return p;
@@ -876,7 +912,7 @@ public final class DualDeniability {
                 byte[] plain = params.serialize();
 
                 // 计算并写入 keyHash（HMAC-SHA3-512 覆盖 canary 在内的所有字段）
-                byte[] computedKeyHash = computeKeyHash(mbKey, params);
+                byte[] computedKeyHash = computeKeyHash(mbKey, params, 7);
                 System.arraycopy(computedKeyHash, 0, plain, KEYHASH_OFFSET, KEYHASH_SIZE);
                 params.keyHash = computedKeyHash;
 
@@ -899,10 +935,11 @@ public final class DualDeniability {
          * @param encrypted 完整的 MetaBlock 密文（552 字节）
          * @param pwBytes   密码 UTF-8 字节
          * @param paranoid  偏执模式（用于验证 flags 中的 paranoid 标志匹配）
+         * @param flagsLen  扩展标志字节数（v1=6，v2=7）
          * @return 解密并验证通过则返回 MetaBlockParams，否则返回 null
          */
         static MetaBlockParams tryDecryptAndVerify(byte[] encrypted, byte[] pwBytes,
-                                                   boolean paranoid) {
+                                                   boolean paranoid, int flagsLen) {
             // 解析：salt(16) + nonce(24) + ciphertext(512)
             byte[] mbSalt = Arrays.copyOfRange(encrypted, 0, METABLOCK_SALT_SIZE);
             byte[] mbNonce = Arrays.copyOfRange(encrypted, METABLOCK_SALT_SIZE,
@@ -917,10 +954,10 @@ public final class DualDeniability {
                 xChaCha20Xor(mbKey, mbNonce, plain, ciphertext, METABLOCK_PLAIN_SIZE);
 
                 // 反序列化
-                MetaBlockParams params = MetaBlockParams.deserialize(plain);
+                MetaBlockParams params = MetaBlockParams.deserialize(plain, flagsLen);
 
                 // 验证 keyHash
-                byte[] computed = computeKeyHash(mbKey, params);
+                byte[] computed = computeKeyHash(mbKey, params, flagsLen);
                 if (!HeaderAuth.constantTimeEqual(computed, params.keyHash)) {
                     return null;
                 }
@@ -936,11 +973,12 @@ public final class DualDeniability {
          * <p>HMAC-SHA3-512(mbKey, salt || hkdfSalt || serpentIV || nonce || authTag ||
          * dataOffset || dataLength || origNameLen || origName || flags)
          *
-         * @param mbKey  MetaBlock 加密密钥（32 字节）
-         * @param params 密码学参数（keyHash 字段被忽略）
+         * @param mbKey    MetaBlock 加密密钥（32 字节）
+         * @param params   密码学参数（keyHash 字段被忽略）
+         * @param flagsLen 扩展标志字节数（v1=6，v2=7）
          * @return 64 字节 HMAC-SHA3-512
          */
-        static byte[] computeKeyHash(byte[] mbKey, MetaBlockParams params) {
+        static byte[] computeKeyHash(byte[] mbKey, MetaBlockParams params, int flagsLen) {
             HMac hmac = new HMac(new SHA3Digest(512));
             hmac.init(new KeyParameter(mbKey));
 
@@ -966,7 +1004,7 @@ public final class DualDeniability {
             }
 
             byte[] flagBytes = params.flags.toBytesExtended();
-            hmac.update(flagBytes, 0, flagBytes.length);
+            hmac.update(flagBytes, 0, flagsLen);
 
             // 金丝雀令牌（16 字节）
             if (params.canary != null && params.canary.length == 16) {
@@ -1175,6 +1213,16 @@ public final class DualDeniability {
                 SecureZero.zero(macSubkey);
                 SecureZero.zero(serpentKey);
                 SecureZero.zero(headerSk);
+
+                // 加密前压缩：解密后的 .incomplete 为压缩数据，先解压还原
+                if (params.compressed) {
+                    Path incompletePath = Path.of(incomplete);
+                    Path decompressed = Path.of(outputFile + ".incomplete.decompressed");
+                    ZstdCompressor.decompress(Files.newInputStream(incompletePath),
+                            Files.newOutputStream(decompressed));
+                    Files.deleteIfExists(incompletePath);
+                    Files.move(decompressed, incompletePath, StandardCopyOption.REPLACE_EXISTING);
+                }
 
                 // 原子重命名
                 Files.move(Path.of(incomplete), Path.of(outputFile),

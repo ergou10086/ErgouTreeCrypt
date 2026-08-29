@@ -102,6 +102,53 @@ public final class DualDeniabilityTest {
                 "fake password should decrypt decoy data");
     }
 
+    /**
+     * 加密前压缩（Zstandard）往返：真/伪密码各自还原解压后的内容。
+     */
+    @Test
+    void testCompressedRoundtrip(@TempDir Path tempDir) throws Exception {
+        for (int level : new int[] {1, 3, 22}) {
+            byte[] realData = compressibleData(512 * 1024);
+            byte[] decoyData = compressibleData(64 * 1024);
+
+            Path realFile = createFile(tempDir, "secret_l" + level + ".bin", realData);
+            Path decoyFile = createFile(tempDir, "decoy_l" + level + ".bin", decoyData);
+            Path output = tempDir.resolve("dual_l" + level + ".ergou");
+            Path decReal = tempDir.resolve("real_l" + level + ".bin");
+            Path decDecoy = tempDir.resolve("decoy_l" + level + ".bin");
+
+            EncryptRequest encReq = new EncryptRequest();
+            encReq.setInputFile(realFile.toString());
+            encReq.setDecoyFilePath(decoyFile.toString());
+            encReq.setPassword("real-pass");
+            encReq.setFakePassword("fake-pass");
+            encReq.setDualDeniability(true);
+            encReq.setCompress(true);
+            encReq.setCompressionLevel(level);
+            encReq.setOutputFile(output.toString());
+            encReq.setRsCodecs(rs);
+            Encryptor.encrypt(encReq);
+
+            DecryptRequest realReq = new DecryptRequest();
+            realReq.setInputFile(output.toString());
+            realReq.setOutputFile(decReal.toString());
+            realReq.setPassword("real-pass");
+            realReq.setRsCodecs(rs);
+            Decryptor.decrypt(realReq);
+            assertArrayEquals(realData, Files.readAllBytes(decReal),
+                    "level " + level + " real roundtrip should match");
+
+            DecryptRequest decoyReq = new DecryptRequest();
+            decoyReq.setInputFile(output.toString());
+            decoyReq.setOutputFile(decDecoy.toString());
+            decoyReq.setPassword("fake-pass");
+            decoyReq.setRsCodecs(rs);
+            Decryptor.decrypt(decoyReq);
+            assertArrayEquals(decoyData, Files.readAllBytes(decDecoy),
+                    "level " + level + " decoy roundtrip should match");
+        }
+    }
+
     @Test
     void testWrongPasswordFails(@TempDir Path tempDir) throws Exception {
         byte[] realData = generateTestData(1024);
@@ -422,6 +469,17 @@ public final class DualDeniabilityTest {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {
             data[i] = (byte) ((i * 7 + 1) & 0xff);
+        }
+        return data;
+    }
+
+    /**
+     * 生成高冗余、易压缩的确定性数据。
+     */
+    private static byte[] compressibleData(int size) {
+        byte[] data = new byte[size];
+        for (int i = 0; i < size; i++) {
+            data[i] = (byte) (i % 16);
         }
         return data;
     }

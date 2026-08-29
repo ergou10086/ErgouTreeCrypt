@@ -21,6 +21,7 @@ bouncycastle = "1.78.1"
 commons-compress = "1.27.1"
 zip4j = "2.11.5"
 tukaani-xz = "1.10"
+zstd-jni = "1.5.6-9"
 
 # --- Testing ---
 junit = "4.13.2"
@@ -60,6 +61,7 @@ bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.re
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commons-compress" }
 zip4j = { group = "net.lingala.zip4j", name = "zip4j", version.ref = "zip4j" }
 tukaani-xz = { group = "org.tukaani", name = "xz", version.ref = "tukaani-xz" }
+zstd-jni = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstd-jni" }
 
 # --- Coroutines ---
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version = "1.9.0" }

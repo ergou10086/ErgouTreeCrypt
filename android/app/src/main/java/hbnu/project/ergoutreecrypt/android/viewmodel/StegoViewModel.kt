@@ -66,11 +66,9 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
      * @return 进度监听器
      */
     private fun createProgressListener(): ProgressListener = ProgressListener { fraction ->
+        // 仅更新进度，不强制改写状态；否则取消后（CANCELLED）会被进度回调冲回 RUNNING
         _progress.update {
-            it.copy(
-                state = ProgressState.State.RUNNING,
-                progress = fraction.toFloat().coerceIn(0f, 1f)
-            )
+            it.copy(progress = fraction.toFloat().coerceIn(0f, 1f))
         }
     }
 
@@ -116,8 +114,11 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     LoggingProgressListener(createProgressListener(), "FileStego"))
 
                 success = true
-                _progress.update {
-                    it.copy(state = ProgressState.State.DONE, progress = 1f)
+                // 取消后 codec 仍会跑完（无取消检查），仅当未被取消才写 DONE，避免冲掉「已取消」
+                if (_progress.value.state != ProgressState.State.CANCELLED) {
+                    _progress.update {
+                        it.copy(state = ProgressState.State.DONE, progress = 1f)
+                    }
                 }
             } catch (e: CancellationException) {
                 cancelled = true
@@ -198,12 +199,15 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     LoggingProgressListener(createProgressListener(), "FileStego"))
 
                 success = true
-                _progress.update {
-                    it.copy(
-                        state = ProgressState.State.DONE,
-                        progress = 1f,
-                        info = resultFile.fileName.toString()
-                    )
+                // 取消后 codec 仍会跑完（无取消检查），仅当未被取消才写 DONE，避免冲掉「已取消」
+                if (_progress.value.state != ProgressState.State.CANCELLED) {
+                    _progress.update {
+                        it.copy(
+                            state = ProgressState.State.DONE,
+                            progress = 1f,
+                            info = resultFile.fileName.toString()
+                        )
+                    }
                 }
             } catch (e: CancellationException) {
                 cancelled = true

@@ -284,6 +284,18 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
         return ok
     }
 
+    // 丢弃暂存输出（失败/取消时）：仅删除临时目录、不提交，避免残留半成品文件
+    suspend fun discardPendingOutput() {
+        val pending = pendingOut
+        if (pending != null) {
+            withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
+            // 仅当暂存输出未被新操作替换时才清空，避免误清新操作的暂存目录
+            if (pendingOut === pending) {
+                pendingOut = null
+            }
+        }
+    }
+
     // 终态分支先捕获所需数据并 reset() 消费，再执行挂起工作：
     // 切回 Tab 或页面重建不会重复弹窗/重复记录历史
     LaunchedEffect(progress.state) {
@@ -328,6 +340,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 val errMsg = mapErrorToChineseMessage(progress.error)
                 val errDetail = progress.error
                 vm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = "提取失败"
                 resultMessage = errMsg
                 resultDetail = errDetail
@@ -336,6 +349,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
             }
             ProgressState.State.CANCELLED -> {
                 vm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = "已取消"
                 resultMessage = "提取操作已被取消。"
                 resultDetail = null

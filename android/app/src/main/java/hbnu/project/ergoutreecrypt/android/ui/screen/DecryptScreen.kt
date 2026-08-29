@@ -4,6 +4,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -602,6 +604,18 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
         return ok
     }
 
+    // 丢弃暂存输出（失败/取消时）：仅删除临时目录、不提交，避免残留半成品文件
+    suspend fun discardPendingOutput() {
+        val pending = pendingOut
+        if (pending != null) {
+            withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
+            // 仅当暂存输出未被新操作替换时才清空，避免误清新操作的暂存目录
+            if (pendingOut === pending) {
+                pendingOut = null
+            }
+        }
+    }
+
     // 监听解密完成/失败状态，触发结果弹窗
     // 终态分支先捕获所需数据并 reset() 消费，再执行挂起工作：
     // 切回 Tab 或页面重建不会重复弹窗/重复记录历史
@@ -668,6 +682,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     .joinToString("\n")
                     .ifBlank { progress.error }
                 vm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = if (verifyOnly) "校验失败" else "解密失败"
                 resultMessage = errMsg
                 resultDetail = errDetail
@@ -676,6 +691,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             }
             ProgressState.State.CANCELLED -> {
                 vm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = "已取消"
                 resultMessage = "解密操作已被取消。"
                 resultDetail = null
@@ -728,6 +744,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 val errMsg = mapErrorToChineseMessage(mediaProgress.error)
                 val errDetail = mediaProgress.error
                 mediaVm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = "格式保持解密失败"
                 resultMessage = errMsg
                 resultDetail = errDetail
@@ -736,6 +753,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             }
             ProgressState.State.CANCELLED -> {
                 mediaVm.reset()
+                scope.launch { discardPendingOutput() }
                 resultTitle = "已取消"
                 resultMessage = "格式保持解密操作已被取消。"
                 resultDetail = null
@@ -825,6 +843,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     val activeProgress = if (mediaProgress.state == ProgressState.State.RUNNING) mediaProgress else progress
                     val cancelAction = {
+                        // 若正在等待归档密码输入，先关闭弹窗并解除后台线程阻塞，再取消操作
+                        passwordPrompt?.result?.complete(null)
+                        passwordPrompt = null
                         if (mediaProgress.state == ProgressState.State.RUNNING) mediaVm.cancel() else vm.cancel()
                     }
                     ProgressCard(progressState = activeProgress, onCancel = cancelAction)

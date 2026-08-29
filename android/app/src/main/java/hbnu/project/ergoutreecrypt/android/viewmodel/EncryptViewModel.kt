@@ -203,11 +203,14 @@ class EncryptViewModel : ViewModel() {
             val t0 = System.nanoTime()
             var success = false
             var cancelled = false
+            // 结果目录（失败/取消时用于清理半成品）
+            var resultDirForCleanup: Path? = null
 
             try {
                 val root = Paths.get(inputDir)
                 val folderName = root.fileName?.toString() ?: "folder"
                 val resultDir = Paths.get(outputDir).resolve("${folderName}_result")
+                resultDirForCleanup = resultDir
                 Files.createDirectories(resultDir)
 
                 // 递归收集全部常规文件，按路径排序保证稳定顺序
@@ -311,6 +314,14 @@ class EncryptViewModel : ViewModel() {
                     )
                 }
             } finally {
+                // 取消/失败时删除 resultDir 半成品，避免残留（成功路径已在打包后自行删除或保留为产出）
+                if (!success && resultDirForCleanup != null) {
+                    try {
+                        resultDirForCleanup!!.toFile().deleteRecursively()
+                    } catch (_: Exception) {
+                        // 清理失败不影响操作权释放
+                    }
+                }
                 // 无条件归还操作权，避免 busy 悬挂导致后续操作按钮永久置灰
                 OperationCoordinator.release(token)
                 val elapsed = logElapsedMillis(t0)

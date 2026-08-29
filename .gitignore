@@ -1,6 +1,7 @@
 # --- IDE (root) ---
 .idea
 *.iml
+out/
 
 # --- Desktop (Maven) ---
 target/
@@ -9,6 +10,8 @@ target/
 android/.gradle/
 android/build/
 android/app/build/
+android/app/debug/
+android/app/release/
 android/local.properties
 android/jcef/
 android/.idea/workspace.xml

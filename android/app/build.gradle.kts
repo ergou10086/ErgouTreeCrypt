@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -35,8 +37,19 @@ val syncI18n by tasks.registering(Copy::class) {
 // ============================================================
 // 版本号：文件级变量，供 android 块和 APK 重命名任务共用
 // ============================================================
-val appVersionName = "1.8.7"
-val appVersionCode = 87
+val appVersionName = "2.3.5"
+val appVersionCode = 20305
+
+// ============================================================
+// 签名配置：从 keystore.properties 读取（该文件已加入 .gitignore，不提交到仓库）
+// 若文件不存在（如 CI 环境），release 将回退为未签名构建
+// ============================================================
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
 
 android {
     namespace = "hbnu.project.ergoutreecrypt.android"
@@ -60,6 +73,17 @@ android {
         buildConfigField("int", "APP_VERSION_CODE", "${appVersionCode}")
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         // 调试版本：不混淆，可调试，应用名含 Debug 后缀
         debug {
@@ -70,6 +94,9 @@ android {
         }
         // 发布版本：开启混淆和资源缩减
         release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
@@ -107,7 +134,7 @@ android {
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n) }
 
 // ============================================================
-// 自定义 APK 输出文件名：ErgouTreeCrypt-v1.8.7-release.apk
+// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.3.5-release.apk
 // 原理：在所有 assemble 任务完成后，扫描 outputs/apk 目录并复制一份重命名后的 APK
 // ============================================================
 val renameApks by tasks.registering {

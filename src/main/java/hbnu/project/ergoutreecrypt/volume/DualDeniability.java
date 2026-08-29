@@ -893,7 +893,6 @@ public final class DualDeniability {
          * @param out      输出流（定位在 MetaBlock 起始位置）
          * @param params   密码学参数
          * @param pwBytes  密码 UTF-8 字节
-         * @param paranoid 偏执模式
          * @throws Exception 密码学错误
          */
         static void writeEncrypted(OutputStream out, MetaBlockParams params,

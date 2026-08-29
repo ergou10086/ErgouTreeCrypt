@@ -1,9 +1,12 @@
 package hbnu.project.ergoutreecrypt.android.ui.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +85,10 @@ data class BottomNavItem(
  * 加密 / 解密 / 文本加密 / 隐写 / 隐写提取 / 设置）。
  * 页面之间支持左右滑动切换（HorizontalPager），滑动与底部导航双向同步。
  *
+ * <p>首帧只组合当前页，首帧提交后再把离屏页纳入组合：6 个重页面同步组合会阻塞
+ * 首帧绘制，配合 {@code enableEdgeToEdge} 的透明窗口表现为启动后完全黑屏。
+ * ViewModel 已提升到 Activity 作用域，离屏页稍后组合不会中断已启动的加解密。
+ *
  * @author ErgouTree
  * @since 2026/8/11
  */
@@ -90,6 +98,11 @@ fun ErgouNavGraph() {
     val scope = rememberCoroutineScope()
     // 操作历史全屏覆盖页开关（由各页右上角时钟图标触发）
     var showHistory by remember { mutableStateOf(false) }
+    // 首帧后再组合离屏页，避免启动黑屏
+    var offscreenReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        offscreenReady = true
+    }
 
     val bottomNavItems = listOf(
         BottomNavItem(Routes.ENCRYPT_PAGE, "加密", Icons.Filled.Lock, Icons.Outlined.Lock),
@@ -100,16 +113,23 @@ fun ErgouNavGraph() {
         BottomNavItem(Routes.SETTINGS_PAGE, "设置", Icons.Filled.Settings, Icons.Outlined.Settings)
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // 根容器设置不透明主题底色：无背景图时作为兜底背景，避免透明内容露出系统窗口背景导致黑屏/白屏
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         // 背景图片层（置于最底层）
         BackgroundOverlay(modifier = Modifier.fillMaxSize())
 
         // 应用主体内容
         // Scaffold 默认容器色为不透明背景色，会遮住下层 BackgroundOverlay，故设为透明
+        // contentWindowInsets 置零：系统栏由 CompactTopBar / NavigationBar 各自处理，避免与内层 Scaffold 重复消费 insets
         Scaffold(
             containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
-                NavigationBar {
+                NavigationBar(modifier = Modifier.navigationBarsPadding()) {
                     bottomNavItems.forEach { item ->
                         val selected = pagerState.currentPage == item.page
 
@@ -126,7 +146,9 @@ fun ErgouNavGraph() {
                                     contentDescription = item.label
                                 )
                             },
-                            label = { Text(item.label) }
+                            label = { Text(item.label) },
+                            // 6 个目的地超出 NavigationBar 设计上限（3–5），仅选中项显示标签以免测量溢出
+                            alwaysShowLabel = false
                         )
                     }
                 }
@@ -134,8 +156,8 @@ fun ErgouNavGraph() {
         ) { innerPadding ->
             HorizontalPager(
                 state = pagerState,
-                // 保持全部 6 页处于组合状态：离屏页不销毁，加解密任务跨 Tab 继续运行
-                beyondViewportPageCount = 5,
+                // 首帧只组合当前页；就绪后再保持全部 6 页，离屏页不销毁以便保留表单状态
+                beyondViewportPageCount = if (offscreenReady) 5 else 0,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)

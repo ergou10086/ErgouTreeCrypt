@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -150,6 +151,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     Scaffold(
         // 容器透明，避免遮住全局背景图层
         containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CompactTopBar(
                 title = "设置",
@@ -585,7 +587,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "ErgouTreeCrypt Android v1.8.7\n核心版本：v2.15（对应桌面版 v2.2.5）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
+                text = "ErgouTreeCrypt Android v2.3.5\n核心版本：v2.15（对应桌面版 v2.3.5）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

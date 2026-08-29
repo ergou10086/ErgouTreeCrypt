@@ -8,6 +8,8 @@ import hbnu.project.ergoutreecrypt.classical.modern.Sm4Cipher;
 import hbnu.project.ergoutreecrypt.classical.modern.TripleDesCipher;
 import hbnu.project.ergoutreecrypt.classical.modern.TwofishCipher;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,12 +71,17 @@ public final class CipherRegistry {
     /**
      * 获取所有已注册的算法信息列表，按注册顺序排列。
      *
-     * @return 算法元数据列表
+     * <p>使用循环而非 {@code Stream.toList()}，以便在 Android API 26–33 上运行
+     * （{@code Stream.toList()} 直至 API 34 才存在）。
+     *
+     * @return 算法元数据列表（只读）
      */
     public static List<CipherInfo> getAll() {
-        return CIPHERS.values().stream()
-                .map(ClassicalCipher::getInfo)
-                .toList();
+        List<CipherInfo> list = new ArrayList<>(CIPHERS.size());
+        for (ClassicalCipher cipher : CIPHERS.values()) {
+            list.add(cipher.getInfo());
+        }
+        return Collections.unmodifiableList(list);
     }
 
     /**

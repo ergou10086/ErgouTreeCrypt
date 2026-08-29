@@ -81,9 +81,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     val argon2Mode by settings.argon2MobileMode.collectAsState(initial = "BALANCED")
     val themeMode by settings.themeMode.collectAsState(initial = "SYSTEM")
     val languageCode by settings.languageCode.collectAsState(initial = "zh_CN")
-    val threadCount by settings.threadCount.collectAsState(initial = 4)
-    val batchSerialGiB by settings.batchSerialThresholdGiB.collectAsState(initial = 10)
-    val defaultParanoid by settings.isDefaultParanoid.collectAsState(initial = false)
+    val threadCount by settings.threadCount.collectAsState(initial = 2)
     val defaultReedSolomon by settings.isDefaultReedSolomon.collectAsState(initial = false)
 
     // 背景图片设置
@@ -279,13 +277,6 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
 
             // === 默认加密选项 ===
             SettingSwitch(
-                title = "默认偏执模式",
-                description = "新建加密任务时默认开启 Serpent+XChaCha20 双重加密",
-                checked = defaultParanoid,
-                onCheckedChange = { scope.launch { settings.setDefaultParanoid(it) } }
-            )
-
-            SettingSwitch(
                 title = "默认纠错码",
                 description = "新建加密任务时默认开启 Reed-Solomon 纠错，体积增加约 6%",
                 checked = defaultReedSolomon,
@@ -409,7 +400,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "移动端批处理始终单线程，此滑块目前不影响加解密。保留以便与桌面端设置键兼容。",
+                text = "移动端线程数限制在 1-4（默认 2）。文件夹加解密始终逐文件串行处理，避免内存峰值。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -417,46 +408,8 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
             Slider(
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
-                valueRange = 1f..8f,
-                steps = 6
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            var thresholdValue by remember { mutableFloatStateOf(batchSerialGiB.toFloat()) }
-            LaunchedEffect(batchSerialGiB) {
-                thresholdValue = batchSerialGiB.toFloat()
-            }
-            LaunchedEffect(Unit) {
-                snapshotFlow { thresholdValue }
-                    .debounce(300L)
-                    .collect { value ->
-                        settings.setBatchSerialThresholdGiB(value.toInt())
-                    }
-            }
-            Text(
-                text = try {
-                    hbnu.project.ergoutreecrypt.i18n.Messages.get("settings.batchSerialThreshold")
-                } catch (_: Exception) {
-                    "大批次单线程阈值（GiB）："
-                } + thresholdValue.toInt(),
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = try {
-                    hbnu.project.ergoutreecrypt.i18n.Messages.get("settings.batchSerialThreshold.tip")
-                } catch (_: Exception) {
-                    "文件夹总大小达到该值时改为单线程。移动端解密始终单线程。"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Slider(
-                value = thresholdValue,
-                onValueChange = { thresholdValue = it },
-                valueRange = 1f..100f,
-                steps = 98
+                valueRange = 1f..4f,
+                steps = 2
             )
 
             Spacer(modifier = Modifier.height(24.dp))

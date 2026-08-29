@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.android.ui.screen
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -145,13 +146,10 @@ private fun detectMediaFormat(fileName: String?): MediaFormat? {
 
 // ==================== 桌面端对齐的提示文本 ====================
 
-private val TIP_PARANOID = "启用后数据先经 Serpent 加密再经 XChaCha20 加密，提供双重保护。加解密速度会略有下降。"
 private val TIP_RS = "使用 Reed-Solomon 纠错码，可在文件部分损坏时恢复数据。启用后文件体积增加约 6%。"
 private val TIP_DENIABILITY = "创建包含两份内容的加密容器：真密码解密真实文件，伪密码（钓鱼密码）解密无害的伪装文件。即使被胁迫，也可安全交出伪密码。"
-private val TIP_COMPRESS = "加密前先使用 Zstandard 压缩数据，可减小文件体积。"
 private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护；7Z 不支持密码保护。"
 private val TIP_SPLIT = "将加密输出切分为多个指定大小的分卷文件，便于传输和存储。"
-private val TIP_DEPTH = "控制文件夹迭代加密的层数。深度内的文件逐一加密为 .ergou；超出深度的子目录会先整体打包再加密。默认值为 2。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
 // ============================================================
@@ -223,20 +221,15 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     var passwordVisible by remember { mutableStateOf(false) }
 
     // ---- 加密选项（初始值从 DataStore 设置中加载） ----
-    var paranoid by remember { mutableStateOf(false) }
     var reedSolomon by remember { mutableStateOf(false) }
     var deniability by remember { mutableStateOf(false) }
-    var compressBefore by remember { mutableStateOf(false) }
-    var compressLevel by remember { mutableStateOf(3) }
     var compressAfter by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(false) }
-    var encDepth by remember { mutableStateOf(2) }
     var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
     var settingsLoaded by remember { mutableStateOf(false) }
 
     // 从 DataStore 加载默认设置（仅首次组合）
     LaunchedEffect(Unit) {
-        paranoid = settings.isDefaultParanoid.first()
         reedSolomon = settings.isDefaultReedSolomon.first()
         argon2Mode = Argon2MobileMode.fromKey(settings.argon2MobileMode.first())
         settingsLoaded = true
@@ -245,7 +238,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 音视频格式保持加密选项 ----
     var mediaMode by remember { mutableStateOf(false) }
     // 档位由移动端自动选择最优安全档，不开放手动选择
-    var mediaParanoid by remember { mutableStateOf(false) }
     var mediaIntegrity by remember { mutableStateOf(true) }
 
     // 子字段
@@ -299,6 +291,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     inPath = path
                     inSize = size
                     isFolder = isDir
+                } else {
+                    // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
                 outName = inName?.let { "$it.ergou" }
             } finally {
@@ -331,6 +326,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 if (path != null) {
                     inSize = null
                     isFolder = true
+                } else {
+                    // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
                 outName = "$inName.ergou"
             } finally {
@@ -441,8 +439,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 开始加密 ----
     fun doEncrypt() {
         scope.launch {
-            val req = EncryptRequest()
-            req.inputFile = inPath
             // 输出目录：SAF 树优先，其次用户显式路径，最后按权限能力解析默认目录
             // （MediaStore 回退时先写内部临时目录，完成后再提交）
             val safUri = outDirUri
@@ -462,17 +458,39 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
+            val tier = argon2Mode.resolve()
+
+            // 文件夹加密：在输出目录创建「文件夹名_result」，串行逐文件处理，避免内存峰值
+            if (isFolder && inPath != null) {
+                vm.startEncryptFolder(
+                    inputDir = inPath!!,
+                    outputDir = writeDir,
+                    password = password,
+                    reedSolomon = reedSolomon,
+                    deniability = deniability,
+                    split = split,
+                    chunkSize = splitSize,
+                    comments = comments,
+                    archiveFormat = archiveFmt.ifEmpty { null },
+                    archivePassword = if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) archivePassword else null,
+                    keyfiles = kfPaths.toList(),
+                    keyfileOrdered = kfOrdered,
+                    argon2MemoryKib = tier.memoryKiB,
+                    argon2Passes = tier.passes,
+                    argon2Threads = tier.threads
+                )
+                return@launch
+            }
+
+            val req = EncryptRequest()
+            req.inputFile = inPath
             val outFile = "$writeDir/${outName ?: "encrypted.ergou"}"
             req.outputFile = outFile
             req.password = password
-            req.setParanoid(paranoid)
             req.setReedSolomon(reedSolomon)
-            req.setCompress(compressBefore)
-            req.setCompressionLevel(compressLevel)
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
-            val tier = argon2Mode.resolve()
             req.argon2MemoryKib = tier.memoryKiB
             req.argon2Passes = tier.passes
             req.argon2Threads = tier.threads
@@ -520,7 +538,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 output = outFile,
                 password = password,
                 profile = null, // 自动推荐档位
-                paranoid = mediaParanoid,
                 storeIntegrity = mediaIntegrity,
                 argon2MemoryKib = tier.memoryKiB,
                 argon2Passes = tier.passes,
@@ -941,10 +958,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             // ============================================================
             ExpandableCard(title = "高级选项") {
 
-                // ---- 偏执模式 (Paranoid) ----
-                OptionRow("偏执模式（Serpent + XChaCha20 双重加密）", paranoid, { paranoid = it }, TIP_PARANOID, enabled = !mediaMode)
-                Spacer(Modifier.height(6.dp))
-
                 // ---- Reed-Solomon 纠错 ----
                 OptionRow("Reed-Solomon 纠错（抗损坏，体积略增）", reedSolomon, { reedSolomon = it }, TIP_RS, enabled = !mediaMode)
                 Spacer(Modifier.height(6.dp))
@@ -989,23 +1002,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-                // ---- 压缩后加密 ----
-                OptionRow("压缩后加密", compressBefore, { compressBefore = it }, TIP_COMPRESS, enabled = !mediaMode)
-                if (compressBefore && !mediaMode) {
-                    Spacer(Modifier.height(4.dp))
-                    Column(modifier = Modifier.padding(start = 36.dp)) {
-                        Text("压缩级别：$compressLevel", style = MaterialTheme.typography.bodyMedium)
-                        Slider(
-                            value = compressLevel.toFloat(),
-                            onValueChange = { compressLevel = it.toInt() },
-                            valueRange = 1f..22f,
-                            steps = 20,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-
                 // ---- 加密后压缩（格式保持加密下仍可用，对齐桌面端 avCompressAfterCheck） ----
                 OptionRow("加密后压缩", compressAfter, { compressAfter = it }, TIP_COMPRESS_AFTER)
                 if (compressAfter) {
@@ -1042,22 +1038,6 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                         Text("每卷大小：$splitSize MiB", style = MaterialTheme.typography.bodyMedium)
                         Slider(value = splitSize.toFloat(), onValueChange = { splitSize = it.toInt() }, valueRange = 10f..4096f, modifier = Modifier.fillMaxWidth())
                     }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-
-                // ---- 加密深度 ----
-                val depthAlpha = if (!mediaMode) 1f else 0.38f
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("加密深度", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = depthAlpha))
-                    Spacer(Modifier.width(4.dp))
-                    InfoTooltip(TIP_DEPTH)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Slider(value = encDepth.toFloat(), onValueChange = { encDepth = it.toInt() }, valueRange = 1f..10f, steps = 8, modifier = Modifier.weight(1f), enabled = !mediaMode)
-                    Spacer(Modifier.width(8.dp))
-                    Text("$encDepth 层", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = depthAlpha))
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
@@ -1107,7 +1087,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     Checkbox(checked = mediaMode, onCheckedChange = {
                         mediaMode = it
                         if (it) { isFolder = false } // 格式保持加密仅支持单文件
-                        if (!it) { mediaParanoid = false; mediaIntegrity = true }
+                        if (!it) { mediaIntegrity = true }
                     })
                     Text("格式保持加密", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
                     if (mediaFmt != null) {
@@ -1139,12 +1119,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
 
                     Spacer(Modifier.height(8.dp))
 
-                    // 偏执模式 + 完整性校验（对齐桌面端 avParanoidCheck / avIntegrityCheck）
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = mediaParanoid, onCheckedChange = { mediaParanoid = it })
-                        Text("偏执模式（Serpent + XChaCha20 双重加密）", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp).weight(1f))
-                        InfoTooltip("启用后 Argon2 使用 8 passes + HMAC-SHA3-512，并叠加 Serpent-CTR 外层加密，提供与普通文件加密偏执模式相同的双重保护。")
-                    }
+                    // 完整性校验（对齐桌面端 avIntegrityCheck）
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = mediaIntegrity, onCheckedChange = { mediaIntegrity = it })
                         Text("存储完整性校验", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp).weight(1f))

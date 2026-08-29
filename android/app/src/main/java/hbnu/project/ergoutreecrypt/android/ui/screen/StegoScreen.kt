@@ -42,7 +42,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -113,8 +112,6 @@ import java.io.File
 // ==================== 提示文本常量 ====================
 
 /** 提示文本 */
-private val TIP_STEGO_PARANOID = "启用后数据先经 Serpent 加密再经 XChaCha20 加密，提供双重保护。"
-private val TIP_STEGO_COMPRESS = "加密前先使用 Zstandard 压缩数据，可减小隐藏数据的体积。"
 private val TIP_STEGO_INTEGRITY = "存储原文的完整性校验码（MAC），提取后自动验证文件是否被篡改。"
 private val TIP_STEGO_STEALTH = "使用 HMAC 派生魔数替代固定魔数，避免通过魔数字符串检测隐写数据。"
 private val TIP_STEGO_OBFUSCATE = "在输出文件末尾追加随机字节，使文件大小达到指定目标，增加检测难度。"
@@ -189,9 +186,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var passwordVisible by remember { mutableStateOf(false) }
 
     // ---- 高级选项（与桌面端 FileStegoOptions 对齐） ----
-    var paranoid by remember { mutableStateOf(false) }
-    var compressed by remember { mutableStateOf(false) }
-    var compressLevel by remember { mutableStateOf(3) }
     var storeIntegrity by remember { mutableStateOf(true) }
     var stealth by remember { mutableStateOf(false) }
     var obfuscateSize by remember { mutableStateOf(false) }
@@ -252,6 +246,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                     secretName = name
                     secretPath = path
                     secretSize = size
+                } else {
+                    // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -295,6 +292,10 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 carrierName = name
                 carrierPath = path
                 carrierValid = path != null
+                if (path == null) {
+                    // 载体路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法读取所选载体文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
+                }
                 if (path != null) {
                     val size = withContext(Dispatchers.IO) {
                         val f = File(path)
@@ -388,9 +389,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             }
             val outFile = "$writeDir/${outName ?: "stego_output"}"
             val opts = FileStegoOptions.builder()
-                .paranoid(paranoid)
-                .compressed(compressed)
-                .compressionLevel(compressLevel)
                 .storeIntegrity(storeIntegrity)
                 .stealth(stealth)
                 .obfuscateSize(obfuscateSize)
@@ -906,27 +904,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             // 五、高级选项（与桌面端 FileStegoOptions 对齐）
             // ============================================================
             ExpandableCard(title = "高级选项") {
-
-                // ---- 偏执模式 ----
-                OptionRow("偏执模式（Serpent + XChaCha20 双重加密）", paranoid, { paranoid = it }, TIP_STEGO_PARANOID)
-                Spacer(Modifier.height(6.dp))
-
-                // ---- 加密前压缩 ----
-                OptionRow("加密前压缩（Zstandard）", compressed, { compressed = it }, TIP_STEGO_COMPRESS)
-                if (compressed) {
-                    Spacer(Modifier.height(4.dp))
-                    Column(modifier = Modifier.padding(start = 36.dp)) {
-                        Text("压缩级别：$compressLevel", style = MaterialTheme.typography.bodyMedium)
-                        Slider(
-                            value = compressLevel.toFloat(),
-                            onValueChange = { compressLevel = it.toInt() },
-                            valueRange = 1f..22f,
-                            steps = 20,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
 
                 // ---- 完整性校验 ----
                 OptionRow("完整性校验（MAC）", storeIntegrity, { storeIntegrity = it }, TIP_STEGO_INTEGRITY)

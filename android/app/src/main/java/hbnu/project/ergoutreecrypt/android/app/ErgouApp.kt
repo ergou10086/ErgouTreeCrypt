@@ -89,11 +89,6 @@ class ErgouApp : Application() {
                 }
             }
             launch {
-                settings.batchSerialThresholdGiB.collectLatest { v ->
-                    hbnu.project.ergoutreecrypt.settings.SettingsManager.setBatchSerialThresholdGiB(v)
-                }
-            }
-            launch {
                 settings.isArchiveCustomEncryption.collectLatest { v ->
                     hbnu.project.ergoutreecrypt.settings.SettingsManager.setArchiveCustomEncryption(v)
                 }

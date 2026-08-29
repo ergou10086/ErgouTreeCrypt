@@ -12,6 +12,8 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
 import hbnu.project.ergoutreecrypt.volume.FolderCrypt
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter
+import hbnu.project.ergoutreecrypt.volume.Verifier
+import hbnu.project.ergoutreecrypt.volume.VerifyRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -106,6 +108,96 @@ class DecryptViewModel : ViewModel() {
                 }
             } catch (e: OutOfMemoryError) {
                 LogService.error("GENERIC_DECRYPT", "内存不足", e)
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = e.toString()
+                    )
+                }
+            } finally {
+                val elapsed = logElapsedMillis(t0)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
+                OperationCoordinator.release(token)
+            }
+        }
+    }
+
+    /**
+     * 校验单个加密文件的完整性（只读校验，不产生明文输出）。
+     *
+     * <p>对应「校验完整性」模式：仅调用 {@link Verifier#verify} 比对密文 MAC 与 header 认证标签，
+     * 不做解密。校验通过表示文件未被篡改；密码错误或数据损坏时抛出异常。
+     *
+     * @param input        待校验的加密文件路径（.ergou/.pcv 或分卷碎片）
+     * @param password     解密密码
+     * @param forceDecrypt 是否强制校验（忽略损坏继续）
+     * @param recombine    输入是否为分卷碎片需先合并
+     * @param keyfiles     密钥文件路径列表
+     */
+    fun startVerify(
+        input: String,
+        password: String,
+        forceDecrypt: Boolean,
+        recombine: Boolean,
+        keyfiles: List<String>
+    ) {
+        // 全局操作权占用失败：已有其他 Tab 的操作在运行
+        val token = OperationCoordinator.tryAcquire() ?: return
+        opToken = token
+        // 如果本 VM 仍有上一次任务在收尾，先取消
+        currentJob?.cancel()
+        _progress.update { it.copy(state = ProgressState.State.RUNNING) }
+
+        currentJob = viewModelScope.launch(Dispatchers.IO) {
+            val reporter = LoggingProgressReporter(createProgressReporter(), "Volume")
+            LogService.beginSession("VERIFY", logFileName(input))
+            val t0 = System.nanoTime()
+            var success = false
+            var cancelled = false
+
+            try {
+                val req = VerifyRequest()
+                req.inputFile = input
+                req.password = password
+                req.setForceDecrypt(forceDecrypt)
+                req.setRecombine(recombine)
+                req.setDeniability(false)
+                if (keyfiles.isNotEmpty()) {
+                    req.keyfiles = keyfiles
+                }
+                req.rsCodecs = RsCodecs()
+                req.reporter = reporter
+
+                Verifier.verify(req)
+
+                success = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.DONE, progress = 1f)
+                }
+            } catch (e: CancellationException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: Exception) {
+                LogService.error("VERIFY", "任务失败", e)
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.ERROR,
+                        error = describeError(e)
+                    )
+                }
+            } catch (e: OutOfMemoryError) {
+                LogService.error("VERIFY", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,

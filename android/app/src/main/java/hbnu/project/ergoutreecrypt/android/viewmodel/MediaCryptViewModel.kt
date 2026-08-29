@@ -56,7 +56,6 @@ class MediaCryptViewModel : ViewModel() {
      * @param output    输出加密文件路径
      * @param password  明文密码（UTF-8 编码后传入 codec）
      * @param profile   加密档位，null 表示按格式取默认安全档
-     * @param paranoid  是否使用偏执模式
      * @param storeIntegrity 是否存储完整性校验 MAC
      */
     fun startEncrypt(
@@ -64,7 +63,6 @@ class MediaCryptViewModel : ViewModel() {
         output: String,
         password: String,
         profile: MediaCryptProfile? = null,
-        paranoid: Boolean = false,
         storeIntegrity: Boolean = true,
         argon2MemoryKib: Int? = null,
         argon2Passes: Int? = null,
@@ -84,7 +82,6 @@ class MediaCryptViewModel : ViewModel() {
             try {
                 val options = MediaCryptOptions.builder()
                     .profile(profile)
-                    .paranoid(paranoid)
                     .storeIntegrity(storeIntegrity)
                     .argon2MemoryKib(argon2MemoryKib)
                     .argon2Passes(argon2Passes)

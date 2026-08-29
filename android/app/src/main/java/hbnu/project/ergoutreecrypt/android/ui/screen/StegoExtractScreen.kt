@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.android.ui.screen
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -188,6 +189,9 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     stegoName = name
                     stegoPath = path
                     stegoSize = size
+                } else {
+                    // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态

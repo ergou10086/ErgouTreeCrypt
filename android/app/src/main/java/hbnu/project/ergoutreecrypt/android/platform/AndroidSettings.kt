@@ -47,10 +47,6 @@ class AndroidSettings(context: Context) {
         it[KEY_CONFIRM_OVERWRITE] ?: DEF_CONFIRM_OVERWRITE
     }
 
-    val isDefaultParanoid: Flow<Boolean> = dataStore.data.map {
-        it[KEY_DEFAULT_PARANOID] ?: DEF_PARANOID
-    }
-
     val isDefaultReedSolomon: Flow<Boolean> = dataStore.data.map {
         it[KEY_DEFAULT_RS] ?: DEF_RS
     }
@@ -61,10 +57,6 @@ class AndroidSettings(context: Context) {
 
     val threadCount: Flow<Int> = dataStore.data.map {
         it[KEY_THREAD_COUNT] ?: DEF_THREAD_COUNT
-    }
-
-    val batchSerialThresholdGiB: Flow<Int> = dataStore.data.map {
-        it[KEY_BATCH_SERIAL_GIB] ?: DEF_BATCH_SERIAL_GIB
     }
 
     val themeMode: Flow<String> = dataStore.data.map {
@@ -146,7 +138,6 @@ class AndroidSettings(context: Context) {
             autoDecompress = prefs[KEY_AUTO_DECOMPRESS] ?: DEF_AUTO_DECOMPRESS
             confirmOverwrite = prefs[KEY_CONFIRM_OVERWRITE] ?: DEF_CONFIRM_OVERWRITE
             compressFormat = prefs[KEY_DEFAULT_COMPRESS_FORMAT] ?: DEF_COMPRESS_FORMAT
-            defaultParanoid = prefs[KEY_DEFAULT_PARANOID] ?: DEF_PARANOID
             defaultReedSolomon = prefs[KEY_DEFAULT_RS] ?: DEF_RS
             defaultPasswordless = prefs[KEY_DEFAULT_PASSWORDLESS] ?: DEF_PASSWORDLESS
             splitSize = prefs[KEY_DEFAULT_SPLIT_SIZE] ?: DEF_SPLIT_SIZE
@@ -154,7 +145,6 @@ class AndroidSettings(context: Context) {
             archiveCustomEncryption = prefs[KEY_ARCHIVE_CUSTOM_ENC] ?: DEF_ARCHIVE_CUSTOM_ENC
             themeMode = prefs[KEY_THEME_MODE] ?: DEF_THEME_MODE
             threadCount = prefs[KEY_THREAD_COUNT] ?: DEF_THREAD_COUNT
-            batchSerialThresholdGiB = prefs[KEY_BATCH_SERIAL_GIB] ?: DEF_BATCH_SERIAL_GIB
             logLevel = prefs[KEY_LOG_LEVEL] ?: DEF_LOG_LEVEL
             logClearOnNewOp = prefs[KEY_LOG_CLEAR_ON_NEW_OP] ?: DEF_LOG_CLEAR_ON_NEW_OP
             logJvmDiagnostics = prefs[KEY_LOG_JVM_DIAGNOSTICS] ?: DEF_LOG_JVM_DIAGNOSTICS
@@ -163,11 +153,6 @@ class AndroidSettings(context: Context) {
     }
 
     // ==================== 写入方法（同时更新 SettingsManager） ====================
-
-    suspend fun setDefaultParanoid(v: Boolean) {
-        dataStore.edit { it[KEY_DEFAULT_PARANOID] = v }
-        SettingsManager.setDefaultParanoid(v)
-    }
 
     suspend fun setDefaultReedSolomon(v: Boolean) {
         dataStore.edit { it[KEY_DEFAULT_RS] = v }
@@ -183,17 +168,6 @@ class AndroidSettings(context: Context) {
         val clamped = v.coerceIn(MIN_THREAD_COUNT, MAX_THREAD_COUNT)
         dataStore.edit { it[KEY_THREAD_COUNT] = clamped }
         SettingsManager.setThreadCount(clamped)
-    }
-
-    /**
-     * 设置批处理单线程阈值（GiB）。
-     *
-     * @param v 阈值，钳制在 1–100
-     */
-    suspend fun setBatchSerialThresholdGiB(v: Int) {
-        val clamped = v.coerceIn(MIN_BATCH_SERIAL_GIB, MAX_BATCH_SERIAL_GIB)
-        dataStore.edit { it[KEY_BATCH_SERIAL_GIB] = clamped }
-        SettingsManager.setBatchSerialThresholdGiB(clamped)
     }
 
     suspend fun setAutoDecompress(v: Boolean) {
@@ -327,11 +301,9 @@ class AndroidSettings(context: Context) {
         // --- 桌面端兼容键 ---
         private val KEY_AUTO_DECOMPRESS = booleanPreferencesKey("auto.decompress.decrypt")
         private val KEY_CONFIRM_OVERWRITE = booleanPreferencesKey("confirm.overwrite")
-        private val KEY_DEFAULT_PARANOID = booleanPreferencesKey("default.paranoid")
         private val KEY_DEFAULT_RS = booleanPreferencesKey("default.reedSolomon")
         private val KEY_DEFAULT_PASSWORDLESS = booleanPreferencesKey("default.passwordless")
         private val KEY_THREAD_COUNT = intPreferencesKey("thread.count")
-        private val KEY_BATCH_SERIAL_GIB = intPreferencesKey("batch.serial.threshold.gib")
         private val KEY_THEME_MODE = stringPreferencesKey("theme.mode")
         private val KEY_DEFAULT_SPLIT_SIZE = intPreferencesKey("default.split.size")
         private val KEY_DEFAULT_COMPRESS_FORMAT = stringPreferencesKey("default.compress.format")
@@ -358,11 +330,9 @@ class AndroidSettings(context: Context) {
         // --- 默认值 ---
         private const val DEF_AUTO_DECOMPRESS = true
         private const val DEF_CONFIRM_OVERWRITE = true
-        private const val DEF_PARANOID = false
         private const val DEF_RS = false
         private const val DEF_PASSWORDLESS = false
-        private const val DEF_THREAD_COUNT = 4
-        private const val DEF_BATCH_SERIAL_GIB = 10
+        private const val DEF_THREAD_COUNT = 2
         private const val DEF_THEME_MODE = "SYSTEM"
         private const val DEF_SPLIT_SIZE = 100
         private const val DEF_COMPRESS_FORMAT = "ZIP"
@@ -372,8 +342,6 @@ class AndroidSettings(context: Context) {
         private const val DEF_LOG_CLEAR_ON_NEW_OP = true
         private const val DEF_LOG_JVM_DIAGNOSTICS = false
         private const val MIN_THREAD_COUNT = 1
-        private const val MAX_THREAD_COUNT = 16
-        private const val MIN_BATCH_SERIAL_GIB = 1
-        private const val MAX_BATCH_SERIAL_GIB = 100
+        private const val MAX_THREAD_COUNT = 4
     }
 }

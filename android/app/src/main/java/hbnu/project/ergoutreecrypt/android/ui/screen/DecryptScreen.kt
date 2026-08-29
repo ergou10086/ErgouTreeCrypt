@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -108,10 +109,9 @@ import java.io.File
 
 // ---- 桌面端对齐提示 ----
 private val TIP_FORCE = "即使检测到数据损坏也强制解密，尽可能恢复未损坏部分的数据。"
-private val TIP_AUTO_UNZIP = "输入为明文压缩包时，先解压再解密其中的加密文件，对分卷有效。未勾选「递归解压嵌套压缩包」时最多处理 2 层嵌套。如果压缩包需要密码，请在下方输入。"
+private val TIP_AUTO_UNZIP = "输入为明文压缩包时，先解压再解密其中的加密文件，对分卷有效，最多处理 2 层嵌套。如果压缩包需要密码，请在下方输入。"
 private val TIP_DECRYPT_THEN_EXTRACT = "针对 zip.ergou / 7z.ergou 等加密归档：解密后保留明文压缩包，并解压到同名文件夹且保留内部目录结构。不会解密解压出来的 .ergou 文件。"
-private val TIP_VERIFY = "解密前先校验文件完整性，确认数据未被篡改后再进行解密。"
-private val TIP_RECURSIVE = "未勾选时，解压后解密与解密后解压最多处理 2 层嵌套压缩包；勾选后最多处理 5 层。递归解压存在压缩炸弹等风险，请确认来源可信后再使用。"
+private val TIP_VERIFY = "勾选后仅校验文件完整性，不进行解密。校验通过表示文件未被篡改。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
 private fun fmtSize(bytes: Long): String {
@@ -228,8 +228,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     var force by remember { mutableStateOf(false) }
     var autoUnzip by remember { mutableStateOf(true) }
     var decryptThenExtract by remember { mutableStateOf(false) }
-    var verifyFirst by remember { mutableStateOf(false) }
-    var recursive by remember { mutableStateOf(false) }
+    var verifyOnly by remember { mutableStateOf(false) }
     var recombine by remember { mutableStateOf(false) }
     var decryptSettingsLoaded by remember { mutableStateOf(false) }
 
@@ -280,6 +279,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                         if (f.exists()) f.length() else null
                     }
                     inSize = size
+                } else {
+                    // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
                 name.let { n ->
                     outName = when {
@@ -318,6 +320,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 inPath = path
                 if (path != null) {
                     inSize = null
+                } else {
+                    // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
+                    Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
                 outName = "${inName}_decrypted"
             } finally {
@@ -403,6 +408,20 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 开始解密 ----
     fun doDecrypt() {
         scope.launch {
+            val input = inPath
+
+            // 校验完整性模式：仅做只读校验，不产生明文输出
+            if (verifyOnly && input != null && !isFolder) {
+                vm.startVerify(
+                    input = input,
+                    password = password,
+                    forceDecrypt = force,
+                    recombine = recombine,
+                    keyfiles = kfPaths.toList()
+                )
+                return@launch
+            }
+
             // 输出目录：SAF 树优先，其次用户显式路径，最后按权限能力解析默认目录
             // （MediaStore 回退时先写内部临时目录，完成后再提交）
             val safUri = outDirUri
@@ -425,7 +444,6 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
             // 压缩包 / 文件夹 / 分卷碎片：走 FolderCrypt 自动识别并流式解压解密，
             // 避免把归档文件误当作单卷送入 Decryptor 导致整包读入内存
-            val input = inPath
             if (input != null && (isFolder
                     || ArchiveExtractor.isArchive(File(input).toPath())
                     || Splitter.isSplitChunkPath(input))) {
@@ -435,7 +453,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     password = password,
                     archivePassword = archivePassword.ifEmpty { null },
                     forceDecrypt = force,
-                    recursiveExtract = recursive,
+                    recursiveExtract = false,
                     extractThenDecrypt = autoUnzip,
                     decryptThenExtract = decryptThenExtract,
                     keyfiles = kfPaths.toList()
@@ -450,8 +468,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             req.password = password
             req.setForceDecrypt(force)
             req.setDecryptThenExtract(decryptThenExtract)
-            req.setRecursiveExtract(recursive)
-            req.setVerifyFirst(verifyFirst)
+            req.setRecursiveExtract(false)
             req.setRecombine(recombine)
             if (kfPaths.isNotEmpty()) req.keyfiles = kfPaths.toList()
             req.rsCodecs = RsCodecs()
@@ -538,43 +555,53 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                val outNameNow = outName ?: "decrypted_output"
-                val resolvedOutDir = OutputDirResolver.historyDir(
-                    ctx, outDir, inPath?.let { File(it).parent })
-                val savedTreeUri = outDirUri?.toString()
-                val batchSummary = progress.statusText
-                val batchDetail = progress.detail
-                val partial = !progress.detail.isNullOrBlank() && progress.error != null
-                vm.reset()
-                val committed = commitOutput()
-                when (committed) {
-                    null, true -> {
-                        resultTitle = if (partial) "解密部分完成" else "解密完成"
-                        resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
-                            batchSummary
-                        } else {
-                            buildSuccessMessage("解密", outNameNow)
+                if (verifyOnly) {
+                    // 校验完整性模式：无明文输出，直接报告校验结果
+                    vm.reset()
+                    resultTitle = "校验完成"
+                    resultMessage = "文件完整性校验通过，文件未被篡改。"
+                    resultDetail = null
+                    resultType = ResultType.SUCCESS
+                    showResultDialog = true
+                } else {
+                    val outNameNow = outName ?: "decrypted_output"
+                    val resolvedOutDir = OutputDirResolver.historyDir(
+                        ctx, outDir, inPath?.let { File(it).parent })
+                    val savedTreeUri = outDirUri?.toString()
+                    val batchSummary = progress.statusText
+                    val batchDetail = progress.detail
+                    val partial = !progress.detail.isNullOrBlank() && progress.error != null
+                    vm.reset()
+                    val committed = commitOutput()
+                    when (committed) {
+                        null, true -> {
+                            resultTitle = if (partial) "解密部分完成" else "解密完成"
+                            resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
+                                batchSummary
+                            } else {
+                                buildSuccessMessage("解密", outNameNow)
+                            }
+                            resultDetail = batchDetail
+                            resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
+                            // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
+                            withContext(Dispatchers.IO) {
+                                HistoryService.record(
+                                    OperationType.GENERIC_DECRYPT,
+                                    outNameNow,
+                                    "$resolvedOutDir/$outNameNow",
+                                    savedTreeUri
+                                )
+                            }
                         }
-                        resultDetail = batchDetail
-                        resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
-                        // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
-                        withContext(Dispatchers.IO) {
-                            HistoryService.record(
-                                OperationType.GENERIC_DECRYPT,
-                                outNameNow,
-                                "$resolvedOutDir/$outNameNow",
-                                savedTreeUri
-                            )
+                        false -> {
+                            resultTitle = "解密完成但保存失败"
+                            resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
+                            resultDetail = null
+                            resultType = ResultType.ERROR
                         }
                     }
-                    false -> {
-                        resultTitle = "解密完成但保存失败"
-                        resultMessage = "解密已完成，但复制到所选目录失败，请检查目录权限后重试。"
-                        resultDetail = null
-                        resultType = ResultType.ERROR
-                    }
+                    showResultDialog = true
                 }
-                showResultDialog = true
             }
             ProgressState.State.ERROR -> {
                 val errMsg = mapErrorToChineseMessage(progress.error)
@@ -584,7 +611,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     .joinToString("\n")
                     .ifBlank { progress.error }
                 vm.reset()
-                resultTitle = "解密失败"
+                resultTitle = if (verifyOnly) "校验失败" else "解密失败"
                 resultMessage = errMsg
                 resultDetail = errDetail
                 resultType = ResultType.ERROR
@@ -942,12 +969,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
                 Spacer(Modifier.height(6.dp))
 
-                // ---- 先校验完整性 ----
-                OptionRow("先校验完整性", verifyFirst, { verifyFirst = it }, TIP_VERIFY, enabled = !mediaDecryptMode)
+                // ---- 校验完整性（仅校验，不解密） ----
+                OptionRow("校验完整性（仅校验，不解密）", verifyOnly, { verifyOnly = it }, TIP_VERIFY, enabled = !mediaDecryptMode)
                 Spacer(Modifier.height(6.dp))
-
-                // ---- 递归解压嵌套压缩包 ----
-                OptionRow("递归解压嵌套压缩包", recursive, { recursive = it }, TIP_RECURSIVE, enabled = !mediaDecryptMode)
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 

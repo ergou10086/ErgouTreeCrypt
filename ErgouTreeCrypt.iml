@@ -11,6 +11,8 @@
       <excludeFolder url="file://$MODULE_DIR$/android/build" />
       <excludeFolder url="file://$MODULE_DIR$/android/shared-test/build" />
       <excludeFolder url="file://$MODULE_DIR$/temp" />
+      <excludeFolder url="file://$MODULE_DIR$/android/app/debug" />
+      <excludeFolder url="file://$MODULE_DIR$/android/app/release" />
     </content>
   </component>
 </module>

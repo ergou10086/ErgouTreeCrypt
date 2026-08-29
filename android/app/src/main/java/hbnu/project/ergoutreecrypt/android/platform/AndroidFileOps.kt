@@ -514,9 +514,15 @@ class AndroidFileOps(private val context: Context) {
         tmpDir.mkdirs()
         val tmpFile = File(tmpDir, UUID.randomUUID().toString() + queryExtension(uri))
         return try {
-            openInputStream(uri)?.use { input ->
+            // 输入流打不开（如权限被收回）时返回 null，避免把空临时文件误当作有效输入
+            val input = openInputStream(uri)
+            if (input == null) {
+                tmpFile.delete()
+                return null
+            }
+            input.use { inStream ->
                 tmpFile.outputStream().use { output ->
-                    copyStream(input, output)
+                    copyStream(inStream, output)
                 }
             }
             tmpFile.absolutePath

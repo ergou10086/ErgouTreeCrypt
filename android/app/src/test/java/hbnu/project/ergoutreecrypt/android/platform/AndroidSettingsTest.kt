@@ -16,11 +16,11 @@ import org.junit.Test
 class AndroidSettingsTest {
 
     /**
-     * 默认线程数应为 4（匹配移动端典型核心数）。
+     * 默认线程数应为 2（移动端默认线程数）。
      */
     @Test
-    fun defaultThreadCount_isFour() {
-        assertEquals(4, DEFAULT_THREAD_COUNT)
+    fun defaultThreadCount_isTwo() {
+        assertEquals(2, DEFAULT_THREAD_COUNT)
     }
 
     /**
@@ -29,7 +29,7 @@ class AndroidSettingsTest {
     @Test
     fun threadCountRange_isValid() {
         assertTrue("最小线程数应 ≥ 1", MIN_THREAD_COUNT >= 1)
-        assertTrue("最大线程数应 ≤ 8（移动端限制）", MAX_THREAD_COUNT <= 8)
+        assertTrue("最大线程数应 ≤ 4（移动端限制）", MAX_THREAD_COUNT <= 4)
         assertTrue("最大线程数应 ≥ 最小线程数", MAX_THREAD_COUNT >= MIN_THREAD_COUNT)
     }
 
@@ -39,14 +39,6 @@ class AndroidSettingsTest {
     @Test
     fun defaultArgon2Mode_isBalanced() {
         assertEquals("BALANCED", DEFAULT_ARGON2_MODE)
-    }
-
-    /**
-     * 默认偏执模式为 false。
-     */
-    @Test
-    fun defaultParanoid_isFalse() {
-        assertEquals(false, DEFAULT_PARANOID)
     }
 
     /**
@@ -101,12 +93,11 @@ class AndroidSettingsTest {
         // 与 AndroidSettings.kt 中定义的默认值保持一致
         private const val DEFAULT_AUTO_DECOMPRESS = true
         private const val DEFAULT_CONFIRM_OVERWRITE = true
-        private const val DEFAULT_PARANOID = false
         private const val DEFAULT_RS = false
         private const val DEFAULT_PASSWORDLESS = false
-        private const val DEFAULT_THREAD_COUNT = 4
+        private const val DEFAULT_THREAD_COUNT = 2
         private const val MIN_THREAD_COUNT = 1
-        private const val MAX_THREAD_COUNT = 8
+        private const val MAX_THREAD_COUNT = 4
         private const val DEFAULT_THEME_MODE = "SYSTEM"
         private const val DEFAULT_ARGON2_MODE = "BALANCED"
         private const val DEFAULT_BIOMETRIC = false

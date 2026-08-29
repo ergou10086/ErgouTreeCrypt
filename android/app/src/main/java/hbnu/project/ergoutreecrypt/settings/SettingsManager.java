@@ -31,7 +31,7 @@ public final class SettingsManager {
     private static final boolean DEF_REMEMBER_OUTDIR = true;
     private static final boolean DEF_AUTO_CLEAR_PWD = false;
     private static final String DEF_THEME_MODE = "SYSTEM";
-    private static final int DEF_THREAD_COUNT = 4;
+    private static final int DEF_THREAD_COUNT = 2;
     private static final int DEF_BATCH_SERIAL_GIB = 10;
     private static final boolean DEF_ARCHIVE_PWD_FALLBACK = false;
     private static final boolean DEF_ARCHIVE_CUSTOM_ENC = false;
@@ -61,7 +61,7 @@ public final class SettingsManager {
     private static volatile boolean logClearOnNewOp = DEF_LOG_CLEAR_ON_NEW_OP;
     private static volatile boolean logJvmDiagnostics = DEF_LOG_JVM_DIAGNOSTICS;
     private static final int MIN_THREAD_COUNT = 1;
-    private static final int MAX_THREAD_COUNT = 16;
+    private static final int MAX_THREAD_COUNT = 4;
     private static final int MIN_BATCH_SERIAL_GIB = 1;
     private static final int MAX_BATCH_SERIAL_GIB = 100;
 

@@ -187,26 +187,26 @@ public final class Encryptor {
         ctx.header = new VolumeHeader(salt, hkdfSalt, serpentIV, nonce);
         ctx.header.setComments(req.getComments() == null ? "" : req.getComments());
 
-        // v2.15: 若 EncryptRequest 包含 Argon2 参数覆写，升级 header 版本并写入参数
-        boolean hasArgon2Override = req.getArgon2MemoryKib() != null
-                || req.getArgon2Passes() != null
-                || req.getArgon2Threads() != null;
-        if (hasArgon2Override) {
-            ctx.header.setVersion(VolumeHeader.VERSION_V215);
-            if (req.getArgon2MemoryKib() != null) {
-                ctx.header.setArgon2MemoryKib(req.getArgon2MemoryKib());
-            }
-            if (req.getArgon2Passes() != null) {
-                ctx.header.setArgon2Passes(req.getArgon2Passes());
-            }
-            if (req.getArgon2Threads() != null) {
-                ctx.header.setArgon2Threads(req.getArgon2Threads());
-            }
-        }
+        // B1：始终把实际生效的 Argon2 参数写进卷头（升级到 v2.15），使解密端无需
+        // 猜测默认档位。有效参数与 Argon2Kdf.deriveKey 的决策链保持一致：覆写值
+        // 优先，否则按 paranoid 标志取 CryptoConstants 的默认档位。
+        int effMem = req.getArgon2MemoryKib() != null ? req.getArgon2MemoryKib()
+                : (req.isParanoid() ? CryptoConstants.ARGON2_PARANOID_MEMORY_KIB
+                : CryptoConstants.ARGON2_NORMAL_MEMORY_KIB);
+        int effPasses = req.getArgon2Passes() != null ? req.getArgon2Passes()
+                : (req.isParanoid() ? CryptoConstants.ARGON2_PARANOID_PASSES
+                : CryptoConstants.ARGON2_NORMAL_PASSES);
+        int effThreads = req.getArgon2Threads() != null ? req.getArgon2Threads()
+                : (req.isParanoid() ? CryptoConstants.ARGON2_PARANOID_THREADS
+                : CryptoConstants.ARGON2_NORMAL_THREADS);
 
-        // v2.16：启用加密前压缩时升级 header 版本并写入压缩标志（优先于 v2.15）
+        // 压缩时版本为 v2.16（额外携带压缩标志），否则 v2.15
+        ctx.header.setVersion(req.isCompress()
+                ? VolumeHeader.VERSION_V216 : VolumeHeader.VERSION_V215);
+        ctx.header.setArgon2MemoryKib(effMem);
+        ctx.header.setArgon2Passes(effPasses);
+        ctx.header.setArgon2Threads(effThreads);
         if (req.isCompress()) {
-            ctx.header.setVersion(VolumeHeader.VERSION_V216);
             ctx.header.setCompressed(true);
         }
         Flags flags = new Flags(

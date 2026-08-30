@@ -357,10 +357,10 @@ public final class VolumeRoundtripTest {
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
-        // Verify header can be read back
+        // Verify header can be read back（B1 后默认版本升级为 v2.15）
         try (java.io.InputStream in = Files.newInputStream(encrypted)) {
             String version = hbnu.project.ergoutreecrypt.header.HeaderReader.peekVersion(in, rs);
-            assertEquals(hbnu.project.ergoutreecrypt.header.VolumeHeader.CURRENT_VERSION, version);
+            assertEquals(hbnu.project.ergoutreecrypt.header.VolumeHeader.VERSION_V215, version);
         }
 
         // Verify total file size = header + encrypted data

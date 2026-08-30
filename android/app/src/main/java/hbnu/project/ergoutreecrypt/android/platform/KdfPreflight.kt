@@ -38,4 +38,24 @@ object KdfPreflight {
             null
         }
     }
+
+    /**
+     * 读取卷头中的「加密前压缩」（Zstandard）标志。
+     *
+     * <p>桌面端用 zstd-jni 压缩，移动端无对应 native 库无法解压此类文件；返回
+     * true 表示该文件使用了加密前压缩，移动端应直接拒绝解密。
+     *
+     * @param path 待解密的单文件路径
+     * @return 压缩标志；读取失败（非 .ergou、损坏等）返回 null
+     */
+    fun peekCompressed(path: Path): Boolean? {
+        return try {
+            Files.newInputStream(path).use { input: InputStream ->
+                val reader = HeaderReader(input, RsCodecs())
+                reader.readHeader().header.isCompressed
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

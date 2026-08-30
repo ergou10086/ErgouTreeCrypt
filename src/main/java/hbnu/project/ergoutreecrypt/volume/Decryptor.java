@@ -447,19 +447,20 @@ public final class Decryptor {
             }
         }
 
-        // 加密前压缩：解密后的 .incomplete 为压缩数据，先解压还原
+        // 加密前压缩：解密后的 .incomplete 为 Zstd 压缩数据，直接解压到最终输出，
+        // 避免中间 .decompressed 文件与双重命名（降低磁盘峰值与 I/O）
         if (ctx.header.isCompressed()) {
             Path incomplete = Path.of(req.getOutputFile() + ".incomplete");
-            Path decompressed = Path.of(req.getOutputFile() + ".incomplete.decompressed");
+            LogService.info("Decryptor", "解压加密前压缩的载荷 → " + req.getOutputFile());
             ZstdCompressor.decompress(Files.newInputStream(incomplete),
-                    Files.newOutputStream(decompressed));
+                    Files.newOutputStream(Path.of(req.getOutputFile())));
             Files.deleteIfExists(incomplete);
-            Files.move(decompressed, incomplete, StandardCopyOption.REPLACE_EXISTING);
+            LogService.info("Decryptor", "解压加密前压缩的载荷完成");
+        } else {
+            // 原子重命名 .incomplete → 最终输出
+            Files.move(Path.of(req.getOutputFile() + ".incomplete"), Path.of(req.getOutputFile()),
+                    StandardCopyOption.REPLACE_EXISTING);
         }
-
-        // 原子重命名 .incomplete → 最终输出
-        Files.move(Path.of(req.getOutputFile() + ".incomplete"), Path.of(req.getOutputFile()),
-                StandardCopyOption.REPLACE_EXISTING);
 
         // 清理临时文件
         if (ctx.tempFile != null) {

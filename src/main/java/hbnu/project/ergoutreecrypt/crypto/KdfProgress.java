@@ -21,6 +21,17 @@ public interface KdfProgress {
     void onProgress(int pass, int totalPasses);
 
     /**
+     * 每完成一个 slice（一个 pass 的 1/4）回调一次，供更细粒度进度展示。
+     *
+     * <p>默认空实现，既有只关心 pass 粒度的实现无需改动即可编译。
+     *
+     * @param doneSlices  已完成（含当前）的 slice 序号，从 1 开始
+     * @param totalSlices 总 slice 数（passes × 4）
+     */
+    default void onSliceProgress(int doneSlices, int totalSlices) {
+    }
+
+    /**
      * 是否请求取消派生。
      *
      * @return true 表示应尽快中止派生

@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# 保留 JNI 原生 Argon2 桥接的 native 方法名，否则 R8 混淆后 loadLibrary 找不到符号
+-keepclasseswithmembernames,includedescriptorclasses class hbnu.project.ergoutreecrypt.crypto.NativeArgon2 {
+    native <methods>;
+}

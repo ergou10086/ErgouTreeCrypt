@@ -71,6 +71,11 @@ android {
         // 将版本名注入 BuildConfig，供运行时显示
         buildConfigField("String", "APP_VERSION_NAME", "\"${appVersionName}\"")
         buildConfigField("int", "APP_VERSION_CODE", "${appVersionCode}")
+
+        // 原生 Argon2（libargon2）目标 ABI；未打包 ABI 的设备回退纯 Java 离堆
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -126,6 +131,14 @@ android {
                 "src/main/java",
                 layout.buildDirectory.dir("sync-core")  // 同步任务产物目录
             )
+        }
+    }
+
+    // 原生 Argon2：CMake 编译 vendored libargon2 + JNI 桥
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 }

@@ -396,6 +396,10 @@ class DecryptViewModel : ViewModel() {
                 _progress.update { it.copy(statusText = "密钥派生中… 第 $pass/$totalPasses 轮") }
             }
 
+            override fun onSliceProgress(doneSlices: Int, totalSlices: Int) {
+                _progress.update { it.copy(statusText = "密钥派生中… 第 $doneSlices/$totalSlices 片") }
+            }
+
             override fun isCancelled(): Boolean =
                 _progress.value.state == ProgressState.State.CANCELLED
         }

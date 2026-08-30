@@ -239,8 +239,7 @@ public final class Argon2Kdf {
 
         byte[] key;
         if (offHeap) {
-            key = Argon2OffHeap.deriveKey(password, salt, memoryKiB, passes,
-                    threads, CryptoConstants.ARGON2_KEY_SIZE, progress);
+            key = deriveOffHeapKey(password, salt, memoryKiB, passes, threads, progress);
         } else {
             Argon2Parameters params = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                     .withVersion(Argon2Parameters.ARGON2_VERSION_13)
@@ -265,5 +264,39 @@ public final class Argon2Kdf {
                     (System.nanoTime() - t0) / 1_000_000L);
         }
         return key;
+    }
+
+    /**
+     * 离堆派生：优先走原生 libargon2（Android），不可用时回退纯 Java。
+     *
+     * <p>原生实现单次调用不可中途回调，仅在调用前检查取消并报告一次性进度；
+     * 纯 Java 实现（{@link Argon2OffHeap}）支持 slice/块粒度进度与取消。
+     *
+     * @param password  密码字节
+     * @param salt      Argon2 盐
+     * @param memoryKiB 内存参数（KiB）
+     * @param passes    迭代次数
+     * @param threads   并行 lane 数
+     * @param progress  进度/取消回调，可为 null
+     * @return 32 字节派生密钥
+     */
+    private static byte[] deriveOffHeapKey(final byte[] password, final byte[] salt,
+                                           final int memoryKiB, final int passes,
+                                           final int threads, final KdfProgress progress) {
+        if (NativeArgon2.isAvailable()) {
+            if (progress != null) {
+                if (progress.isCancelled() || Thread.currentThread().isInterrupted()) {
+                    throw new IllegalStateException("Argon2 密钥派生已被取消");
+                }
+                progress.onProgress(1, 1);
+            }
+            if (LogService.isTraceEnabled()) {
+                LogService.trace("Argon2Kdf", "离堆派生走原生 libargon2");
+            }
+            return NativeArgon2.deriveKey(password, salt, memoryKiB, passes,
+                    threads, CryptoConstants.ARGON2_KEY_SIZE);
+        }
+        return Argon2OffHeap.deriveKey(password, salt, memoryKiB, passes,
+                threads, CryptoConstants.ARGON2_KEY_SIZE, progress);
     }
 }

@@ -206,6 +206,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // 桌面端/高内存档单文件的 KDF 预检提示（null 表示无需提示）
     var kdfWarning by remember { mutableStateOf<String?>(null) }
 
+    // 使用了「加密前压缩」的文件：移动端无 native 库无法解压，直接拒绝（null 表示可解密）
+    var compressedNotice by remember { mutableStateOf<String?>(null) }
+
     // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
     var defaultOutPath by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -221,13 +224,20 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // 单文件 KDF 预检：读取卷头 Argon2 内存参数，高内存档给出"较慢/建议桌面端"提示
     LaunchedEffect(inPath, isFolder) {
         kdfWarning = null
+        compressedNotice = null
         val p = inPath ?: return@LaunchedEffect
         if (isFolder) return@LaunchedEffect
         val lower = p.lowercase()
         if (!(lower.endsWith(".ergou") || lower.endsWith(".pcv"))) return@LaunchedEffect
-        kdfWarning = withContext(Dispatchers.IO) {
-            val memKib = KdfPreflight.peekArgon2MemoryKib(File(p).toPath())
-            when {
+        withContext(Dispatchers.IO) {
+            val path = File(p).toPath()
+            // 加密前压缩（Zstandard）：移动端无 native 库无法解压，直接拒绝
+            if (KdfPreflight.peekCompressed(path) == true) {
+                compressedNotice = "该文件使用了「加密前压缩」（Zstandard），移动端无法解密，请在桌面端解密。"
+                return@withContext
+            }
+            val memKib = KdfPreflight.peekArgon2MemoryKib(path)
+            kdfWarning = when {
                 memKib == null ->
                     "该文件未记录移动端密钥参数（桌面端 1 GiB 档），密钥派生可能耗时数分钟，建议在桌面端用较小档位重新加密。"
                 memKib > (256 shl 10) ->
@@ -855,8 +865,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     Button(
                         onClick = { if (mediaDecryptMode) doMediaDecrypt() else doDecrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用
-                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !busy
+                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用；加密前压缩的文件禁用
+                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !busy && compressedNotice == null
                     ) {
                         Icon(Icons.Default.LockOpen, null)
                         Text(if (mediaDecryptMode) "  格式保持解密" else "  解密")
@@ -1055,6 +1065,16 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     kdfWarning!!,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            // 加密前压缩：移动端无法解密，直接拒绝
+            if (compressedNotice != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    compressedNotice!!,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error
                 )

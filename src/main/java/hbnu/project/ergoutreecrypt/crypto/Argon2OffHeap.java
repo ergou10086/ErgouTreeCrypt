@@ -298,25 +298,29 @@ public final class Argon2OffHeap {
         ExecutorService pool = Executors.newFixedThreadPool(lanes);
         try {
             for (int pass = 0; pass < passes; pass++) {
-                if (Thread.currentThread().isInterrupted()
-                        || (progress != null && progress.isCancelled())) {
-                    throw new IllegalStateException("Argon2 密钥派生已被取消");
-                }
+                checkCancelled(progress);
                 if (progress != null) {
                     progress.onProgress(pass + 1, passes);
                 }
                 for (int slice = 0; slice < SYNC_POINTS; slice++) {
                     final int p = pass;
                     final int s = slice;
+                    checkCancelled(progress);
+                    if (progress != null) {
+                        progress.onSliceProgress(pass * SYNC_POINTS + slice + 1,
+                                passes * SYNC_POINTS);
+                    }
                     List<Future<?>> futures = new ArrayList<>(lanes);
                     for (int lane = 0; lane < lanes; lane++) {
                         final int l = lane;
                         futures.add(pool.submit(() -> fillSegment(mem, l, p, s,
-                                segmentLength, laneLength, lanes, memoryBlocks, passes)));
+                                segmentLength, laneLength, lanes, memoryBlocks, passes, progress)));
                     }
                     for (Future<?> future : futures) {
                         future.get();
                     }
+                    // 工作线程可能在分片内因取消提前返回，此处再校验一次，使取消信号立即上抛
+                    checkCancelled(progress);
                 }
             }
         } catch (InterruptedException e) {
@@ -330,12 +334,29 @@ public final class Argon2OffHeap {
     }
 
     /**
+     * 检查取消信号；命中即抛出取消异常。
+     *
+     * <p>取消信号来自两个来源：调用线程的中断标志，或 {@code progress} 回调
+     * 报告的取消请求（移动端 UI 取消）。任一命中都应在最短时间内中止派生。
+     *
+     * @param progress 进度/取消回调，可为 null（桌面端不传）
+     * @throws IllegalStateException 若已请求取消
+     */
+    private static void checkCancelled(final KdfProgress progress) {
+        if (Thread.currentThread().isInterrupted()
+                || (progress != null && progress.isCancelled())) {
+            throw new IllegalStateException("Argon2 密钥派生已被取消");
+        }
+    }
+
+    /**
      * 填充单个 lane 的单个切片。
      */
     private static void fillSegment(final OffHeapMemory mem, final int lane, final int pass,
                                     final int slice, final int segmentLength,
                                     final int laneLength, final int lanes,
-                                    final int memoryBlocks, final int passes) {
+                                    final int memoryBlocks, final int passes,
+                                    final KdfProgress progress) {
         // Argon2id：仅 pass 0 的前两个切片使用数据独立寻址
         boolean dataIndependent = pass == 0 && slice < SYNC_POINTS / 2;
         int startingIndex = (pass == 0 && slice == 0) ? 2 : 0;
@@ -366,6 +387,11 @@ public final class Argon2OffHeap {
         long[] z = new long[BLOCK_LONGS];
 
         for (int i = startingIndex; i < segmentLength; i++, currOffset++, prevOffset++) {
+            // 每 1024 块（约 1 MiB）轮询一次取消；命中即提前返回，剩余内存由调用方统一清零释放
+            if ((i & 1023) == 0 && progress != null
+                    && (progress.isCancelled() || Thread.currentThread().isInterrupted())) {
+                return;
+            }
             if (currOffset % laneLength == 1) {
                 prevOffset = currOffset - 1;
             }

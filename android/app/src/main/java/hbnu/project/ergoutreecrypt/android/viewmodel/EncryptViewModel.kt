@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import hbnu.project.ergoutreecrypt.android.platform.FileNameSanitizer
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressReporter
 import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
@@ -208,7 +209,7 @@ class EncryptViewModel : ViewModel() {
 
             try {
                 val root = Paths.get(inputDir)
-                val folderName = root.fileName?.toString() ?: "folder"
+                val folderName = FileNameSanitizer.sanitize(root.fileName?.toString() ?: "folder")
                 val resultDir = Paths.get(outputDir).resolve("${folderName}_result")
                 resultDirForCleanup = resultDir
                 Files.createDirectories(resultDir)
@@ -228,7 +229,7 @@ class EncryptViewModel : ViewModel() {
                         throw InterruptedException("cancelled")
                     }
                     val rel = root.relativize(file)
-                    val destEnc = resultDir.resolve(rel.toString() + ".ergou")
+                    val destEnc = resultDir.resolve(FileNameSanitizer.sanitizePathSegments(rel.toString()) + ".ergou")
                     Files.createDirectories(destEnc.parent)
 
                     val req = EncryptRequest()

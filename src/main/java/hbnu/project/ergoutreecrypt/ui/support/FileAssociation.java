@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
+import hbnu.project.ergoutreecrypt.log.LogService;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class FileAssociation {
 
+    private static final String APP_ID = "ErgouTreeCrypt";
     private static final String EXT = ".ergou";
     private static final String PROG_ID = "ErgouTreeCrypt.ergou";
     private static final String APP_NAME = "ErgouTreeCrypt 加密文件";
@@ -44,14 +47,16 @@ public final class FileAssociation {
      * @param iconPath 已落盘的 .ico 文件绝对路径
      * @return 是否注册成功
      */
-    public static boolean register(String iconPath) {
-        if (!isWindows()) {
+    public static boolean register(String iconPath, String openCommand) {
+        if (!isWindows() || openCommand == null || openCommand.isBlank()) {
             return false;
         }
         try {
             String extKey = "HKCU\\Software\\Classes\\" + EXT;
             String progKey = "HKCU\\Software\\Classes\\" + PROG_ID;
             String iconKey = progKey + "\\DefaultIcon";
+            String openKey = progKey + "\\shell\\open";
+            String commandKey = openKey + "\\command";
 
             // 1) .ergou → ProgID
             runReg("add", extKey, "/ve", "/d", PROG_ID, "/f");
@@ -59,6 +64,9 @@ public final class FileAssociation {
             runReg("add", progKey, "/ve", "/d", APP_NAME, "/f");
             // 3) DefaultIcon → .ico 路径（带 ,0 指定图标索引）
             runReg("add", iconKey, "/ve", "/d", iconPath + ",0", "/f");
+            // 4) 直接手动打开.ergou后缀文件的动作
+            runReg("add", openKey, "/ve", "/d", "打开(&O)", "/f");
+            runReg("add", commandKey, "/ve", "/d", openCommand, "/f");
 
             notifyShellIconChanged();
             return true;
@@ -85,11 +93,6 @@ public final class FileAssociation {
             Path appIconFile = iconDir.resolve("ergou-app.ico");
             Path fileIconFile = iconDir.resolve("ergou-file.ico");
 
-            boolean bothExist = Files.exists(appIconFile) && Files.exists(fileIconFile);
-            if (isRegistered() && bothExist) {
-                return;
-            }
-
             // 1) 提取应用图标（logo-96x.ico）
             try (InputStream in = FileAssociation.class.getResourceAsStream(APP_ICON_RESOURCE)) {
                 if (in != null) {
@@ -105,26 +108,25 @@ public final class FileAssociation {
                 }
             }
 
-            // 3) 注册 .ergou 文件关联，使用转换后的文件图标
-            register(fileIconFile.toAbsolutePath().toString());
+            String openCommand = buildOpenCommand();
+            String exeName = currentExecutableName();
+            if (openCommand == null || openCommand.isBlank()
+                    || exeName == null || exeName.isBlank()) {
+                return;
+            }
+
+            String appIconPath = appIconFile.toAbsolutePath().toString();
+            String fileIconPath = fileIconFile.toAbsolutePath().toString();
+
+            // 3) 注册默认打开关联（.ergou → ProgID → open command）
+            registerFileAssociation(fileIconPath, openCommand);
+
+            // 4) 补齐 Default Programs 的应用注册层
+            registerApplication(exeName, appIconPath, openCommand);
         } catch (IOException ignored) {
             // 静默失败，不影响应用启动
-        }
-    }
-
-    /**
-     * 已注册 .ergou 关联则返回 true。
-     */
-    private static boolean isRegistered() {
-        try {
-            Process p = new ProcessBuilder(
-                    "reg", "query", "HKCU\\Software\\Classes\\.ergou", "/ve")
-                    .redirectErrorStream(true)
-                    .start();
-            p.waitFor(3, TimeUnit.SECONDS);
-            return p.exitValue() == 0;
-        } catch (Exception e) {
-            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -137,7 +139,94 @@ public final class FileAssociation {
         cmd[0] = "reg";
         System.arraycopy(regArgs, 0, cmd, 1, regArgs.length);
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        p.waitFor(5, TimeUnit.SECONDS);
+        String output = new String(p.getInputStream().readAllBytes());
+        if (!p.waitFor(5, TimeUnit.SECONDS)) {
+            p.destroyForcibly();
+            LogService.warn("FileAssociation", "reg 超时: " + String.join(" ", regArgs));
+            return;
+        }
+        if (p.exitValue() != 0) {
+            LogService.warn("FileAssociation",
+                    "reg 失败(" + p.exitValue() + "): " + String.join(" ", regArgs)
+                            + (output.isBlank() ? "" : " | " + output.strip()));
+        }
+    }
+
+    private static String buildOpenCommand() {
+        // 此函数只支持直接用.exe打开的情况, 若对.jar文件直接运行 则无效
+        return currentExecutablePath()
+                .map(path -> regQuoted(path.toAbsolutePath().toString()) + " " + regQuoted("%1"))
+                .orElse(null);
+    }
+
+    private static String currentExecutableName() {
+        return currentExecutablePath()
+                .map(path -> path.getFileName().toString())
+                .orElse(null);
+    }
+
+    private static java.util.Optional<Path> currentExecutablePath() {
+        return ProcessHandle.current()
+                .info()
+                .command()
+                .map(Path::of)
+                .filter(Files::isRegularFile)
+                .filter(FileAssociation::isAppExe);
+    }
+
+    private static boolean isAppExe(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".exe")
+                && !name.equals("java.exe")
+                && !name.equals("javaw.exe");
+    }
+
+    private static String regQuoted(String value) {
+        return "\\\"" + value + "\\\"";
+    }
+
+    private static void registerFileAssociation(String fileIconPath, String openCommand)
+            throws IOException, InterruptedException {
+        String extKey = "HKCU\\Software\\Classes\\" + EXT;
+        String progKey = "HKCU\\Software\\Classes\\" + PROG_ID;
+        String iconKey = progKey + "\\DefaultIcon";
+        String openKey = progKey + "\\shell\\open";
+        String commandKey = openKey + "\\command";
+
+        // 1) .ergou → ProgID
+        runReg("add", extKey, "/ve", "/d", PROG_ID, "/f");
+        // 2) ProgID → 显示名
+        runReg("add", progKey, "/ve", "/d", APP_NAME, "/f");
+        // 3) DefaultIcon → .ico 路径（带 ,0 指定图标索引）
+        runReg("add", iconKey, "/ve", "/d", regQuoted(fileIconPath) + ",0", "/f");
+        // 4) 直接手动打开 .ergou 后缀文件的动作
+        runReg("add", openKey, "/ve", "/d", "打开(&O)", "/f");
+        runReg("add", commandKey, "/ve", "/d", openCommand, "/f");
+    }
+
+    private static void registerApplication(String exeName, String appIconPath, String openCommand)
+            throws IOException, InterruptedException {
+        String appKey = "HKCU\\Software\\Classes\\Applications\\" + exeName;
+        String appIconKey = appKey + "\\DefaultIcon";
+        String appShellKey = appKey + "\\shell\\open";
+        String appCommandKey = appShellKey + "\\command";
+        String supportedTypesKey = appKey + "\\SupportedTypes";
+        String capabilitiesKey = appKey + "\\Capabilities";
+        String capabilitiesFileAssocKey = capabilitiesKey + "\\FileAssociations";
+        String registeredApplicationsKey = "HKCU\\Software\\RegisteredApplications";
+        String capabilitiesPath = "Software\\Classes\\Applications\\" + exeName + "\\Capabilities";
+
+        runReg("add", appKey, "/ve", "/d", APP_NAME, "/f");
+        runReg("add", appKey, "/v", "FriendlyAppName", "/t", "REG_SZ", "/d", APP_NAME, "/f");
+        runReg("add", appIconKey, "/ve", "/d", regQuoted(appIconPath) + ",0", "/f");
+        runReg("add", supportedTypesKey, "/v", EXT, "/t", "REG_SZ", "/d", "", "/f");
+        runReg("add", appShellKey, "/ve", "/d", "打开(&O)", "/f");
+        runReg("add", appCommandKey, "/ve", "/d", openCommand, "/f");
+
+        runReg("add", capabilitiesKey, "/v", "ApplicationName", "/t", "REG_SZ", "/d", APP_ID, "/f");
+        runReg("add", capabilitiesKey, "/v", "ApplicationDescription", "/t", "REG_SZ", "/d", APP_NAME, "/f");
+        runReg("add", capabilitiesFileAssocKey, "/v", EXT, "/t", "REG_SZ", "/d", PROG_ID, "/f");
+        runReg("add", registeredApplicationsKey, "/v", APP_ID, "/t", "REG_SZ", "/d", capabilitiesPath, "/f");
     }
 
     /**

@@ -45,6 +45,48 @@ public final class ZstdCompressor {
     private ZstdCompressor() {
     }
 
+    /** native 可用性缓存（惰性探针，一次判定后复用）。 */
+    private static volatile Boolean available;
+
+    /**
+     * 探测 zstd-jni 的 native 库是否可用。
+     *
+     * <p>zstd-jni 仅提供桌面端 native（无 Android ABI），在移动端加载
+     * {@code libzstd-jni-*.so} 会抛 {@link UnsatisfiedLinkError}。本方法通过一次
+     * 微小的压缩/解压往返判定 native 是否可用，结果缓存复用；移动端可据此在
+     * 预检阶段拒绝「加密前压缩」的文件，避免解压阶段崩溃。
+     *
+     * @return true 表示 native 可用（桌面端）；false 表示不可用（移动端）
+     */
+    public static boolean isAvailable() {
+        Boolean a = available;
+        if (a == null) {
+            synchronized (ZstdCompressor.class) {
+                a = available;
+                if (a == null) {
+                    a = probeAvailable();
+                    available = a;
+                }
+            }
+        }
+        return a;
+    }
+
+    /**
+     * 执行一次微小的压缩/解压往返，判定 native 是否可加载。
+     *
+     * @return true 表示 native 可正常压缩/解压
+     */
+    private static boolean probeAvailable() {
+        try {
+            byte[] compressed = compress(new byte[] {1, 2, 3}, DEFAULT_LEVEL);
+            byte[] round = decompress(compressed);
+            return round.length == 3 && round[0] == 1 && round[1] == 2 && round[2] == 3;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /**
      * 将档位收敛到 {@code [MIN_LEVEL, MAX_LEVEL]} 区间。
      *

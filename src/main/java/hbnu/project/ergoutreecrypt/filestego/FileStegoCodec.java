@@ -9,6 +9,8 @@ import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
 import hbnu.project.ergoutreecrypt.filestego.api.PayloadException;
 import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener;
 import hbnu.project.ergoutreecrypt.filestego.api.StegoEncodeOptions;
+import hbnu.project.ergoutreecrypt.filestego.api.StegoPreflight;
+import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierResult;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.AbstractCarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata;
@@ -70,6 +72,12 @@ public final class FileStegoCodec {
      * 适配器支持流式嵌入/提取时才允许处理。
      */
     private static final long LARGE_PAYLOAD_THRESHOLD_BYTES = 64L << 20;
+
+    /**
+     * 只读预检的载体大小上限（64 MiB）：非流式适配器（PDF/WAV/FLAC）读取元数据
+     * 会整读文件，超过此大小的文件跳过预检，避免移动端在「选择文件」阶段 OOM。
+     */
+    private static final long PREFLIGHT_MAX_BYTES = 64L << 20;
 
     /**
      * 将文件加密后嵌入到载体文件中。
@@ -377,6 +385,45 @@ public final class FileStegoCodec {
      */
     public boolean isStegoFile(final Path file) {
         return CarrierRegistry.detectByMagic(file).isPresent();
+    }
+
+    /**
+     * 只读预检隐写载体：读取元数据中的 Argon2 档位与 Payload 头的压缩标志。
+     *
+     * <p>供移动端在提取前调用（对齐卷路径的「加密前压缩」防护策略）：无需完整
+     * 提取 Payload，只读元数据（判定 KDF 档位）与 Payload 头前 10 字节（判定
+     * 「加密前压缩」标志）。非隐写文件或读取失败返回 {@link StegoPreflight#UNKNOWN}。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param password  密码（可为 null；文件隐写载体定位不依赖密码）
+     * @return 预检结果；无法判定时返回 {@link StegoPreflight#UNKNOWN}
+     */
+    public StegoPreflight preflight(final Path stegoFile, final byte[] password) {
+        try {
+            CarrierAdapter adapter = findAdapterForExtract(stegoFile);
+            if (!(adapter instanceof AbstractCarrierAdapter abstractAdapter)) {
+                return StegoPreflight.UNKNOWN;
+            }
+            // 非流式适配器（PDF/WAV/FLAC）读元数据会整读文件，大文件预检可能 OOM；
+            // 跳过预检，交由提取路径的 lowMemoryMode 护栏拒绝（与 extract 口径一致）
+            if (Files.size(stegoFile) > PREFLIGHT_MAX_BYTES
+                    && !adapter.supportsStreamingExtract()) {
+                return StegoPreflight.UNKNOWN;
+            }
+            CarrierMetadata meta = abstractAdapter.readMetadataOnly(stegoFile, password);
+            Integer memoryKib = meta.argon2Params() != null
+                    ? meta.argon2Params().memoryKiB() : null;
+            Boolean compressed = null;
+            try {
+                byte[] prefix = abstractAdapter.readPayloadPrefix(stegoFile, meta, 10);
+                compressed = PayloadCodec.isCompressedFlag(prefix);
+            } catch (CarrierException ignored) {
+                // 压缩标志读取失败不影响档位判定，compressed 保持 null
+            }
+            return new StegoPreflight(memoryKib, compressed);
+        } catch (Exception e) {
+            return StegoPreflight.UNKNOWN;
+        }
     }
 
     /**

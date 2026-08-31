@@ -16,6 +16,7 @@ import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import javafx.beans.value.ChangeListener;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -206,6 +207,18 @@ public class FileStegoController {
         // 选项影响容量估算
         fsParanoidCheck.selectedProperty().addListener((obs, old, val) -> updateCapacityDisplay());
         fsCompressCheck.selectedProperty().addListener((obs, old, val) -> updateCapacityDisplay());
+
+        // 加密前压缩：Zstandard 压缩的内容移动端无法提取，勾选时弹出提示
+        fsCompressCheck.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
+            if (isSelected) {
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.initOwner(window());
+                alert.setTitle(Messages.get("fileStego.option.compress"));
+                alert.setHeaderText(Messages.get("fileStego.option.compress.mobile.warning.header"));
+                alert.setContentText(Messages.get("fileStego.option.compress.mobile.warning"));
+                alert.showAndWait();
+            }
+        });
 
         // 加密前压缩：压缩级别滑条绑定
         fsCompressLevelRow.managedProperty().bind(fsCompressCheck.selectedProperty());

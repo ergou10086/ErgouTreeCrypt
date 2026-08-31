@@ -280,6 +280,71 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
         }
     }
 
+    /**
+     * 只读预检：定点读取并解析元数据（不读取 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param password  密码（ZIP 末尾追加方案不使用）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 定位或解析失败
+     */
+    @Override
+    public CarrierMetadata readMetadataOnly(final Path stegoFile, final byte[] password)
+            throws CarrierException {
+        try (RandomAccessFile raf = new RandomAccessFile(stegoFile.toFile(), "r")) {
+            long fileSize = Files.size(stegoFile);
+            long trailerStart = locateTrailerStart(stegoFile);
+            if (trailerStart < 0) {
+                throw new CarrierException("ZIP 中未找到隐写数据");
+            }
+            int metaProbe = (int) Math.min(META_PROBE_LEN, fileSize - trailerStart);
+            byte[] metaRaw = new byte[metaProbe];
+            raf.seek(trailerStart);
+            raf.readFully(metaRaw);
+            return CarrierMetadata.fromBytes(metaRaw);
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 ZIP 元数据失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 只读预检：定点读取 Payload 头前若干字节（不读取完整 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param meta      已解析的载体元数据（含 payloadSize）
+     * @param maxLen    最多读取的字节数
+     * @return Payload 头前 {@code min(maxLen, payloadSize)} 字节
+     * @throws CarrierException 定位或读取失败
+     */
+    @Override
+    public byte[] readPayloadPrefix(final Path stegoFile, final CarrierMetadata meta,
+                                    final int maxLen) throws CarrierException {
+        try (RandomAccessFile raf = new RandomAccessFile(stegoFile.toFile(), "r")) {
+            long fileSize = Files.size(stegoFile);
+            long trailerStart = locateTrailerStart(stegoFile);
+            if (trailerStart < 0) {
+                throw new CarrierException("ZIP 中未找到隐写数据");
+            }
+            int metaLen = CarrierMetadata.totalSize(meta.isParanoid(), meta.isStealth());
+            long payloadStart = trailerStart + metaLen;
+            long payloadSize = meta.payloadSize();
+            if (payloadSize < 0 || payloadStart + payloadSize > fileSize) {
+                throw new CarrierException("ZIP 隐写数据不完整：Payload 超出文件范围");
+            }
+            int n = (int) Math.min(maxLen, payloadSize);
+            byte[] out = new byte[n];
+            raf.seek(payloadStart);
+            raf.readFully(out);
+            return out;
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 ZIP Payload 前缀失败: " + e.getMessage(), e);
+        }
+    }
+
     // ---- 流式定位与校验 ----
 
     /**

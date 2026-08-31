@@ -1,6 +1,8 @@
 package hbnu.project.ergoutreecrypt.android.platform
 
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec
+import hbnu.project.ergoutreecrypt.filestego.api.StegoPreflight
 import hbnu.project.ergoutreecrypt.header.HeaderReader
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata
@@ -74,6 +76,25 @@ object KdfPreflight {
     fun peekMediaMetadata(path: Path): MediaMetadata? {
         return try {
             MediaCryptCodec().peekMetadata(path)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 只读探测文件隐写载体（STEG-V2），返回 KDF 档位与「加密前压缩」标志。
+     *
+     * <p>供隐写提取前预检使用：只读元数据（判定 Argon2 档位，1 GiB 档提示「较慢」）
+     * 与 Payload 头前 10 字节（判定是否用了「加密前压缩」，命中则移动端无法解压）。
+     * 非隐写文件、读取失败或无法判定时返回 {@code null}，由调用方按「无需提示」处理。
+     *
+     * @param path 待探测的隐写载体文件路径
+     * @return 预检结果；无法判定返回 null
+     */
+    fun peekStego(path: Path): StegoPreflight? {
+        return try {
+            val result = FileStegoCodec().preflight(path, null)
+            if (result === StegoPreflight.UNKNOWN) null else result
         } catch (_: Exception) {
             null
         }

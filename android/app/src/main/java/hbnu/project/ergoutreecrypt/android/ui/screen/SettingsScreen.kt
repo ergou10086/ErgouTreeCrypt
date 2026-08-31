@@ -540,7 +540,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "ErgouTreeCrypt Android v2.3.5\n核心版本：v2.15（对应桌面版 v2.3.5）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
+                text = "ErgouTreeCrypt Android v2.5.0\n核心版本：v2.15（对应桌面版 v2.5.0）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

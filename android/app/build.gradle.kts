@@ -37,8 +37,8 @@ val syncI18n by tasks.registering(Copy::class) {
 // ============================================================
 // 版本号：文件级变量，供 android 块和 APK 重命名任务共用
 // ============================================================
-val appVersionName = "2.3.5"
-val appVersionCode = 20305
+val appVersionName = "2.5.0"
+val appVersionCode = 20500
 
 // ============================================================
 // 签名配置：从 keystore.properties 读取（该文件已加入 .gitignore，不提交到仓库）
@@ -147,7 +147,7 @@ android {
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n) }
 
 // ============================================================
-// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.3.5-release.apk
+// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.5.0-release.apk
 // 原理：在所有 assemble 任务完成后，扫描 outputs/apk 目录并复制一份重命名后的 APK
 // ============================================================
 val renameApks by tasks.registering {

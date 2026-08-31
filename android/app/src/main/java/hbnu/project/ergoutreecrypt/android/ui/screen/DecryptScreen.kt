@@ -210,6 +210,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // 使用了「加密前压缩」的文件：移动端无 native 库无法解压，直接拒绝（null 表示可解密）
     var compressedNotice by remember { mutableStateOf<String?>(null) }
 
+    // 格式保持解密文件的 KDF 预检提示（null 表示无需提示；仅媒体文件）
+    var mediaKdfWarning by remember { mutableStateOf<String?>(null) }
+
     // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
     var defaultOutPath by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -306,6 +309,27 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 音视频格式保持解密 ----
     var mediaDecryptMode by remember { mutableStateOf(false) }
     var mediaNoiseMode by remember { mutableStateOf(true) } // 噪音文件检测，默认开启
+
+    // 格式保持解密的 KDF 预检：读取媒体内嵌元数据的 Argon2 参数，高内存档给出"较慢"提示。
+    // 仅在格式保持解密模式下、且所选文件为受支持媒体格式时执行；只读元数据、不派生密钥。
+    LaunchedEffect(inPath, mediaDecryptMode) {
+        mediaKdfWarning = null
+        if (!mediaDecryptMode) return@LaunchedEffect
+        val p = inPath ?: return@LaunchedEffect
+        val name = inName ?: return@LaunchedEffect
+        if (detectMediaFormat(name) == null) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            val meta = KdfPreflight.peekMediaMetadata(File(p).toPath())
+            if (meta == null) return@withContext
+            mediaKdfWarning = when {
+                !meta.hasArgon2Params() ->
+                    "该文件未记录移动端密钥参数（桌面端 1 GiB 档），密钥派生可能耗时较久，建议在桌面端用较小档位重新加密。"
+                meta.argon2MemoryKib() > (256 shl 10) ->
+                    "该文件密钥派生需约 ${meta.argon2MemoryKib() shr 10} MiB 内存，移动端处理较慢，建议在桌面端用较小档位重新加密。"
+                else -> null
+            }
+        }
+    }
 
     // ---- 密钥文件 ----
     var kfUris by remember { mutableStateOf(listOf<Uri>()) }
@@ -1159,6 +1183,16 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     Text("加密参数将从文件内嵌元数据自动读取，无需手动设置。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    // 桌面端/高内存档媒体文件的 KDF 预检提示（只读元数据，不派生）
+                    if (mediaKdfWarning != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            mediaKdfWarning!!,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     Spacer(Modifier.height(8.dp))
 

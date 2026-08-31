@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -169,6 +170,71 @@ class MediaCryptKdfInteropTest {
         Path dec = dir.resolve("dec.wav");
         codec.decrypt(enc, dec, PASSWORD);
         assertArrayEquals(Files.readAllBytes(in), Files.readAllBytes(dec));
+    }
+
+    // ==================== M2 peekMetadata 只读探测 ====================
+
+    /**
+     * M2：{@code peekMetadata} 只读探测记录档位的加密文件，能读回真实 Argon2 参数。
+     */
+    @Test
+    void m2_peekMetadataReadsRecordedParams(@TempDir Path dir) throws Exception {
+        Path in = MediaTestFixtures.write(dir, "in.wav",
+                MediaTestFixtures.buildWav(MediaTestFixtures.pseudoData(4096)));
+        Path enc = dir.resolve("enc.wav");
+
+        codec.encrypt(in, enc, PASSWORD, tier(Argon2DesktopMode.BALANCED));
+
+        MediaMetadata meta = codec.peekMetadata(enc);
+        assertNotNull(meta, "peekMetadata 应读取到加密元数据");
+        assertTrue(meta.hasArgon2Params());
+        assertEquals(256 << 10, meta.argon2MemoryKib());
+    }
+
+    /**
+     * M2：{@code peekMetadata} 读取旧格式（无参数覆写）加密文件返回 null 参数。
+     */
+    @Test
+    void m2_peekMetadataReadsOldFormatNoParams(@TempDir Path dir) throws Exception {
+        Path in = MediaTestFixtures.write(dir, "in.wav",
+                MediaTestFixtures.buildWav(MediaTestFixtures.pseudoData(2048)));
+        Path enc = dir.resolve("enc.wav");
+
+        codec.encrypt(in, enc, PASSWORD, MediaCryptOptions.defaults());
+
+        MediaMetadata meta = codec.peekMetadata(enc);
+        assertNotNull(meta, "peekMetadata 应读取到旧格式元数据");
+        assertFalse(meta.hasArgon2Params(), "旧格式无 Argon2 参数覆写");
+    }
+
+    /**
+     * M2：{@code peekMetadata} 对非本工具加密的普通媒体文件返回 null。
+     */
+    @Test
+    void m2_peekMetadataOnPlainMediaReturnsNull(@TempDir Path dir) throws Exception {
+        Path plain = MediaTestFixtures.write(dir, "plain.wav",
+                MediaTestFixtures.buildWav(MediaTestFixtures.pseudoData(2048)));
+        assertNull(codec.peekMetadata(plain), "普通媒体文件应返回 null");
+    }
+
+    /**
+     * M2：真实加密媒体文件的 {@code peekMetadata} 与解密侧读参数一致。
+     */
+    @Test
+    void m2_peekMetadataRealEncryptedMedia() throws Exception {
+        assumeTrue(Files.isDirectory(OUT), "缺少真实加密产物目录");
+        List<Path> encFiles;
+        try (var s = Files.list(OUT)) {
+            encFiles = s.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().contains(".enc."))
+                    .sorted().toList();
+        }
+        assumeTrue(!encFiles.isEmpty(), "无真实加密产物");
+        for (Path enc : encFiles) {
+            MediaMetadata meta = codec.peekMetadata(enc);
+            assertNotNull(meta, "真实加密产物应能读到元数据: " + enc.getFileName());
+            assertTrue(meta.hasArgon2Params(), "真实加密产物应记录参数: " + enc.getFileName());
+        }
     }
 
     // ==================== 真实数据跨端互通（mp3 / mp4） ====================

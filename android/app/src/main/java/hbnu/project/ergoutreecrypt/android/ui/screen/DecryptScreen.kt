@@ -564,7 +564,13 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
-            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "decrypted_${inName?.substringAfterLast('.') ?: "media"}")}"
+            // 格式保持解密输出：去掉 .enc 标记后加 .dec，保留原媒体扩展名（对齐桌面端）。
+            val base = inName?.substringBeforeLast('.', "") ?: ""
+            val ext = inName?.substringAfterLast('.', "") ?: ""
+            val stem = base.removeSuffix(".enc").removeSuffix(".ENC")
+            val mediaOutName = if (ext.isNotEmpty()) "$stem.dec.$ext" else "decrypted_media"
+            outName = mediaOutName
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(mediaOutName)}"
             mediaVm.startDecrypt(
                 input = inPath!!,
                 output = outFile,

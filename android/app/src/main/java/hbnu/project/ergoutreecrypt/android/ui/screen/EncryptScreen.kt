@@ -532,7 +532,14 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
-            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}")}"
+            // 格式保持加密输出必须保留原媒体扩展名（桌面端约定 base.enc.ext），
+            // 使两端解密时能按扩展名识别媒体格式。此前误用了通用加密的 .ergou 后缀，
+            // 导致加密产物既无法被播放器识别、也无法被两端格式保持解密。
+            val base = inName?.substringBeforeLast('.', "") ?: ""
+            val ext = inName?.substringAfterLast('.', "") ?: ""
+            val mediaOutName = if (ext.isNotEmpty()) "$base.enc.$ext" else "encrypted.media"
+            outName = mediaOutName
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(mediaOutName)}"
             val tier = argon2Mode.resolve()
             mediaVm.startEncrypt(
                 input = inPath!!,

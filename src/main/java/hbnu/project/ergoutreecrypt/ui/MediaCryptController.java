@@ -13,6 +13,7 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec;
@@ -582,9 +583,16 @@ public class MediaCryptController {
         Path output = Path.of(outPath);
 
         ProfileItem item = avProfileCombo.getValue();
+        // M1：透传桌面端 KDF 档位（默认均衡 256 MiB），使格式保持加密的媒体文件
+        // 记录实际 Argon2 参数，移动端可据此在堆内秒级解密。档位与 paranoid 标志
+        // 正交：paranoid 仅控制 Serpent/HMAC-SHA3，不影响 KDF 三元组。
+        Argon2DesktopMode kdf = SettingsManager.getKdfMode();
         MediaCryptOptions.Builder builder = MediaCryptOptions.builder()
                 .paranoid(avParanoidCheck.isSelected())
-                .storeIntegrity(avIntegrityCheck.isSelected());
+                .storeIntegrity(avIntegrityCheck.isSelected())
+                .argon2MemoryKib(kdf.getMemoryKib())
+                .argon2Passes(kdf.getPasses())
+                .argon2Threads(kdf.getThreads());
         if (item != null && item.profile != null) {
             // 仅当所选档位与文件格式匹配时才采用，否则回退默认。
             MediaFormat fmt = MediaFormat.fromExtension(input);

@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.ui.support;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogLevel;
 import hbnu.project.ergoutreecrypt.log.LogService;
+import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -106,6 +107,20 @@ public final class SettingsDialog {
         CheckBox defaultParanoid = checkBox(Messages.get("settings.defaultParanoid"));
         grid.add(defaultParanoid, 0, row, 2, 1);
         grid.add(infoIcon(Messages.get("settings.defaultParanoid.tip")), 2, row);
+        row++;
+
+        // KDF 强度档位（Phase B2）
+        ComboBox<String> kdfTierCombo = new ComboBox<>();
+        kdfTierCombo.getItems().setAll(
+                Messages.get(Argon2DesktopMode.BALANCED.getLabelKey()),
+                Messages.get(Argon2DesktopMode.STRONG.getLabelKey()),
+                Messages.get(Argon2DesktopMode.PARANOID.getLabelKey()));
+        kdfTierCombo.setPrefWidth(230);
+        HBox kdfTierBox = new HBox(8,
+                new Label(Messages.get("settings.kdfTier")), kdfTierCombo);
+        kdfTierBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(kdfTierBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.kdfTier.tip")), 2, row);
         row++;
 
         CheckBox defaultReedSolomon = checkBox(Messages.get("settings.defaultReedSolomon"));
@@ -229,6 +244,7 @@ public final class SettingsDialog {
         confirmOverwrite.setSelected(SettingsManager.isConfirmOverwrite());
         defaultPasswordless.setSelected(SettingsManager.isDefaultPasswordless());
         defaultParanoid.setSelected(SettingsManager.isDefaultParanoid());
+        kdfTierCombo.setValue(Messages.get(SettingsManager.getKdfMode().getLabelKey()));
         defaultReedSolomon.setSelected(SettingsManager.isDefaultReedSolomon());
         defaultFormat.setValue(SettingsManager.getDefaultCompressFormat());
         defaultSplitSize.getValueFactory().setValue(SettingsManager.getDefaultSplitSize());
@@ -248,7 +264,9 @@ public final class SettingsDialog {
 
         // ---- 监听即时写入 ----
         themeCombo.valueProperty().addListener((o, a, b) -> {
-            if (b == null) return;
+            if (b == null) {
+                return;
+            }
             ThemeManager.Mode m;
             if (b.equals(Messages.get("theme.dark"))) {
                 m = ThemeManager.Mode.DARK;
@@ -271,6 +289,17 @@ public final class SettingsDialog {
                 SettingsManager.setDefaultPasswordless(b));
         defaultParanoid.selectedProperty().addListener((o, a, b) ->
                 SettingsManager.setDefaultParanoid(b));
+        kdfTierCombo.valueProperty().addListener((o, a, b) -> {
+            if (b == null) {
+                return;
+            }
+            for (Argon2DesktopMode mode : Argon2DesktopMode.values()) {
+                if (Messages.get(mode.getLabelKey()).equals(b)) {
+                    SettingsManager.setKdfMode(mode);
+                    return;
+                }
+            }
+        });
         defaultReedSolomon.selectedProperty().addListener((o, a, b) ->
                 SettingsManager.setDefaultReedSolomon(b));
         defaultFormat.valueProperty().addListener((o, a, b) ->
@@ -352,8 +381,12 @@ public final class SettingsDialog {
     }
 
     private static ThemeManager.Mode parseMode(String s) {
-        if ("DARK".equalsIgnoreCase(s)) return ThemeManager.Mode.DARK;
-        if ("LIGHT".equalsIgnoreCase(s)) return ThemeManager.Mode.LIGHT;
+        if ("DARK".equalsIgnoreCase(s)) {
+            return ThemeManager.Mode.DARK;
+        }
+        if ("LIGHT".equalsIgnoreCase(s)) {
+            return ThemeManager.Mode.LIGHT;
+        }
         return ThemeManager.Mode.SYSTEM;
     }
 }

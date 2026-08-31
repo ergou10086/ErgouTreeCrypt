@@ -1,12 +1,15 @@
 package hbnu.project.ergoutreecrypt.ui;
 
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec;
+import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierRegistry;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
+import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
 import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressListener;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
@@ -469,6 +472,14 @@ public class FileStegoController {
         }
     }
 
+    /**
+     * 执行「隐藏」操作：校验载体与待藏文件、检查容量、收集高级选项，
+     * 再委托 {@link FileStegoCodec#hide} 后台嵌入。
+     *
+     * <p>构建 {@link FileStegoOptions} 时会把设置中的 {@link Argon2DesktopMode}
+     * 档位透传为 {@link Argon2Params}（Phase S1），该参数随 {@code CarrierMetadata}
+     * 一并写入产物，提取端据此派生密钥，与当前设备的档位设置无关。
+     */
     private void doHide() {
         if (carrierFile == null) {
             toast.info(Messages.get("fileStego.toast.no.carrier"));
@@ -523,6 +534,9 @@ public class FileStegoController {
             return;
         }
 
+        // KDF 档位（Phase S1）：透传设置中的 Argon2 档位，参数随载体元数据一并烘焙，
+        // 使新隐写文件在移动端按记录的低内存参数堆内秒级提取
+        Argon2DesktopMode kdf = SettingsManager.getKdfMode();
         FileStegoOptions options = FileStegoOptions.builder()
                 .paranoid(fsParanoidCheck.isSelected())
                 .compressed(fsCompressCheck.isSelected())
@@ -533,6 +547,8 @@ public class FileStegoController {
                 .targetSizeBytes(targetSizeBytes)
                 .bruteForceGuard(fsBruteForceCheck.isSelected())
                 .preferChunk(fsEmbedChunkRadio.isSelected())
+                .argon2Params(new Argon2Params(
+                        kdf.getMemoryKib(), kdf.getPasses(), kdf.getThreads()))
                 .build();
 
         byte[] pwd = getPasswordBytes();

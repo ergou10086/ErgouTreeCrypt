@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
+import hbnu.project.ergoutreecrypt.android.platform.FileNameSanitizer
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
@@ -347,9 +348,11 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 name.let { n ->
                     outName = when {
-                        n.endsWith(".ergou", true) -> n.removeSuffix(".ergou").removeSuffix(".ERGOU")
-                        n.endsWith(".pcv", true) -> n.removeSuffix(".pcv").removeSuffix(".PCV")
-                        else -> "$n.decrypted"
+                        n.endsWith(".ergou", true) ->
+                            FileNameSanitizer.sanitize(n.removeSuffix(".ergou").removeSuffix(".ERGOU"))
+                        n.endsWith(".pcv", true) ->
+                            FileNameSanitizer.sanitize(n.removeSuffix(".pcv").removeSuffix(".PCV"))
+                        else -> FileNameSanitizer.sanitize("$n.decrypted")
                     }
                 }
             } finally {
@@ -386,7 +389,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
-                outName = "${inName}_decrypted"
+                outName = "${FileNameSanitizer.sanitize(inName ?: "folder")}_decrypted"
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (folderPickJob === myJob) {
@@ -526,7 +529,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
             val req = DecryptRequest()
             req.inputFile = inPath
-            val outFile = "$writeDir/${outName ?: "decrypted_output"}"
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "decrypted_output")}"
             req.outputFile = outFile
             req.password = password
             req.archivePassword = archivePassword.ifEmpty { null }
@@ -561,7 +564,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
-            val outFile = "$writeDir/${outName ?: "decrypted_${inName?.substringAfterLast('.') ?: "media"}"}"
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "decrypted_${inName?.substringAfterLast('.') ?: "media"}")}"
             mediaVm.startDecrypt(
                 input = inPath!!,
                 output = outFile,

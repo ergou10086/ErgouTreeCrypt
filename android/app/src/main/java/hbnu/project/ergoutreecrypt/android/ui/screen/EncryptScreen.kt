@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
+import hbnu.project.ergoutreecrypt.android.platform.FileNameSanitizer
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
@@ -295,7 +296,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
-                outName = inName?.let { "$it.ergou" }
+                outName = inName?.let { "${FileNameSanitizer.sanitize(it)}.ergou" }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (filePickJob === myJob) {
@@ -330,7 +331,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
-                outName = "$inName.ergou"
+                outName = "${FileNameSanitizer.sanitize(inName ?: "folder")}.ergou"
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (folderPickJob === myJob) {
@@ -484,7 +485,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
 
             val req = EncryptRequest()
             req.inputFile = inPath
-            val outFile = "$writeDir/${outName ?: "encrypted.ergou"}"
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "encrypted.ergou")}"
             req.outputFile = outFile
             req.password = password
             req.setReedSolomon(reedSolomon)
@@ -531,7 +532,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
-            val outFile = "$writeDir/${outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}"}"
+            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "encrypted.${inName?.substringAfterLast('.') ?: "media"}")}"
             val tier = argon2Mode.resolve()
             mediaVm.startEncrypt(
                 input = inPath!!,

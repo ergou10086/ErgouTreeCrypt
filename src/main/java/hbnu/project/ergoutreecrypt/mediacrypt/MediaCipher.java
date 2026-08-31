@@ -77,4 +77,22 @@ public interface MediaCipher {
             throws MediaCryptException, IOException {
         return false;
     }
+
+    /**
+     * 只读探测文件的加密元数据
+     *
+     * <p>供移动端解密前预检使用：读取载体（WAV {@code EgTc} chunk / MP3 尾块 /
+     * MP4 {@code uuid} box）中内嵌的 {@link MediaMetadata}，据此判断 Argon2 参数
+     * 档位。与 {@link #decrypt} 不同，本方法不会把去元数据后的容器写到磁盘。
+     *
+     * <p>非本工具加密的文件返回 {@code null}；默认实现返回 {@code null}（子类覆写）。
+     *
+     * @param input 待探测的媒体文件
+     * @return 解析出的元数据，非本工具加密返回 {@code null}
+     * @throws MediaCryptException 容器非法或元数据损坏
+     * @throws IOException         读写错误
+     */
+    default MediaMetadata peekMetadata(Path input) throws MediaCryptException, IOException {
+        return null;
+    }
 }

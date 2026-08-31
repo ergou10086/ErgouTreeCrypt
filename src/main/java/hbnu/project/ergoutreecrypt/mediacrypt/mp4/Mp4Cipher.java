@@ -108,4 +108,18 @@ public final class Mp4Cipher extends AbstractMediaCipher {
             return false;
         }
     }
+
+    @Override
+    public MediaMetadata peekMetadata(Path input) throws MediaCryptException, IOException {
+        BoxParser parser = BoxParser.parse(input);
+        Mp4Box uuidBox = parser.findMetaUuidBox(input);
+        if (uuidBox == null) {
+            // 回退：兼容 mdat 使用 size==0 的加密文件（uuid 被 mdat 吞并）。
+            uuidBox = BoxParser.scanForMetaUuidBox(input);
+        }
+        if (uuidBox == null) {
+            return null;
+        }
+        return MediaMetadata.fromBytes(Mp4UuidMetadata.readMetadata(input, uuidBox));
+    }
 }

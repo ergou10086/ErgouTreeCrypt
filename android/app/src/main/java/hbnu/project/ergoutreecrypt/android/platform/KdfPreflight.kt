@@ -2,6 +2,8 @@ package hbnu.project.ergoutreecrypt.android.platform
 
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.header.HeaderReader
+import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec
+import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,6 +56,24 @@ object KdfPreflight {
                 val reader = HeaderReader(input, RsCodecs())
                 reader.readHeader().header.isCompressed
             }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 只读探测加密媒体文件内嵌的元数据
+     *
+     * <p>供格式保持解密前预检使用：按扩展名嗅探格式，读取 WAV/MP3/MP4 载体中内嵌的
+     * {@link MediaMetadata}，据此判断 Argon2 档位。非受支持格式、非本工具加密或读取
+     * 失败一律返回 {@code null}。
+     *
+     * @param path 待探测的媒体文件路径
+     * @return 解析出的元数据；非本工具加密或读取失败返回 null
+     */
+    fun peekMediaMetadata(path: Path): MediaMetadata? {
+        return try {
+            MediaCryptCodec().peekMetadata(path)
         } catch (_: Exception) {
             null
         }

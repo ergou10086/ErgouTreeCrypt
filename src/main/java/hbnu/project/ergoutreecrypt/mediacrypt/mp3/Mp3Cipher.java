@@ -82,6 +82,14 @@ public final class Mp3Cipher extends AbstractMediaCipher {
         return Mp3MetadataTrailer.hasTrailer(input);
     }
 
+    @Override
+    public MediaMetadata peekMetadata(Path input) throws MediaCryptException, IOException {
+        if (!Mp3MetadataTrailer.hasTrailer(input)) {
+            return null;
+        }
+        return MediaMetadata.fromBytes(Mp3MetadataTrailer.readMetadata(input));
+    }
+
     /**
      * 按档位收集待加密区间。
      */

@@ -194,6 +194,19 @@ public final class WavCipher extends AbstractMediaCipher {
         }
     }
 
+    @Override
+    public MediaMetadata peekMetadata(Path input) throws MediaCryptException, IOException {
+        WavParser parser = WavParser.parse(input);
+        WavChunk meta = parser.findChunk(WavParser.META_CHUNK_ID);
+        if (meta == null) {
+            return null;
+        }
+        try (FileChannel ch = FileChannel.open(input, StandardOpenOption.READ)) {
+            byte[] metaBytes = readBytes(ch, meta.payloadOffset(), (int) meta.payloadSize());
+            return MediaMetadata.fromBytes(metaBytes);
+        }
+    }
+
     /**
      * 在文件末尾追加 {@code EgTc} chunk（8 字节头 + payload + 奇数填充）。
      *

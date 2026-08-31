@@ -108,6 +108,27 @@ public final class MediaCryptCodec {
         return MediaFormat.fromExtension(input) != null;
     }
 
+    /**
+     * 只读探测加密媒体文件的元数据
+     *
+     * <p>按扩展名嗅探格式后委托对应 {@link MediaCipher#peekMetadata}；非受支持格式、
+     * 非本工具加密或读取失败一律返回 {@code null}。供移动端解密前预检判断 Argon2 档位。
+     *
+     * @param input 待探测的媒体文件
+     * @return 解析出的元数据，无法读取或非本工具加密返回 {@code null}
+     */
+    public MediaMetadata peekMetadata(Path input) {
+        MediaFormat format = MediaFormat.fromExtension(input);
+        if (format == null) {
+            return null;
+        }
+        try {
+            return ciphers.get(format).peekMetadata(input);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private MediaCipher resolve(Path input) throws MediaCryptException {
         MediaFormat format = MediaFormat.fromExtension(input);
         if (format == null) {

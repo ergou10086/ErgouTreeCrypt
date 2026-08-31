@@ -273,6 +273,9 @@ public final class PayloadCodec {
         boolean hasIntegrity = (flags & FLAG_HAS_INTEGRITY) != 0;
         boolean isParanoid = (flags & FLAG_PARANOID) != 0;
         boolean isCompressed = (flags & FLAG_COMPRESSED) != 0;
+        if (isCompressed && !ZstdCompressor.isAvailable()) {
+            throw new PayloadException("该文件使用了『加密前压缩』（Zstandard），" + "当前设备无法解压，请在桌面端提取。");
+        }
 
         // 步骤 4：读取 Metadata
         int metaLength = Short.toUnsignedInt(buf.getShort());
@@ -611,6 +614,10 @@ public final class PayloadCodec {
             boolean hasIntegrity = (flags & FLAG_HAS_INTEGRITY) != 0;
             boolean isCompressed = (flags & FLAG_COMPRESSED) != 0;
             int metaLength = Short.toUnsignedInt(fixed.getShort());
+            if (isCompressed && !ZstdCompressor.isAvailable()) {
+                throw new PayloadException("该文件使用了『加密前压缩』（Zstandard），"
+                        + "当前设备无法解压，请在桌面端提取。");
+            }
             if (metaLength < 0 || metaLength > fileSize - HEADER_FIXED_SIZE) {
                 throw new PayloadException("Metadata 长度异常: " + metaLength);
             }
@@ -699,6 +706,31 @@ public final class PayloadCodec {
     }
 
     // ---- 编码 ----
+
+    /**
+     * 从 Payload 头的前缀字节解析「加密前压缩」标志。
+     *
+     * <p>供只读预检使用：调用方只需提供 Payload 头的前 {@link #HEADER_FIXED_SIZE}
+     * 字节（MAGIC + VERSION + FLAGS + META_LENGTH），无需解析完整 Payload。字节
+     * 不足或魔数不匹配（非 STEG-V2）时返回 false，由调用方按「非隐写文件」处理。
+     *
+     * @param payloadPrefix Payload 头前缀字节（至少 10 字节）
+     * @return true 表示该 Payload 使用了「加密前压缩」
+     */
+    public static boolean isCompressedFlag(final byte[] payloadPrefix) {
+        if (payloadPrefix == null || payloadPrefix.length < HEADER_FIXED_SIZE) {
+            return false;
+        }
+        ByteBuffer bb = ByteBuffer.wrap(payloadPrefix).order(ByteOrder.BIG_ENDIAN);
+        byte[] magic = new byte[MAGIC_LEN];
+        bb.get(magic);
+        if (!Arrays.equals(magic, MAGIC)) {
+            return false;
+        }
+        bb.getShort(); // 跳过 VERSION
+        int flags = Short.toUnsignedInt(bb.getShort());
+        return (flags & FLAG_COMPRESSED) != 0;
+    }
 
     /**
      * 仅读取 Payload Header（不解密密文），用于快速格式识别和元数据查看。

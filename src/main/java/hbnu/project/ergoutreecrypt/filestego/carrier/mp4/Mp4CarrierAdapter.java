@@ -293,6 +293,83 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
+     * 只读预检：定点读取并解析元数据（不读取 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param password  密码（MP4 uuid box 方案不使用）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 定位或解析失败
+     */
+    @Override
+    public CarrierMetadata readMetadataOnly(final Path stegoFile, final byte[] password)
+            throws CarrierException {
+        try {
+            Mp4Box box = findStegUuidBox(stegoFile);
+            if (box == null) {
+                throw new CarrierException("MP4 中未找到隐写数据（uuid/EGTC-STEGO-MP401）");
+            }
+            if (box.payloadSize() < STEG_UUID.length) {
+                throw new CarrierException("MP4 隐写 uuid box 过小");
+            }
+            long metaOffset = box.payloadOffset() + STEG_UUID.length;
+            long combinedLen = box.payloadSize() - STEG_UUID.length;
+            try (FileChannel ch = FileChannel.open(stegoFile, StandardOpenOption.READ)) {
+                int metaProbe = (int) Math.min(META_PROBE_LEN, combinedLen);
+                ByteBuffer metaRaw = readAt(ch, metaOffset, metaProbe);
+                byte[] metaBytes = new byte[metaProbe];
+                metaRaw.get(metaBytes);
+                return CarrierMetadata.fromBytes(metaBytes);
+            }
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 MP4 元数据失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 只读预检：定点读取 Payload 头前若干字节（不读取完整 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param meta      已解析的载体元数据（含 payloadSize）
+     * @param maxLen    最多读取的字节数
+     * @return Payload 头前 {@code min(maxLen, payloadSize)} 字节
+     * @throws CarrierException 定位或读取失败
+     */
+    @Override
+    public byte[] readPayloadPrefix(final Path stegoFile, final CarrierMetadata meta,
+                                    final int maxLen) throws CarrierException {
+        try {
+            Mp4Box box = findStegUuidBox(stegoFile);
+            if (box == null) {
+                throw new CarrierException("MP4 中未找到隐写数据（uuid/EGTC-STEGO-MP401）");
+            }
+            if (box.payloadSize() < STEG_UUID.length) {
+                throw new CarrierException("MP4 隐写 uuid box 过小");
+            }
+            long metaOffset = box.payloadOffset() + STEG_UUID.length;
+            long combinedLen = box.payloadSize() - STEG_UUID.length;
+            try (FileChannel ch = FileChannel.open(stegoFile, StandardOpenOption.READ)) {
+                int metaLen = CarrierMetadata.totalSize(meta.isParanoid(), meta.isStealth());
+                long payloadStart = metaOffset + metaLen;
+                long payloadSize = meta.payloadSize();
+                if (payloadSize < 0 || metaLen + payloadSize > combinedLen) {
+                    throw new CarrierException("MP4 隐写数据不完整：Payload 超出 box 范围");
+                }
+                int n = (int) Math.min(maxLen, payloadSize);
+                ByteBuffer buf = readAt(ch, payloadStart, n);
+                byte[] out = new byte[n];
+                buf.get(out);
+                return out;
+            }
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 MP4 Payload 前缀失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * 从隐写 MP4 中读取 uuid box 内的组合块。
      *
      * @param stegoFile 隐写 MP4 文件

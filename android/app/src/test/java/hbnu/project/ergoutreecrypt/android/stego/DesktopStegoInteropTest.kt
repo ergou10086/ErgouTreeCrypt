@@ -125,6 +125,31 @@ class DesktopStegoInteropTest {
     }
 
     /**
+     * 桌面端「加密前压缩」产物：移动端侧的预检应识别 `compressed == true`（S2 生效证据）。
+     *
+     * <p>移动端 `KdfPreflight.peekStego` 据此在点提取按钮前拒绝，避免落到解压阶段
+     * 因 zstd-jni 无 Android ABI 崩溃。
+     */
+    @Test
+    fun desktopCompressedArtifact_preflightDetectsCompressed() {
+        val dir = artifactDir()
+        assumeTrue("缺少桌面端隐写产物目录", dir != null)
+        val compressed = Files.list(dir).use { s ->
+            s.filter { it.isRegularFile() }
+                .filter { it.name.startsWith(COMPRESSED_PREFIX) }
+                .sorted()
+                .toList()
+        }
+        assumeTrue("缺少桌面端压缩产物（先跑 mvn -Dtest=FileStegoKdfInteropTest）", compressed.isNotEmpty())
+
+        for (stego in compressed) {
+            val preflight = codec.preflight(stego, null)
+            assertNotNull("${stego.name} 应能预检到元数据", preflight)
+            assertEquals("${stego.name} 应被识别为压缩", true, preflight.compressed)
+        }
+    }
+
+    /**
      * 构建移动端提取选项，与 `StegoViewModel.extract` 的组装保持一致。
      *
      * @return 移动端提取选项
@@ -165,6 +190,9 @@ class DesktopStegoInteropTest {
 
         /** 桌面端高级选项产物的命名前缀。 */
         private const val ADV_PREFIX = "adv_desktop_"
+
+        /** 桌面端「加密前压缩」产物的命名前缀（Phase S2）。 */
+        private const val COMPRESSED_PREFIX = "s2_desktop_compressed_"
 
         /** 源文件缓存子目录名。 */
         private const val SECRETS_DIR = "_secrets"

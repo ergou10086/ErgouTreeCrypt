@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
+import hbnu.project.ergoutreecrypt.filestego.api.StegoPreflight;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.AbstractCarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata;
@@ -83,6 +85,12 @@ class FileStegoKdfInteropTest {
      * 使六种载体都能进入同一矩阵。
      */
     private static final long SECRET_SLICE_BYTES = 12L << 20;
+
+    /**
+     * 真实源文件整文件使用的上限（14 MiB）：小于 FLAC 载体 16 MiB 容量，
+     * 命中的小体积真实文件（如 mp3）直接整文件使用，覆盖真实文件名往返。
+     */
+    private static final long WHOLE_FILE_MAX_BYTES = 14L << 20;
 
     /** 大文件互通用例的隐写产物上限（超过则跳过元数据探针，避免重复读写整份 Payload）。 */
     private static final long META_PROBE_LIMIT_BYTES = 128L << 20;
@@ -369,6 +377,39 @@ class FileStegoKdfInteropTest {
                 desktopExtractOptions(), MOBILE_BALANCED);
     }
 
+    /**
+     * 桌面端「加密前压缩」真实数据往返（Phase S2）：压缩文件在桌面端（zstd 可用）
+     * 仍可提取逐字节一致；预检应识别 {@code compressed == true}（移动端据此拒绝）。
+     *
+     * <p>用真实 mp3 整文件 + 真实 ZIP 载体 + 移动省电档（64 MiB）压缩隐写，
+     * 桌面端提取；产物留在 {@code test_output/stego} 供移动端预检复核。
+     *
+     * @throws Exception 隐写或提取失败
+     */
+    @Test
+    void realCarriers_compressedRoundtripOnDesktop() throws Exception {
+        assumeTrue(ZstdCompressor.isAvailable(), "桌面端应可用 zstd native");
+        Path secret = prepareRealSecret();
+        assumeTrue(secret != null, "缺少真实秘密文件（temp/test/原内容）");
+        Path zip = CARRIERS.resolve(findCarrierName(".zip"));
+        assumeTrue(Files.isRegularFile(zip), "缺少 ZIP 真实载体");
+
+        interop(zip, secret, "s2_desktop_compressed",
+                FileStegoOptions.builder()
+                        .storeIntegrity(true)
+                        .compressed(true)
+                        .compressionLevel(3)
+                        .argon2Params(MOBILE_LIGHT)
+                        .build(),
+                desktopExtractOptions(), MOBILE_LIGHT);
+
+        // 断言预检能识别压缩标志（移动端据此拒绝，而非崩溃）
+        Path stego = OUT.resolve("s2_desktop_compressed_" + stem(zip) + extension(zip));
+        StegoPreflight p = codec.preflight(stego, PASSWORD);
+        assertNotNull(p, "压缩产物应能预检到元数据");
+        assertEquals(Boolean.TRUE, p.compressed(), "压缩产物预检应识别 compressed");
+    }
+
     // ==================== 私有辅助 ====================
 
     /**
@@ -514,6 +555,15 @@ class FileStegoKdfInteropTest {
             return null;
         }
         Files.createDirectories(SECRETS);
+        // 小体积真实文件（≤ 14 MiB，可进 FLAC）直接整文件使用，覆盖真实文件名往返
+        if (Files.size(src) <= WHOLE_FILE_MAX_BYTES) {
+            Path whole = SECRETS.resolve(src.getFileName().toString());
+            if (Files.isRegularFile(whole) && Files.size(whole) == Files.size(src)) {
+                return whole;
+            }
+            Files.copy(src, whole, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return whole;
+        }
         String name = src.getFileName().toString();
         int dot = name.lastIndexOf('.');
         String base = dot >= 0 ? name.substring(0, dot) : name;

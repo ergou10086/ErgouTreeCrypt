@@ -62,6 +62,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
@@ -91,6 +92,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Paths
 
 /**
  * 隐写提取页面。
@@ -135,6 +137,10 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     var stegoPath by remember { mutableStateOf<String?>(null) }
     var stegoName by remember { mutableStateOf<String?>(null) }
     var stegoSize by remember { mutableStateOf<Long?>(null) }
+
+    // ---- 隐写预检结果（KDF 档位 / 加密前压缩） ----
+    var stegoCompressed by remember { mutableStateOf(false) }
+    var stegoSlowKdf by remember { mutableStateOf(false) }
 
     // ---- 隐写文件选择加载状态 ----
     var stegoLoading by remember { mutableStateOf(false) }
@@ -189,6 +195,14 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     stegoName = name
                     stegoPath = path
                     stegoSize = size
+                    // 只读预检：识别桌面端 1 GiB 档（较慢）与「加密前压缩」（移动端无法解压）
+                    val preflight = withContext(Dispatchers.IO) {
+                        KdfPreflight.peekStego(Paths.get(path))
+                    }
+                    stegoCompressed = preflight?.compressed == true
+                    stegoSlowKdf = preflight != null &&
+                            (preflight.argon2MemoryKib == null ||
+                                    preflight.argon2MemoryKib!! > (256 shl 10))
                 } else {
                     // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
@@ -240,6 +254,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasFile = stegoPath != null
     val canStart = hasFile && password.isNotEmpty() && !isRunning && !stegoLoading && !busy
+            && !stegoCompressed
 
     // ---- 开始提取 ----
     fun doExtract() {
@@ -487,8 +502,58 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     onRemove = {
                         stegoUri = null; stegoPath = null
                         stegoName = null; stegoSize = null
+                        stegoCompressed = false; stegoSlowKdf = false
                     }
                 )
+            }
+
+            // 预检警告：加密前压缩（移动端无法解压，禁用提取）/ 1 GiB 档（较慢）
+            if (stegoCompressed) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Delete, null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "该文件使用了「加密前压缩」（Zstandard），移动端无法提取，请在桌面端提取。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            } else if (stegoSlowKdf) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "该文件使用 1 GiB 密钥派生参数，提取较慢（约十几秒）。建议在桌面端用较小档位重新隐写。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

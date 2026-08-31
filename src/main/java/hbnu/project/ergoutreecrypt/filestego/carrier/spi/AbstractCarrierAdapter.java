@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 /**
  * Carrier Adapter 模板基类——提供嵌入/提取的通用流程骨架。
@@ -142,6 +143,44 @@ public abstract class AbstractCarrierAdapter implements CarrierAdapter {
 
     /** 默认回退提取的写出分块大小（256 KiB）。 */
     private static final int WRITE_CHUNK_BYTES = 1 << 18;
+
+    // ---- 只读预检（供移动端在提取前判定 KDF 档位与压缩标志） ----
+
+    /**
+     * 只读取并解析载体元数据，不读取 Payload。
+     *
+     * <p>供移动端提取前预检使用：只需知道 {@code CarrierMetadata} 中的 Argon2
+     * 参数档位，无需提取整个 Payload。默认实现直接委托 {@link #doExtract}。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param password  密码（可为 null；文件隐写载体的定位不依赖密码）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 提取或解析失败
+     */
+    public CarrierMetadata readMetadataOnly(final Path stegoFile, final byte[] password)
+            throws CarrierException {
+        return doExtract(stegoFile, password);
+    }
+
+    /**
+     * 只读取 Payload 头的前若干字节，不读取完整 Payload。
+     *
+     * <p>供移动端提取前预检使用：只需 Payload 头的前 10 字节即可判定「加密前压缩」
+     * 标志，无需提取整个 Payload。默认实现读取完整 Payload 后截断；支持大文件的
+     * 适配器应覆写为定点读取，避免把大 Payload 全量读入内存。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param meta      已解析的载体元数据（含 payloadSize）
+     * @param maxLen    最多读取的字节数
+     * @return Payload 头的前 {@code min(maxLen, payloadSize)} 字节
+     * @throws CarrierException 读取失败
+     */
+    public byte[] readPayloadPrefix(final Path stegoFile, final CarrierMetadata meta,
+                                    final int maxLen) throws CarrierException {
+        byte[] payload = readPayload(stegoFile, meta);
+        int n = Math.min(maxLen, payload.length);
+        return Arrays.copyOf(payload, n);
+    }
 
     // ---- 子类必须实现 ----
 

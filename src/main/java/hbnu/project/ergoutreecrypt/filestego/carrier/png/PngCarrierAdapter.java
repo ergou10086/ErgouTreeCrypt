@@ -327,11 +327,104 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
         }
     }
 
+    /**
+     * 只读预检：定点读取并解析元数据（不读取 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param password  密码（PNG 方案不使用）
+     * @return 解析后的载体元数据
+     * @throws CarrierException 定位或解析失败
+     */
+    @Override
+    public CarrierMetadata readMetadataOnly(final Path stegoFile, final byte[] password)
+            throws CarrierException {
+        try (FileChannel ch = FileChannel.open(stegoFile, StandardOpenOption.READ)) {
+            long fileSize = ch.size();
+            if (fileSize < PNG_SIGNATURE.length) {
+                throw new CarrierException("不是有效的 PNG 文件（签名不匹配）");
+            }
+            ByteBuffer sigBuf = readAt(ch, 0, PNG_SIGNATURE.length);
+            byte[] sig = new byte[PNG_SIGNATURE.length];
+            sigBuf.get(sig);
+            if (!Arrays.equals(sig, PNG_SIGNATURE)) {
+                throw new CarrierException("不是有效的 PNG 文件（签名不匹配）");
+            }
+            long dataStart;
+            long dataLen;
+            long[] stegData = findStegChunkRange(ch, fileSize);
+            if (stegData != null) {
+                dataStart = stegData[0];
+                dataLen = stegData[1];
+            } else {
+                long iendStart = locateIendStart(ch, fileSize);
+                dataStart = iendStart + CHUNK_OVERHEAD;
+                dataLen = fileSize - dataStart;
+                if (dataLen < CarrierMetadata.MAGIC_LEN) {
+                    throw new CarrierException("PNG 中未找到隐写数据");
+                }
+            }
+            int metaProbe = (int) Math.min(META_PROBE_LEN, dataLen);
+            ByteBuffer metaRaw = readAt(ch, dataStart, metaProbe);
+            byte[] metaBytes = new byte[metaProbe];
+            metaRaw.get(metaBytes);
+            if (!CarrierMetadata.startsWithMagic(metaBytes)) {
+                throw new CarrierException("PNG 隐写数据不是有效的隐写载荷");
+            }
+            return CarrierMetadata.fromBytes(metaBytes);
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 PNG 元数据失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 只读预检：定点读取 Payload 头前若干字节（不读取完整 Payload）。
+     *
+     * @param stegoFile 隐写载体文件
+     * @param meta      已解析的载体元数据（含 payloadSize）
+     * @param maxLen    最多读取的字节数
+     * @return Payload 头前 {@code min(maxLen, payloadSize)} 字节
+     * @throws CarrierException 定位或读取失败
+     */
+    @Override
+    public byte[] readPayloadPrefix(final Path stegoFile, final CarrierMetadata meta,
+                                    final int maxLen) throws CarrierException {
+        try (FileChannel ch = FileChannel.open(stegoFile, StandardOpenOption.READ)) {
+            long fileSize = ch.size();
+            long dataStart;
+            long dataLen;
+            long[] stegData = findStegChunkRange(ch, fileSize);
+            if (stegData != null) {
+                dataStart = stegData[0];
+                dataLen = stegData[1];
+            } else {
+                long iendStart = locateIendStart(ch, fileSize);
+                dataStart = iendStart + CHUNK_OVERHEAD;
+                dataLen = fileSize - dataStart;
+            }
+            int metaLen = CarrierMetadata.totalSize(meta.isParanoid(), meta.isStealth());
+            long payloadStart = dataStart + metaLen;
+            long payloadSize = meta.payloadSize();
+            if (payloadSize < 0 || metaLen + payloadSize > dataLen) {
+                throw new CarrierException("PNG 隐写数据不完整：Payload 超出范围");
+            }
+            int n = (int) Math.min(maxLen, payloadSize);
+            ByteBuffer buf = readAt(ch, payloadStart, n);
+            byte[] out = new byte[n];
+            buf.get(out);
+            return out;
+        } catch (CarrierException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new CarrierException("读取 PNG Payload 前缀失败: " + e.getMessage(), e);
+        }
+    }
+
     // ---- 流式 PNG 结构走查与写入 ----
 
     /**
-     * 流式方案 A 嵌入：复制 IEND 前内容，插入 stEG chunk（head + 分块 data +
-     * 流式 CRC 尾），再复制 IEND 及其后内容。
+     * 流式方案 A 嵌入：复制 IEND 前内容，插入 stEG chunk（head + 分块 data + 流式 CRC 尾），再复制 IEND 及其后内容。
      *
      * @param carrier     原始载体文件
      * @param iendStart   IEND chunk 起始偏移

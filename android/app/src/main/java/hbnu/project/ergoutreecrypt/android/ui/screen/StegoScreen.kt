@@ -115,7 +115,6 @@ import java.io.File
 private val TIP_STEGO_INTEGRITY = "存储原文的完整性校验码（MAC），提取后自动验证文件是否被篡改。"
 private val TIP_STEGO_STEALTH = "使用 HMAC 派生魔数替代固定魔数，避免通过魔数字符串检测隐写数据。"
 private val TIP_STEGO_OBFUSCATE = "在输出文件末尾追加随机字节，使文件大小达到指定目标，增加检测难度。"
-private val TIP_STEGO_PREFER_CHUNK = "对于 PNG 载体：优先使用 stEG 自定义块嵌入（更隐蔽）；关闭则在 IEND 后直接追加。"
 
 // ============================================================
 // StegoScreen — 统一隐写（隐藏）页面
@@ -190,7 +189,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var stealth by remember { mutableStateOf(false) }
     var obfuscateSize by remember { mutableStateOf(false) }
     var targetSizeMB by remember { mutableStateOf(10) }
-    var preferChunk by remember { mutableStateOf(true) }
 
     // Argon2 移动模式档位（复用全局设置，映射为隐写 KDF 覆写参数）
     var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
@@ -393,7 +391,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 .stealth(stealth)
                 .obfuscateSize(obfuscateSize)
                 .targetSizeBytes(if (obfuscateSize) targetSizeMB * 1024L * 1024L else 0)
-                .preferChunk(preferChunk)
+                // 移动端不开放嵌入方式选择：PNG 载体默认 stEG chunk（更隐蔽），
+                // 其他载体默认末尾追加（其余适配器本就忽略 preferChunk）。
+                .preferChunk(carrierName?.lowercase()?.endsWith(".png") == true)
                 // 移动端：低内存档位 Argon2 参数（写入载体元数据）+ 按设备可用堆设置的大文件护栏。
                 // 档位内存超过应用堆时，共享核心会自动回退到离堆（native 内存）派生
                 .argon2Params(argon2Mode.toArgon2Params())
@@ -947,24 +947,6 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-
-                // ---- Prefer Chunk（仅对 PNG 载体有意义） ----
-                val isPngCarrier = carrierName?.lowercase()?.endsWith(".png") == true
-                OptionRow(
-                    "优先使用 Chunk 嵌入（PNG stEG 块）",
-                    preferChunk,
-                    { preferChunk = it },
-                    TIP_STEGO_PREFER_CHUNK
-                )
-                if (!isPngCarrier && carrierName != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        "此选项仅对 PNG 载体有效，其他格式使用追加模式",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(start = 36.dp)
-                    )
-                }
             }
 
             OperationLogPanel(visible = logVisible)

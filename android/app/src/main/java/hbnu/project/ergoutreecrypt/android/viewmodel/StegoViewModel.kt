@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
+import hbnu.project.ergoutreecrypt.android.platform.LsbStegoDetector
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressListener
 import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
@@ -26,9 +27,7 @@ import java.nio.file.Paths
 /**
  * 隐写操作 ViewModel。
  *
- * <p>桥接共享核心 {@link FileStegoCodec} 与 Compose UI，提供隐写（hide）和
- * 隐写提取（extract）两个核心操作。操作在 IO 协程中执行，进度通过
- * {@link ProgressState} 回传至 UI。
+ * <p>桥接共享核心 {@link FileStegoCodec} 与 Compose UI，提供隐写（hide）和隐写提取（extract）两个核心操作。操作在 IO 协程中执行，进度通过{@link ProgressState} 回传至 UI。
  *
  * <p>初始化时会调用 {@link BruteForceGuard#init(Path)} 设置暴力破解防护的
  * 侧车数据库目录，确保提取操作中的密码验证限速正常工作。
@@ -189,6 +188,18 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     password.toByteArray(Charsets.UTF_8)
                 } else {
                     ByteArray(0)
+                }
+
+                // 桌面端「图像隐写」LSB 模式：移动端不支持提取，直接报错（避免落入"未找到隐写数据"的泛化错误）
+                if (LsbStegoDetector.detectLsbStego(stegoFile)) {
+                    LogService.error("STEGO_EXTRACT", "检测到桌面端图像隐写 LSB 模式，移动端不支持")
+                    _progress.update {
+                        it.copy(
+                            state = ProgressState.State.ERROR,
+                            error = "该文件是桌面端「图像隐写」LSB 模式处理的内容，移动端不支持提取，请在桌面端处理。"
+                        )
+                    }
+                    return@launch
                 }
 
                 val opts = FileStegoOptions.builder()

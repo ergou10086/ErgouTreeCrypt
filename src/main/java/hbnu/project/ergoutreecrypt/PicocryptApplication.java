@@ -11,6 +11,7 @@ import hbnu.project.ergoutreecrypt.ui.MainController;
 import hbnu.project.ergoutreecrypt.ui.support.FileAssociation;
 import hbnu.project.ergoutreecrypt.ui.support.JvmLogSupport;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -21,6 +22,8 @@ import javafx.stage.StageStyle;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.Security;
 import java.util.ArrayList;
@@ -74,6 +77,22 @@ public class PicocryptApplication extends Application {
         }
     }
 
+    private  Path findStartupFile() {
+        for (String raw : getParameters().getRaw()) {
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+
+            try {
+                Path path = Path.of(raw).toAbsolutePath().normalize();
+                if(Files.isRegularFile(path)) {
+                    return path;
+                }
+            } catch (InvalidPathException ignored) {}
+        }
+        return null;
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -113,6 +132,12 @@ public class PicocryptApplication extends Application {
         // 场景就绪后再挂主题与窗口拖动逻辑。
         controller.attachScene();
         stage.show();
+
+        // 若直接从目标文件解压, 则直接填入路径
+        Path startupFile = findStartupFile();
+        if (startupFile != null) {
+            Platform.runLater(()-> controller.openStartupFile(startupFile));
+        }
 
         // 后台注册 .ergou 文件关联（HKCU，无需管理员权限）
         new Thread(FileAssociation::autoRegister, "file-assoc").start();

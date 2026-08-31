@@ -9,6 +9,7 @@ import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.*;
 import hbnu.project.ergoutreecrypt.volume.*;
@@ -1246,6 +1247,11 @@ public class MainController {
             opts.password = pwd == null ? "" : pwd;
             opts.comments = commentsArea.getText() == null ? "" : commentsArea.getText();
             opts.paranoid = paranoidCheck.isSelected();
+            // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
+            Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
+            opts.argon2MemoryKib = kdfMode.getMemoryKib();
+            opts.argon2Passes = kdfMode.getPasses();
+            opts.argon2Threads = kdfMode.getThreads();
             opts.reedSolomon = reedSolomonCheck.isSelected();
             opts.deniability = deniabilityCheck.isSelected();
             opts.compress = compressCheck.isSelected();
@@ -1282,6 +1288,11 @@ public class MainController {
         req.setPassword(pwd == null ? "" : pwd);
         req.setComments(commentsArea.getText() == null ? "" : commentsArea.getText());
         req.setParanoid(paranoidCheck.isSelected());
+        // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
+        Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
+        req.setArgon2MemoryKib(kdfMode.getMemoryKib());
+        req.setArgon2Passes(kdfMode.getPasses());
+        req.setArgon2Threads(kdfMode.getThreads());
         req.setReedSolomon(reedSolomonCheck.isSelected());
         // 双卷可否认加密
         boolean deniability = deniabilityCheck.isSelected();

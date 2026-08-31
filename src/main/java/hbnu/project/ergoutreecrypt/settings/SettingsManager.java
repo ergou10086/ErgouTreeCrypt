@@ -33,6 +33,7 @@ public final class SettingsManager {
     private static final String KEY_LOG_LEVEL           = "log.level";
     private static final String KEY_LOG_CLEAR_ON_NEW_OP = "log.clearOnNewOp";
     private static final String KEY_LOG_JVM_DIAGNOSTICS = "log.jvmDiagnostics";
+    private static final String KEY_KDF_TIER            = "kdf.tier";
 
     // ---- 默认值 ----
     private static final boolean DEF_AUTO_DECOMPRESS  = true;
@@ -51,6 +52,7 @@ public final class SettingsManager {
     private static final String  DEF_LOG_LEVEL        = "INFO";
     private static final boolean DEF_LOG_CLEAR_ON_NEW_OP = true;
     private static final boolean DEF_LOG_JVM_DIAGNOSTICS = false;
+    private static final String  DEF_KDF_TIER            = "BALANCED";
     private static final int     MIN_THREAD_COUNT     = 1;
     private static final int     MAX_THREAD_COUNT     = 16;
     private static final int     DEF_BATCH_SERIAL_GIB = 10;
@@ -266,5 +268,26 @@ public final class SettingsManager {
      */
     public static void setJvmDiagnostics(boolean v) {
         PREFS.putBoolean(KEY_LOG_JVM_DIAGNOSTICS, v);
+    }
+
+    /**
+     * 获取桌面端 Argon2 KDF 档位（Phase B2）。
+     *
+     * <p>返回 {@link Argon2DesktopMode} 枚举，未知/缺失的持久化值回退到
+     * {@link Argon2DesktopMode#BALANCED}（256 MiB，移动端友好默认档）。
+     *
+     * @return KDF 档位枚举
+     */
+    public static Argon2DesktopMode getKdfMode() {
+        return Argon2DesktopMode.fromKey(PREFS.get(KEY_KDF_TIER, DEF_KDF_TIER));
+    }
+
+    /**
+     * 持久化桌面端 Argon2 KDF 档位键值。
+     *
+     * @param mode KDF 档位枚举
+     */
+    public static void setKdfMode(Argon2DesktopMode mode) {
+        PREFS.put(KEY_KDF_TIER, mode == null ? DEF_KDF_TIER : mode.getKey());
     }
 }

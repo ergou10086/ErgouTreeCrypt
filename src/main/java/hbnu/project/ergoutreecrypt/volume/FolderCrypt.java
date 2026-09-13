@@ -6,6 +6,10 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.exception.CancelledException;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
@@ -95,7 +99,7 @@ public final class FolderCrypt {
                 .toList();
 
         if (filesToEncrypt.isEmpty() && deepDirs.isEmpty()) {
-            throw new IOException("input folder is empty: " + inputDir);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, "input folder is empty: " + inputDir);
         }
 
         // 加密结果先落到一个工作目录（与输入同名），再视情况打包
@@ -163,7 +167,8 @@ public final class FolderCrypt {
 
         if (result.succeededCount() == 0 && result.failedCount() > 0) {
             BatchResult.Failure first = result.failures().get(0);
-            throw new IOException("全部文件加密失败：" + first.name() + " — " + first.message());
+            throw new CryptoException(ErrorKind.IO_ERROR,
+                    "全部文件加密失败：" + first.name() + " — " + first.message());
         }
 
         // 若启用压缩：只打包工作目录中已成功写出的文件（失败文件不会落盘）。
@@ -308,7 +313,7 @@ public final class FolderCrypt {
                         attempts++;
                         archPwd = opts.archivePasswordProvider.providePassword(archive, true);
                         if (archPwd == null || archPwd.isEmpty()) {
-                            throw new IOException("Archive password required but not provided");
+                            throw new CryptoException(ErrorKind.ARCHIVE_PASSWORD, "Archive password required but not provided");
                         }
                         continue;
                     }
@@ -329,10 +334,11 @@ public final class FolderCrypt {
      * @param archive 待解压的归档路径
      * @param opts    解密选项
      * @return 用于解压的归档密码；归档不需要密码时返回 null
-     * @throws IOException 归档需要密码但用户放弃输入
+     * @throws IOException     归档密码探测失败
+     * @throws CryptoException 归档需要密码但用户放弃输入
      */
     private static String resolveArchivePassword(Path archive, DecryptOptions opts)
-            throws IOException {
+            throws IOException, CryptoException {
         String archPwd = ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password);
         if (archPwd != null && !archPwd.isEmpty()) {
             return archPwd;
@@ -353,7 +359,7 @@ public final class FolderCrypt {
         }
         String password = provider.providePassword(archive, false);
         if (password == null || password.isEmpty()) {
-            throw new IOException("Archive password required but not provided");
+            throw new CryptoException(ErrorKind.ARCHIVE_PASSWORD, "Archive password required but not provided");
         }
         return password;
     }
@@ -1065,10 +1071,8 @@ public final class FolderCrypt {
      * @return true 表示应中止整批
      */
     private static boolean isCancel(Throwable t) {
-        if (t instanceof InterruptedException) {
-            return true;
-        }
-        return t != null && "cancelled".equalsIgnoreCase(t.getMessage());
+        return ExceptionMapper.isCancellation(t)
+                || (t != null && "cancelled".equalsIgnoreCase(t.getMessage()));
     }
 
     /**
@@ -1141,7 +1145,7 @@ public final class FolderCrypt {
         Path tempArchive = archiveDirectory(deepDir);
         try {
             if (tempArchive == null) {
-                throw new IOException("deep directory is empty: " + deepDir);
+                throw new CryptoException(ErrorKind.INVALID_HEADER, "deep directory is empty: " + deepDir);
             }
             if (opts.split) {
                 Path chunkDir = destEnc.getParent().resolve(
@@ -1216,13 +1220,13 @@ public final class FolderCrypt {
      * @param completed  已完成计数
      * @param total      任务总数
      * @param result     汇总
-     * @throws InterruptedException 用户取消
+     * @throws Exception 用户取消或批任务失败
      */
     private static void processJobs(List<BatchJob> jobs, int threads, boolean encrypt,
                                     ProgressReporter reporter,
                                     ParallelProgressAggregator progress,
                                     AtomicInteger completed, int total,
-                                    BatchResult result) throws InterruptedException {
+                                    BatchResult result) throws Exception {
         ConcurrentLinkedQueue<BatchJob> queue = new ConcurrentLinkedQueue<>(jobs);
         AtomicBoolean oomDowngrade = new AtomicBoolean(false);
         AtomicReference<InterruptedException> cancelled = new AtomicReference<>();
@@ -1277,10 +1281,10 @@ public final class FolderCrypt {
             throw c;
         }
         if (reporter != null && reporter.isCancelled()) {
-            throw new InterruptedException("cancelled");
+            throw new CancelledException();
         }
         if (progress != null && progress.isCancelled()) {
-            throw new InterruptedException("cancelled");
+            throw new CancelledException();
         }
     }
 
@@ -1451,9 +1455,9 @@ public final class FolderCrypt {
     /**
      * 没有任何可解密文件时抛出（单个文件后缀不可解密，或整批全部不可解密）。
      */
-    public static final class NoDecryptableFilesException extends IOException {
+    public static final class NoDecryptableFilesException extends CryptoException {
         public NoDecryptableFilesException(String message) {
-            super(message);
+            super(ErrorKind.INVALID_HEADER, message);
         }
     }
 

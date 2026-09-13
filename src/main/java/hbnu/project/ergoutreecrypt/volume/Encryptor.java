@@ -15,6 +15,9 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.exception.CancelledException;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.header.Flags;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
@@ -224,7 +227,8 @@ public final class Encryptor {
     /**
      * RS 编码并写入 header（auth 值位置写入零占位符）。
      */
-    private static void encryptWriteHeader(OperationContext ctx, EncryptRequest req) throws IOException {
+    private static void encryptWriteHeader(OperationContext ctx, EncryptRequest req)
+            throws IOException, CryptoException {
         String incomplete = req.getOutputFile() + ".incomplete";
         try (OutputStream out = Files.newOutputStream(Path.of(incomplete))) {
             HeaderWriter writer = new HeaderWriter(out, req.getRsCodecs());
@@ -255,7 +259,8 @@ public final class Encryptor {
     /**
      * Keyfile 处理：计算各 keyfile 的 SHA3-256 哈希并合并。
      */
-    private static void encryptProcessKeyfiles(OperationContext ctx, EncryptRequest req) throws IOException {
+    private static void encryptProcessKeyfiles(OperationContext ctx, EncryptRequest req)
+            throws IOException, CryptoException {
         List<String> kfPaths = req.getKeyfiles();
         if (kfPaths == null || kfPaths.isEmpty()) {
             ctx.keyfileHash = new byte[32];
@@ -274,7 +279,8 @@ public final class Encryptor {
         String password = req.getPassword();
         if ((password == null || password.isEmpty()) && ctx.keyfileKey != null) {
             if (KeyfileProcessor.isDuplicateKeyfileKey(ctx.keyfileKey)) {
-                throw new IOException("duplicate keyfiles detected (keys cancel out)");
+                throw new CryptoException(ErrorKind.KEYFILE_MISMATCH,
+                        "duplicate keyfiles detected (keys cancel out)");
             }
             ctx.setKey(ctx.keyfileKey.clone());
         }
@@ -306,7 +312,8 @@ public final class Encryptor {
                 && ctx.useKeyfiles;
         if (ctx.useKeyfiles && ctx.keyfileKey != null && !keyfileOnly) {
             if (KeyfileProcessor.isDuplicateKeyfileKey(ctx.keyfileKey)) {
-                throw new IllegalStateException("duplicate keyfiles detected (keys cancel out)");
+                throw new CryptoException(ErrorKind.KEYFILE_MISMATCH,
+                        "duplicate keyfiles detected (keys cancel out)");
             }
             ctx.setKey(KeyfileProcessor.xorWithKey(ctx.key, ctx.keyfileKey));
         }
@@ -331,7 +338,7 @@ public final class Encryptor {
 
             while (true) {
                 if (ctx.isCancelled()) {
-                    throw new InterruptedException("cancelled");
+                    throw new CancelledException();
                 }
 
                 int n = readFull(fin, src);

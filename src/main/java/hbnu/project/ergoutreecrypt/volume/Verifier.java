@@ -5,6 +5,9 @@ import hbnu.project.ergoutreecrypt.crypto.Mac;
 import hbnu.project.ergoutreecrypt.crypto.MacFactory;
 import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.encoding.Padding;
+import hbnu.project.ergoutreecrypt.exception.CancelledException;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -101,7 +104,7 @@ public final class Verifier {
 
             while (true) {
                 if (ctx.isCancelled()) {
-                    throw new InterruptedException("cancelled");
+                    throw new CancelledException();
                 }
 
                 int n = Decryptor.readFull(fin, src);
@@ -163,7 +166,7 @@ public final class Verifier {
             if (req.isForceDecrypt()) {
                 return;
             }
-            throw new IOException("MAC verification failed — file may be corrupted");
+            throw new CryptoException(ErrorKind.TAMPERED_DATA, "MAC verification failed — file may be corrupted");
         }
 
         SecureZero.zero(computedMac);

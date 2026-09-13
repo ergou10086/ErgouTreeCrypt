@@ -3,11 +3,13 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressReporter
-import hbnu.project.ergoutreecrypt.android.platform.describeError
+import hbnu.project.ergoutreecrypt.android.platform.errorKind
+import hbnu.project.ergoutreecrypt.android.platform.friendlyError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.exception.CancelledException
+import hbnu.project.ergoutreecrypt.exception.ErrorKind
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract
@@ -111,7 +113,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } catch (e: OutOfMemoryError) {
@@ -119,7 +122,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString()
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } finally {
@@ -213,7 +217,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } catch (e: OutOfMemoryError) {
@@ -221,7 +226,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString()
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } finally {
@@ -337,7 +343,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e),
+                        error = friendlyError(e),
+                        kind = errorKind(e),
                         detail = batch?.formatDetail()?.ifBlank { null },
                         statusText = batch?.formatSummary() ?: it.statusText
                     )
@@ -348,7 +355,8 @@ class DecryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString(),
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY,
                         detail = batch?.formatDetail()?.ifBlank { null }
                     )
                 }

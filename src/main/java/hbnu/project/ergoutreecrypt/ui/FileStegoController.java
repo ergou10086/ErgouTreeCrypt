@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui;
 
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec;
 import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
@@ -583,7 +584,7 @@ public class FileStegoController {
                 },
                 ex -> {
                     showProgress(false, null);
-                    toast.error(Messages.format("fileStego.toast.error", errorMessage(ex)));
+                    toast.error(errorMessage(ex));
                     tryDelete(outputPath);
                 });
     }
@@ -623,7 +624,7 @@ public class FileStegoController {
                 },
                 ex -> {
                     showProgress(false, null);
-                    toast.error(Messages.format("fileStego.toast.error", errorMessage(ex)));
+                    toast.error(errorMessage(ex));
                 });
     }
 
@@ -748,7 +749,7 @@ public class FileStegoController {
     }
 
     private static String errorMessage(final Throwable ex) {
-        return (ex.getMessage() != null) ? ex.getMessage() : ex.toString();
+        return ExceptionMapper.friendlyMessage(ex);
     }
 
     /**

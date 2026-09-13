@@ -6,13 +6,16 @@ import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.DeviceMemory
 import hbnu.project.ergoutreecrypt.android.platform.LsbStegoDetector
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressListener
-import hbnu.project.ergoutreecrypt.android.platform.describeError
+import hbnu.project.ergoutreecrypt.android.platform.errorKind
+import hbnu.project.ergoutreecrypt.android.platform.friendlyError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard
+import hbnu.project.ergoutreecrypt.exception.ErrorKind
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
 import hbnu.project.ergoutreecrypt.filestego.api.ProgressListener
+import hbnu.project.ergoutreecrypt.i18n.Messages
 import hbnu.project.ergoutreecrypt.log.LogService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -122,12 +125,16 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
             } catch (e: CancellationException) {
                 cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
+            } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: OutOfMemoryError) {
                 LogService.error("STEGO_ENCODE", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = "内存不足：操作所需内存超过设备可用堆，请降低 Argon2 档位后重试。"
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } catch (e: Exception) {
@@ -135,7 +142,8 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } finally {
@@ -196,7 +204,8 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                     _progress.update {
                         it.copy(
                             state = ProgressState.State.ERROR,
-                            error = "该文件是桌面端「图像隐写」LSB 模式处理的内容，移动端不支持提取，请在桌面端处理。"
+                            error = Messages.get(ErrorKind.UNSUPPORTED_FORMAT.i18nKey()),
+                            kind = ErrorKind.UNSUPPORTED_FORMAT
                         )
                     }
                     return@launch
@@ -223,14 +232,16 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
             } catch (e: CancellationException) {
                 cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
+            } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: OutOfMemoryError) {
                 LogService.error("STEGO_EXTRACT", "内存不足", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = "内存不足：提取所需内存超过设备可用堆。" +
-                                "该文件的 Argon2 参数在创建时已固定，与当前档位设置无关；" +
-                                "请改用桌面端提取。"
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } catch (e: Exception) {
@@ -238,7 +249,8 @@ class StegoViewModel(private val appContext: Context) : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } finally {

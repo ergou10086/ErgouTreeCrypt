@@ -1,5 +1,8 @@
 package hbnu.project.ergoutreecrypt.filestego.api;
 
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
+
 /**
  * Payload 编解码异常——在 STEG-V2 Payload 的编码或解码过程中发生的错误。
  *
@@ -13,10 +16,12 @@ package hbnu.project.ergoutreecrypt.filestego.api;
  *   <li>数据截断或不完整</li>
  * </ul>
  *
+ * <p>默认归类为 {@link ErrorKind#PAYLOAD_INVALID}。
+ *
  * @author ErgouTree
  * @since 2026/8/5
  */
-public class PayloadException extends Exception {
+public class PayloadException extends CryptoException {
 
     /**
      * 创建携带错误消息的 Payload 异常。
@@ -24,7 +29,7 @@ public class PayloadException extends Exception {
      * @param message 错误描述
      */
     public PayloadException(final String message) {
-        super(message);
+        super(ErrorKind.PAYLOAD_INVALID, message);
     }
 
     /**
@@ -34,6 +39,6 @@ public class PayloadException extends Exception {
      * @param cause   底层异常
      */
     public PayloadException(final String message, final Throwable cause) {
-        super(message, cause);
+        super(ErrorKind.PAYLOAD_INVALID, message, cause);
     }
 }

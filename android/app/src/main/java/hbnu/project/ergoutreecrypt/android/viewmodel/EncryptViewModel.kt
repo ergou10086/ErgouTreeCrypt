@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.FileNameSanitizer
 import hbnu.project.ergoutreecrypt.android.platform.LoggingProgressReporter
-import hbnu.project.ergoutreecrypt.android.platform.describeError
+import hbnu.project.ergoutreecrypt.android.platform.errorKind
+import hbnu.project.ergoutreecrypt.android.platform.friendlyError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.exception.CancelledException
+import hbnu.project.ergoutreecrypt.exception.ErrorKind
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
@@ -45,6 +47,7 @@ data class ProgressState(
     val canCancel: Boolean = false,
     val state: State = State.IDLE,
     val error: String? = null,
+    val kind: ErrorKind? = null,
     val detail: String? = null
 ) {
     enum class State { IDLE, RUNNING, DONE, ERROR, CANCELLED }
@@ -124,7 +127,8 @@ class EncryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } catch (e: OutOfMemoryError) {
@@ -132,7 +136,8 @@ class EncryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString()
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } finally {
@@ -314,7 +319,8 @@ class EncryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } catch (e: OutOfMemoryError) {
@@ -322,7 +328,8 @@ class EncryptViewModel : ViewModel() {
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = e.toString()
+                        error = friendlyError(e),
+                        kind = ErrorKind.OUT_OF_MEMORY
                     )
                 }
             } finally {

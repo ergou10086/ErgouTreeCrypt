@@ -1,5 +1,8 @@
 package hbnu.project.ergoutreecrypt.filestego.api;
 
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
+
 /**
  * 载体适配器操作异常——在嵌入或提取过程中发生的与载体格式相关的错误。
  *
@@ -12,10 +15,12 @@ package hbnu.project.ergoutreecrypt.filestego.api;
  *   <li>载体文件结构损坏</li>
  * </ul>
  *
+ * <p>默认归类为 {@link ErrorKind#CARRIER_INVALID}。
+ *
  * @author ErgouTree
  * @since 2026/8/5
  */
-public class CarrierException extends Exception {
+public class CarrierException extends CryptoException {
 
     /**
      * 创建携带错误消息的载体异常。
@@ -23,7 +28,7 @@ public class CarrierException extends Exception {
      * @param message 错误描述
      */
     public CarrierException(final String message) {
-        super(message);
+        super(ErrorKind.CARRIER_INVALID, message);
     }
 
     /**
@@ -33,6 +38,6 @@ public class CarrierException extends Exception {
      * @param cause   底层异常
      */
     public CarrierException(final String message, final Throwable cause) {
-        super(message, cause);
+        super(ErrorKind.CARRIER_INVALID, message, cause);
     }
 }

@@ -2,8 +2,9 @@ package hbnu.project.ergoutreecrypt.header;
 
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -72,9 +73,10 @@ public final class HeaderReader {
      * keyHash、keyfileHash、authTag 共 11 个字段，每个字段先 RS 解码再赋值。
      *
      * @return 含解码后 header 及错误详情的 ReadResult
-     * @throws IOException 致命 I/O 错误或非法 version/注释格式
+     * @throws IOException     致命 I/O 错误
+     * @throws CryptoException 非法 version/注释格式或卷头被截断
      */
-    public ReadResult readHeader() throws IOException {
+    public ReadResult readHeader() throws IOException, CryptoException {
         VolumeHeader h = new VolumeHeader();
         List<String> decodeErrors = new ArrayList<>();
         boolean commentDecodeError = false;
@@ -94,7 +96,7 @@ public final class HeaderReader {
         h.setVersion(new String(vd.data, StandardCharsets.UTF_8));
 
         if (!matchVersion(vd.data)) {
-            throw new IOException(ERR_INVALID_VERSION);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_INVALID_VERSION);
         }
 
         // 2. comment length: RS5(15→5)
@@ -110,19 +112,19 @@ public final class HeaderReader {
 
         String commentLenStr = new String(cld.data, StandardCharsets.UTF_8);
         if (!COMMENT_LEN_RE.matcher(commentLenStr).matches()) {
-            throw new IOException(ERR_INVALID_COMMENT_LENGTH);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_INVALID_COMMENT_LENGTH);
         }
 
         int commentsLen;
         try {
             commentsLen = Integer.parseInt(commentLenStr);
         } catch (NumberFormatException e) {
-            throw new IOException(ERR_INVALID_COMMENT_LENGTH);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_INVALID_COMMENT_LENGTH);
         }
 
         // 防御上限检查
         if (commentsLen < 0 || commentsLen > VolumeHeader.MAX_COMMENT_LEN) {
-            throw new IOException(ERR_INVALID_COMMENT_LENGTH);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_INVALID_COMMENT_LENGTH);
         }
 
         // 3. comments: 每个 UTF-8 字节 RS1(3→1)，收集后以 UTF-8 转为字符串
@@ -267,16 +269,17 @@ public final class HeaderReader {
      * @param in header 数据的输入流
      * @param rs 预初始化的 RS 编解码器集合
      * @return version 字符串（如 "v2.14"）
-     * @throws IOException I/O 错误或 RS 解码失败
+     * @throws IOException     I/O 错误
+     * @throws CryptoException 卷头被截断或 RS 解码失败
      */
-    public static String peekVersion(InputStream in, RsCodecs rs) throws IOException {
+    public static String peekVersion(InputStream in, RsCodecs rs) throws IOException, CryptoException {
         byte[] versionEnc = new byte[HeaderLayout.VERSION_ENC_SIZE];
         if (in.read(versionEnc) != versionEnc.length) {
-            throw new EOFException("read version: unexpected EOF");
+            throw new CryptoException(ErrorKind.INVALID_HEADER, "read version: unexpected EOF");
         }
         ReedSolomon.DecodeResult vd = ReedSolomon.decode(rs.rs5, versionEnc, false);
         if (vd.corrupted) {
-            throw new IOException(ERR_CORRUPTED_HEADER);
+            throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_CORRUPTED_HEADER);
         }
         return new String(vd.data, StandardCharsets.UTF_8);
     }
@@ -319,15 +322,16 @@ public final class HeaderReader {
     }
 
     /**
-     * 读满整个缓冲区，不足时阻塞等待，遇到 EOF 则抛出异常。
+     * 读满整个缓冲区，不足时阻塞等待，遇到 EOF 则抛出「卷头被截断」异常。
      */
-    private int readFull(byte[] buf) throws IOException {
+    private int readFull(byte[] buf) throws IOException, CryptoException {
         int offset = 0;
         int len = buf.length;
         while (offset < len) {
             int n = in.read(buf, offset, len - offset);
             if (n < 0) {
-                throw new EOFException("unexpected EOF at byte " + offset + " of " + len);
+                throw new CryptoException(ErrorKind.INVALID_HEADER,
+                        "unexpected EOF at byte " + offset + " of " + len);
             }
             offset += n;
         }

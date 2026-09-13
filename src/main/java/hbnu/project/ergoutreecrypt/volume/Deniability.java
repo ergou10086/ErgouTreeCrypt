@@ -7,6 +7,8 @@ import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 import hbnu.project.ergoutreecrypt.crypto.XChaCha20;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
@@ -18,7 +20,6 @@ import org.bouncycastle.crypto.engines.ChaCha7539Engine;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -228,7 +229,8 @@ public final class Deniability {
             ReedSolomon.DecodeResult vd = ReedSolomon.decode(rs.rs5, versionEnc, false);
             if (vd.corrupted || !HeaderReader.matchVersion(vd.data)) {
                 Files.deleteIfExists(Path.of(outputPath));
-                throw new IOException("password is incorrect or the file is not a volume");
+                throw new CryptoException(ErrorKind.WRONG_PASSWORD,
+                        "password is incorrect or the file is not a volume");
             }
         }
 
@@ -259,7 +261,8 @@ public final class Deniability {
                 }
             }
         }
-        throw new IOException("password is incorrect or the file is not a volume");
+        throw new CryptoException(ErrorKind.WRONG_PASSWORD,
+                "password is incorrect or the file is not a volume");
     }
 
     /**
@@ -407,12 +410,12 @@ public final class Deniability {
     /**
      * 从输入流中精确读取指定字节数（不足时抛 EOFException）。
      */
-    static void readFullExact(InputStream in, byte[] buf) throws IOException {
+    static void readFullExact(InputStream in, byte[] buf) throws IOException, CryptoException {
         int offset = 0;
         while (offset < buf.length) {
             int n = in.read(buf, offset, buf.length - offset);
             if (n < 0) {
-                throw new EOFException("unexpected EOF");
+                throw new CryptoException(ErrorKind.INVALID_HEADER, "unexpected EOF");
             }
             offset += n;
         }

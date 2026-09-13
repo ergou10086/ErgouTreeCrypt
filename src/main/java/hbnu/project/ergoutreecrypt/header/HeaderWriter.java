@@ -3,6 +3,8 @@ package hbnu.project.ergoutreecrypt.header;
 import hbnu.project.ergoutreecrypt.encoding.Fec;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -50,14 +52,14 @@ public final class HeaderWriter {
      *
      * @param h 待写入的卷头数据
      * @return 总写入字节数
-     * @throws IOException               I/O 错误
-     * @throws IllegalArgumentException 若注释超长
+     * @throws IOException      I/O 错误
+     * @throws CryptoException 若注释超长（编程错误，UI 前置校验应挡住）
      */
-    public int writeHeader(VolumeHeader h) throws IOException {
+    public int writeHeader(VolumeHeader h) throws IOException, CryptoException {
         String comments = h.getComments() == null ? "" : h.getComments();
         byte[] commentBytes = comments.getBytes(StandardCharsets.UTF_8);
         if (commentBytes.length > VolumeHeader.MAX_COMMENT_LEN) {
-            throw new IllegalArgumentException("comments exceed maximum length");
+            throw new CryptoException(ErrorKind.INTERNAL_ERROR, "comments exceed maximum length");
         }
 
         int totalWritten = 0;

@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import javafx.application.Platform;
 
@@ -94,7 +95,7 @@ public final class TaskRunner {
             } catch (Throwable t) {
                 long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
                 if (opName != null) {
-                    if (t instanceof InterruptedException) {
+                    if (ExceptionMapper.isCancellation(t)) {
                         LogService.endSessionCancelled(elapsed);
                     } else {
                         LogService.error("TaskRunner", "任务失败", t);

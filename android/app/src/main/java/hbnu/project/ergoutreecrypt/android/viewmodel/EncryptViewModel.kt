@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.exception.CancelledException
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
@@ -109,6 +110,11 @@ class EncryptViewModel : ViewModel() {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: CancelledException) {
                 cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)
@@ -294,6 +300,11 @@ class EncryptViewModel : ViewModel() {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: CancelledException) {
                 cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)

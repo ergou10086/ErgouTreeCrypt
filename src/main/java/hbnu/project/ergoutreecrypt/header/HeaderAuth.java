@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.header;
 
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import org.bouncycastle.crypto.digests.SHA3Digest;
 import org.bouncycastle.crypto.macs.HMac;
 import org.bouncycastle.crypto.params.KeyParameter;
@@ -221,8 +223,10 @@ public final class HeaderAuth {
 
     /**
      * 认证失败异常，携带失败原因分类。
+     *
+     * <p>受检异常（继承 {@link CryptoException}），前端可据 {@link #kind()} 做类型化映射。
      */
-    public static final class AuthException extends RuntimeException {
+    public static final class AuthException extends CryptoException {
 
         /**
          * 密码是否错误。
@@ -243,11 +247,12 @@ public final class HeaderAuth {
          * @param passwordIncorrect 密码错误标志
          * @param keyfileIncorrect  keyfile 错误标志
          * @param keyfileOrdered    有序标志
+         * @param kind              错误分类
          * @param message           错误消息
          */
         AuthException(boolean passwordIncorrect, boolean keyfileIncorrect,
-                      boolean keyfileOrdered, String message) {
-            super(message);
+                      boolean keyfileOrdered, ErrorKind kind, String message) {
+            super(kind, message);
             this.passwordIncorrect = passwordIncorrect;
             this.keyfileIncorrect = keyfileIncorrect;
             this.keyfileOrdered = keyfileOrdered;
@@ -257,7 +262,7 @@ public final class HeaderAuth {
          * 创建密码错误异常。
          */
         public static AuthException passwordError() {
-            return new AuthException(true, false, false,
+            return new AuthException(true, false, false, ErrorKind.WRONG_PASSWORD,
                     "The provided password is incorrect");
         }
 
@@ -265,7 +270,7 @@ public final class HeaderAuth {
          * 创建 v2 密码错误或 header 被篡改异常。
          */
         public static AuthException v2PasswordOrTamperError() {
-            return new AuthException(true, false, false,
+            return new AuthException(true, false, false, ErrorKind.TAMPERED_DATA,
                     "The password is incorrect or header is tampered");
         }
 
@@ -278,11 +283,16 @@ public final class HeaderAuth {
             String msg = ordered
                     ? "Incorrect keyfiles or ordering"
                     : "Incorrect keyfiles";
-            return new AuthException(false, true, ordered, msg);
+            return new AuthException(false, true, ordered, ErrorKind.KEYFILE_MISMATCH, msg);
         }
 
         /**
          * 判断异常是否为密码错误（非 keyfile 错误）。
+         *
+         * <p>保留基于 {@code passwordIncorrect} 标志的判定（而非 {@code kind()==WRONG_PASSWORD}）：
+         * v2 header 的密码错误与篡改在密码学上不可区分，统一抛 {@link #v2PasswordOrTamperError()}
+         * （kind 为 {@code TAMPERED_DATA}），但解密端仍须据此把该异常视作「密码候选失败」继续尝试
+         * 后续归一化候选，否则会破坏 v2 卷的多候选重试。
          */
         public static boolean isPasswordError(Throwable t) {
             return t instanceof AuthException ae && ae.passwordIncorrect;

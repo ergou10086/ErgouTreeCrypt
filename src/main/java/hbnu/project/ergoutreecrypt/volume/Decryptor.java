@@ -14,6 +14,9 @@ import hbnu.project.ergoutreecrypt.encoding.Padding;
 import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.exception.CancelledException;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
@@ -74,8 +77,8 @@ public final class Decryptor {
             int max = hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                     .getMaxAttempts();
             LogService.warn("Decryptor", "暴力破解防护锁定, maxAttempts=" + max);
-            throw new IOException(String.format(
-                    "too many failed attempts (%d), file temporarily locked", max));
+            throw new CryptoException(ErrorKind.BRUTE_FORCE_LOCKED,
+                    String.format("too many failed attempts (%d), file temporarily locked", max), max);
         }
 
         OperationContext ctx = new OperationContext();
@@ -94,13 +97,11 @@ public final class Decryptor {
             LogPhases.run("Decryptor", "finalize", () -> decryptFinalize(ctx, req));
         } catch (Exception e) {
             cleanupDecrypt(ctx, req);
-            // 记录失败尝试（暴力破解防护）
+            // 记录失败尝试（暴力破解防护）：密码错误、header 认证失败或数据被篡改
             boolean isPasswordError = hbnu.project.ergoutreecrypt.header.HeaderAuth.AuthException
                     .isPasswordError(e)
-                    || (e instanceof IOException
-                    && e.getMessage() != null
-                    && (e.getMessage().contains("password")
-                    || e.getMessage().contains("MAC")));
+                    || (e instanceof CryptoException ce
+                    && (ce.kind() == ErrorKind.WRONG_PASSWORD || ce.kind() == ErrorKind.TAMPERED_DATA));
             if (isPasswordError) {
                 hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
                         .recordFailure(inputPath);
@@ -169,7 +170,8 @@ public final class Decryptor {
     /**
      * 读取并 RS 解码卷头各字段。
      */
-    static void decryptReadHeader(OperationContext ctx, DecryptRequest req) throws IOException {
+    static void decryptReadHeader(OperationContext ctx, DecryptRequest req)
+            throws IOException, CryptoException {
         ctx.setStatus(Messages.get("status.readingHeader"));
 
         try (InputStream in = Files.newInputStream(Path.of(ctx.inputFile))) {
@@ -248,14 +250,15 @@ public final class Decryptor {
     /**
      * Keyfile 处理：计算哈希并与密码密钥合并。
      */
-    private static void decryptProcessKeyfiles(OperationContext ctx, DecryptRequest req) throws IOException {
+    private static void decryptProcessKeyfiles(OperationContext ctx, DecryptRequest req)
+            throws IOException, CryptoException {
         if (!ctx.useKeyfiles) {
             ctx.keyfileHash = new byte[32];
             return;
         }
         List<String> kfPaths = req.getKeyfiles();
         if (kfPaths == null || kfPaths.isEmpty()) {
-            throw new IOException("keyfiles required but none provided");
+            throw new CryptoException(ErrorKind.KEYFILE_MISMATCH, "keyfiles required but none provided");
         }
         ctx.setStatus(Messages.get("status.keyfiles"));
         List<Path> paths = kfPaths.stream().map(Path::of).toList();
@@ -274,7 +277,7 @@ public final class Decryptor {
     /**
      * Header 认证验证（v1 SHA3-512 / v2 HMAC-SHA3-512）。
      */
-    private static void decryptVerifyAuth(OperationContext ctx, DecryptRequest req) {
+    private static void decryptVerifyAuth(OperationContext ctx, DecryptRequest req) throws CryptoException {
         ctx.setStatus(Messages.get("status.verifyingAuth"));
 
         if (ctx.isLegacyV1) {
@@ -314,7 +317,7 @@ public final class Decryptor {
                         && ctx.useKeyfiles;
                 if (ctx.keyfileKey != null && !keyfileOnly) {
                     if (KeyfileProcessor.isDuplicateKeyfileKey(ctx.keyfileKey)) {
-                        throw new IllegalStateException("duplicate keyfiles detected");
+                        throw new CryptoException(ErrorKind.KEYFILE_MISMATCH, "duplicate keyfiles detected");
                     }
                     ctx.setKey(KeyfileProcessor.xorWithKey(ctx.key, ctx.keyfileKey));
                 }
@@ -362,7 +365,7 @@ public final class Decryptor {
 
             while (true) {
                 if (ctx.isCancelled()) {
-                    throw new InterruptedException("cancelled");
+                    throw new CancelledException();
                 }
 
                 int n = readFull(fin, src);
@@ -443,7 +446,7 @@ public final class Decryptor {
                 // 强制解密模式：即使 MAC 不匹配也继续
             } else {
                 Files.deleteIfExists(Path.of(req.getOutputFile() + ".incomplete"));
-                throw new IOException("MAC verification failed — file may be corrupted");
+                throw new CryptoException(ErrorKind.TAMPERED_DATA, "MAC verification failed — file may be corrupted");
             }
         }
 

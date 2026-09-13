@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.android.platform.describeError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
+import hbnu.project.ergoutreecrypt.exception.CancelledException
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract
@@ -96,6 +97,11 @@ class DecryptViewModel : ViewModel() {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: CancelledException) {
                 cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)
@@ -193,6 +199,11 @@ class DecryptViewModel : ViewModel() {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: CancelledException) {
                 cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)
@@ -311,6 +322,11 @@ class DecryptViewModel : ViewModel() {
                     it.copy(state = ProgressState.State.CANCELLED)
                 }
             } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update {
+                    it.copy(state = ProgressState.State.CANCELLED)
+                }
+            } catch (e: CancelledException) {
                 cancelled = true
                 _progress.update {
                     it.copy(state = ProgressState.State.CANCELLED)

@@ -6,6 +6,7 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -1503,7 +1504,7 @@ public class MainController {
                     setRunning(false);
                 },
                 err -> {
-                    if (err instanceof InterruptedException) {
+                    if (ExceptionMapper.isCancellation(err)) {
                         statusLabel.setText(Messages.get("status.cancelled"));
                         toast.info(Messages.get("status.cancelled"));
                     } else {
@@ -1573,7 +1574,7 @@ public class MainController {
      * @param err    抛出的异常
      */
     private void showBatchError(BatchResult result, Throwable err) {
-        if (err instanceof InterruptedException) {
+        if (ExceptionMapper.isCancellation(err)) {
             statusLabel.setText(Messages.get("status.cancelled"));
             toast.info(Messages.get("status.cancelled"));
             setRunning(false);

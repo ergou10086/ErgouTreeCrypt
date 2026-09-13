@@ -8,6 +8,8 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.exception.CryptoException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.header.Flags;
 import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -416,9 +418,10 @@ public final class DualDeniability {
         hbnu.project.ergoutreecrypt.crypto.BruteForceGuard guard =
                 hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance();
         if (!req.isForceDecrypt() && !guard.allowAttempt(inputFile)) {
-            throw new IOException(String.format(
-                    "too many failed attempts (%d), file temporarily locked",
-                    guard.getMaxAttempts()));
+            throw new CryptoException(ErrorKind.BRUTE_FORCE_LOCKED,
+                    String.format("too many failed attempts (%d), file temporarily locked",
+                            guard.getMaxAttempts()),
+                    guard.getMaxAttempts());
         }
 
         if (reporter != null) {
@@ -430,11 +433,11 @@ public final class DualDeniability {
             byte[] magic = new byte[4];
             readExact(fin, magic);
             if (!Arrays.equals(magic, MAGIC)) {
-                throw new IOException("not a dual-deniability volume");
+                throw new CryptoException(ErrorKind.INVALID_HEADER, "not a dual-deniability volume");
             }
             int version = fin.read();
             if (version < 0) {
-                throw new IOException("unexpected EOF reading version");
+                throw new CryptoException(ErrorKind.INVALID_HEADER, "unexpected EOF reading version");
             }
             // v1 的扩展标志为 6 字节，v2 起为 7 字节（含 compressed）
             int flagsLen = version <= VERSION_V1 ? 6 : 7;
@@ -485,7 +488,8 @@ public final class DualDeniability {
 
             // 所有密码候选均失败
             guard.recordFailure(inputFile);
-            throw new IOException("password is incorrect or the file is not a valid dual-deniability volume");
+            throw new CryptoException(ErrorKind.WRONG_PASSWORD,
+                    "password is incorrect or the file is not a valid dual-deniability volume");
         }
         // 解密成功，重置计数器（在 DataRegion.decryptFrom 中已完成）
         // 注意：recordSuccess 在返回前由 Decryptor 统一调用，此处不重复
@@ -623,12 +627,12 @@ public final class DualDeniability {
     /**
      * 从输入流精确读取指定字节数。
      */
-    private static void readExact(InputStream in, byte[] buf) throws IOException {
+    private static void readExact(InputStream in, byte[] buf) throws IOException, CryptoException {
         int offset = 0;
         while (offset < buf.length) {
             int n = in.read(buf, offset, buf.length - offset);
             if (n < 0) {
-                throw new java.io.EOFException("unexpected EOF");
+                throw new CryptoException(ErrorKind.INVALID_HEADER, "unexpected EOF");
             }
             offset += n;
         }
@@ -1205,7 +1209,8 @@ public final class DualDeniability {
                     SecureZero.zero(macSubkey);
                     SecureZero.zero(serpentKey);
                     SecureZero.zero(headerSk);
-                    throw new IOException("MAC verification failed — file may be corrupted or tampered");
+                    throw new CryptoException(ErrorKind.TAMPERED_DATA,
+                            "MAC verification failed — file may be corrupted or tampered");
                 }
 
                 cs.close();

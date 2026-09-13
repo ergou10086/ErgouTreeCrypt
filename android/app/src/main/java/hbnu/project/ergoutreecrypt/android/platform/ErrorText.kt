@@ -1,5 +1,8 @@
 package hbnu.project.ergoutreecrypt.android.platform
 
+import hbnu.project.ergoutreecrypt.exception.ErrorKind
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper
+
 /**
  * 将异常描述为可读的错误文本（类名 + 消息）。
  *
@@ -16,3 +19,22 @@ package hbnu.project.ergoutreecrypt.android.platform
  */
 fun describeError(e: Throwable): String =
     "${e.javaClass.simpleName}: ${e.localizedMessage ?: ""}".trim()
+
+/**
+ * 将异常映射为友好文案（按 {@link ErrorKind} 类型判断，不依赖消息字符串）。
+ *
+ * <p>委托共享核心的 {@link ExceptionMapper#friendlyMessage(Throwable)}，据当前语言
+ * 解析对应的 {@code messages_*.properties}。未知异常回退为「内部错误」。
+ *
+ * @param e 待映射异常
+ * @return 已解析的友好文案
+ */
+fun friendlyError(e: Throwable): String = ExceptionMapper.friendlyMessage(e)
+
+/**
+ * 返回异常对应的错误分类。
+ *
+ * @param e 待归类异常
+ * @return 错误分类，恒非 null
+ */
+fun errorKind(e: Throwable): ErrorKind = ExceptionMapper.kindOf(e)

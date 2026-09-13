@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui;
 
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -548,7 +549,7 @@ public class ImageStegoController {
         }, () -> {}, ex -> {
             Platform.runLater(() -> {
                 showProgress(false);
-                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+                toast.error(ExceptionMapper.friendlyMessage(ex));
                 tryDelete(outputPath);
             });
         });
@@ -575,7 +576,7 @@ public class ImageStegoController {
         }, () -> {}, ex -> {
             Platform.runLater(() -> {
                 showProgress(false);
-                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+                toast.error(ExceptionMapper.friendlyMessage(ex));
             });
         });
     }
@@ -631,7 +632,7 @@ public class ImageStegoController {
         }, () -> {}, ex -> {
             Platform.runLater(() -> {
                 showProgress(false);
-                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+                toast.error(ExceptionMapper.friendlyMessage(ex));
                 tryDelete(outputPath);
             });
         });
@@ -658,7 +659,7 @@ public class ImageStegoController {
         }, () -> {}, ex -> {
             Platform.runLater(() -> {
                 showProgress(false);
-                toast.info(Messages.format("stego.toast.error", ex.getMessage()));
+                toast.error(ExceptionMapper.friendlyMessage(ex));
             });
         });
     }

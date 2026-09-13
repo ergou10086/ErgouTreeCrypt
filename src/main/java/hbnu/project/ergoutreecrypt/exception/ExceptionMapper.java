@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.exception;
 
+import hbnu.project.ergoutreecrypt.i18n.Messages;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
@@ -53,11 +55,42 @@ public final class ExceptionMapper {
      * @return 映射结果，恒非 null
      */
     public static Message toMessage(Throwable t) {
+        if (t instanceof CryptoException ce) {
+            return new Message(ce.kind().i18nKey(), ce.args());
+        }
         ErrorKind kind = classify(t);
         if (kind == ErrorKind.IO_ERROR) {
             return new Message(kind.i18nKey(), new Object[] { detail(t) });
         }
         return new Message(kind.i18nKey());
+    }
+
+    /**
+     * 把任意异常解析为可直接展示的友好文案（已按当前语言解析 i18n）。
+     *
+     * <p>等价于 {@link #toMessage(Throwable)} 后按 args 是否为空调用
+     * {@link Messages#get(String)} 或 {@link Messages#format(String, Object...)}。
+     *
+     * @param t 待映射异常
+     * @return 已解析的友好文案，恒非空
+     */
+    public static String friendlyMessage(Throwable t) {
+        Message m = toMessage(t);
+        Object[] args = m.args();
+        if (args == null || args.length == 0) {
+            return Messages.get(m.key());
+        }
+        return Messages.format(m.key(), args);
+    }
+
+    /**
+     * 返回异常对应的错误分类。
+     *
+     * @param t 待归类异常
+     * @return 错误分类，恒非 null
+     */
+    public static ErrorKind kindOf(Throwable t) {
+        return classify(t);
     }
 
     /**

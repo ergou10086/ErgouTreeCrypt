@@ -1508,9 +1508,9 @@ public class MainController {
                         statusLabel.setText(Messages.get("status.cancelled"));
                         toast.info(Messages.get("status.cancelled"));
                     } else {
-                        String msg = err.getMessage() == null ? err.toString() : err.getMessage();
-                        statusLabel.setText(Messages.format("status.failed", msg));
-                        toast.error(Messages.format("status.failed", msg));
+                        String msg = ExceptionMapper.friendlyMessage(err);
+                        statusLabel.setText(msg);
+                        toast.error(msg);
                     }
                     setRunning(false);
                 });
@@ -1584,9 +1584,9 @@ public class MainController {
             showBatchOutcome(result, Messages.get("batch.summary.partial"));
             return;
         }
-        String errMsg = err.getMessage() == null ? err.toString() : err.getMessage();
-        statusLabel.setText(Messages.format("status.failed", errMsg));
-        toast.error(Messages.format("status.failed", errMsg));
+        String errMsg = ExceptionMapper.friendlyMessage(err);
+        statusLabel.setText(errMsg);
+        toast.error(errMsg);
         if (result != null && result.hasFailures()) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.initOwner(stage());

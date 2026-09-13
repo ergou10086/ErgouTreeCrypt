@@ -134,6 +134,10 @@ fun mapErrorToChineseMessage(error: String?): String {
     if (error == null) return "未知错误"
 
     return when {
+        // 压缩包密码（须先于泛化 password 分支，否则会被吞掉）
+        error.contains("zip", ignoreCase = true) && error.contains("password", ignoreCase = true) ->
+            "压缩包密码错误，请检查输入的压缩包密码。"
+
         // 密码相关
         error.contains("password", ignoreCase = true) ||
         error.contains("MAC", ignoreCase = true) ||
@@ -189,7 +193,7 @@ fun mapErrorToChineseMessage(error: String?): String {
 
         // 数据损坏
         error.contains("corrupt", ignoreCase = true) ||
-        error.contains("RS", ignoreCase = true) && error.contains("fail", ignoreCase = true) ->
+        (error.contains("RS", ignoreCase = true) && error.contains("fail", ignoreCase = true)) ->
             "文件数据已损坏且 Reed-Solomon 纠错无法修复。请尝试使用\"强制解密\"选项。"
 
         // 密钥文件
@@ -200,10 +204,6 @@ fun mapErrorToChineseMessage(error: String?): String {
         error.contains("cancel", ignoreCase = true) ||
         error.contains("interrupt", ignoreCase = true) ->
             "操作已被取消。"
-
-        // 压缩包密码
-        error.contains("zip", ignoreCase = true) && error.contains("password", ignoreCase = true) ->
-            "压缩包密码错误，请检查输入的压缩包密码。"
 
         // ===== 隐写（stego）相关错误 =====
 
@@ -231,7 +231,7 @@ fun mapErrorToChineseMessage(error: String?): String {
         // 载体嵌入/提取失败（通用）
         error.contains("载体嵌入失败", ignoreCase = true) ||
         error.contains("载体提取失败", ignoreCase = true) ->
-            "载体操作失败：${error}. 请确认载体文件格式正确且未损坏。"
+            "载体操作失败，请确认载体文件格式正确且未损坏。"
 
         // 文件大小混淆异常
         error.contains("目标大小", ignoreCase = true) && error.contains("混淆", ignoreCase = true) ->

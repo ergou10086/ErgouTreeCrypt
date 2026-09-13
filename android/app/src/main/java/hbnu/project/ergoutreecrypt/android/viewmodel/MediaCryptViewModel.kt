@@ -3,9 +3,12 @@ package hbnu.project.ergoutreecrypt.android.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hbnu.project.ergoutreecrypt.android.platform.LoggingMediaProgress
-import hbnu.project.ergoutreecrypt.android.platform.describeError
+import hbnu.project.ergoutreecrypt.android.platform.errorKind
+import hbnu.project.ergoutreecrypt.android.platform.friendlyError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
 import hbnu.project.ergoutreecrypt.android.platform.logFileName
+import hbnu.project.ergoutreecrypt.exception.ErrorKind
+import hbnu.project.ergoutreecrypt.i18n.Messages
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptOptions
@@ -99,12 +102,16 @@ class MediaCryptViewModel : ViewModel() {
             } catch (e: hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException) {
                 cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
+            } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: Exception) {
                 LogService.error("FPE_ENCRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } finally {
@@ -157,7 +164,8 @@ class MediaCryptViewModel : ViewModel() {
                     _progress.update {
                         it.copy(
                             state = ProgressState.State.ERROR,
-                            error = "该文件不包含有效的加密元数据（EGTC-AVE），可能不是本工具加密的媒体文件。\n请关闭\"噪音文件解密\"选项后重试。"
+                            error = Messages.get(ErrorKind.INVALID_HEADER.i18nKey()),
+                            kind = ErrorKind.INVALID_HEADER
                         )
                     }
                     return@launch
@@ -169,12 +177,12 @@ class MediaCryptViewModel : ViewModel() {
                         _progress.update { it.copy(info = "文件未存储完整性校验数据，跳过完整性验证") }
                     }
                 } catch (e: Exception) {
-                    val msg = e.localizedMessage ?: e.javaClass.simpleName
                     LogService.error("FPE_DECRYPT", "完整性校验失败", e)
                     _progress.update {
                         it.copy(
                             state = ProgressState.State.ERROR,
-                            error = "完整性校验失败：$msg\n文件可能被篡改或密码错误。"
+                            error = Messages.get(ErrorKind.TAMPERED_DATA.i18nKey()),
+                            kind = ErrorKind.TAMPERED_DATA
                         )
                     }
                     return@launch
@@ -189,12 +197,16 @@ class MediaCryptViewModel : ViewModel() {
             } catch (e: hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCancelledException) {
                 cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
+            } catch (e: InterruptedException) {
+                cancelled = true
+                _progress.update { it.copy(state = ProgressState.State.CANCELLED) }
             } catch (e: Exception) {
                 LogService.error("FPE_DECRYPT", "任务失败", e)
                 _progress.update {
                     it.copy(
                         state = ProgressState.State.ERROR,
-                        error = describeError(e)
+                        error = friendlyError(e),
+                        kind = errorKind(e)
                     )
                 }
             } finally {

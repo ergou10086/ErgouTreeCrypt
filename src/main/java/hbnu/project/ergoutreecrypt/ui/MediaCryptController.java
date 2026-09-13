@@ -10,6 +10,7 @@ import java.util.stream.Stream;
 
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
+import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -864,16 +865,15 @@ public class MediaCryptController {
                     setRunning(false);
                 },
                 err -> {
-                    boolean cancelled = err instanceof
-                            MediaCryptCancelledException
-                            || err instanceof InterruptedException;
+                    boolean cancelled = ExceptionMapper.isCancellation(err)
+                            || err instanceof MediaCryptCancelledException;
                     if (cancelled) {
                         avStatusLabel.setText(Messages.get("status.cancelled"));
                         toast.info(Messages.get("status.cancelled"));
                     } else {
-                        String msg = err.getMessage() == null ? err.toString() : err.getMessage();
-                        avStatusLabel.setText(Messages.format("status.failed", msg));
-                        toast.error(Messages.format("status.failed", msg));
+                        String msg = ExceptionMapper.friendlyMessage(err);
+                        avStatusLabel.setText(msg);
+                        toast.error(msg);
                     }
                     setRunning(false);
                 });

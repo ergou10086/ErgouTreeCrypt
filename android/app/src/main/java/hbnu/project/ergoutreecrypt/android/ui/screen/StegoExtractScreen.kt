@@ -78,7 +78,6 @@ import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
 import hbnu.project.ergoutreecrypt.android.ui.component.buildSuccessMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.extractFileName
 import hbnu.project.ergoutreecrypt.android.ui.component.generateRandomPassword
-import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
@@ -352,7 +351,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                 }
             }
             ProgressState.State.ERROR -> {
-                val errMsg = mapErrorToChineseMessage(progress.error)
+                val errMsg = progress.error ?: "未知错误"
                 val errDetail = progress.error
                 vm.reset()
                 scope.launch { discardPendingOutput() }

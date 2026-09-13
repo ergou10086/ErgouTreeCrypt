@@ -92,7 +92,6 @@ import hbnu.project.ergoutreecrypt.android.ui.component.ResultDialog
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
 import hbnu.project.ergoutreecrypt.android.ui.component.buildSuccessMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.extractFileName
-import hbnu.project.ergoutreecrypt.android.ui.component.mapErrorToChineseMessage
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingHint
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.android.viewmodel.DecryptViewModel
@@ -718,7 +717,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
             }
             ProgressState.State.ERROR -> {
-                val errMsg = mapErrorToChineseMessage(progress.error)
+                val errMsg = progress.error ?: "未知错误"
                 val errDetail = listOfNotNull(progress.detail, progress.error)
                     .filter { it.isNotBlank() }
                     .distinct()
@@ -784,7 +783,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 }
             }
             ProgressState.State.ERROR -> {
-                val errMsg = mapErrorToChineseMessage(mediaProgress.error)
+                val errMsg = mediaProgress.error ?: "未知错误"
                 val errDetail = mediaProgress.error
                 mediaVm.reset()
                 scope.launch { discardPendingOutput() }

@@ -47,10 +47,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
+import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.PermissionSection
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
@@ -544,7 +546,69 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = aboutText("about.author"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // 许可证 / 使用规约 / 开源致谢：均为长文本，用可折叠卡片承载避免撑爆设置页
+            Spacer(modifier = Modifier.height(8.dp))
+            ExpandableCard(title = aboutText("about.tab.license")) {
+                AboutBody(
+                    heading = aboutText("about.license.title"),
+                    body = aboutText("about.license.body")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            ExpandableCard(title = aboutText("about.tab.terms")) {
+                AboutBody(body = aboutText("about.terms.body"))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            ExpandableCard(title = aboutText("about.tab.credits")) {
+                AboutBody(body = aboutText("about.credits.body"))
+            }
         }
+    }
+}
+
+/**
+ * 读取「关于」相关文案。
+ *
+ * @param key 文案 key
+ * @return 对应语言的文案；资源缺失时返回空串而不是中断设置页渲染
+ */
+private fun aboutText(key: String): String = try {
+    Messages.get(key)
+} catch (_: Exception) {
+    ""
+}
+
+/**
+ * 「关于」折叠卡片内的正文块。
+ *
+ * @param heading 可选的小标题，为空时不渲染
+ * @param body    正文，可含换行
+ */
+@Composable
+private fun AboutBody(heading: String = "", body: String) {
+    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        if (heading.isNotEmpty()) {
+            Text(
+                text = heading,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

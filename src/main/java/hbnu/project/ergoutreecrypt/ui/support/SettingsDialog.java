@@ -5,6 +5,7 @@ import hbnu.project.ergoutreecrypt.log.LogLevel;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -230,6 +231,25 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.logJvm.tip")), 2, row);
         row++;
 
+        // === 系统集成 ===
+        grid.add(section(Messages.get("settings.section.integration")), 0, row++, 3, 1);
+
+        Button shellMenuBtn = new Button();
+        shellMenuBtn.getStyleClass().add("btn-secondary");
+        shellMenuBtn.setMinWidth(96);
+        Label shellMenuStatus = new Label();
+        shellMenuStatus.getStyleClass().add("field-hint");
+        HBox shellMenuBox = new HBox(10,
+                new Label(Messages.get("settings.shellMenu") + ":"),
+                shellMenuBtn,
+                shellMenuStatus);
+        shellMenuBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(shellMenuBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.shellMenu.tip")), 2, row);
+        row++;
+
+        shellMenuBtn.setOnAction(e -> toggleShellContextMenu(shellMenuBtn, shellMenuStatus));
+
         // ---- 加载当前值 ----
         // 主题模式
         ThemeManager.Mode savedMode = themeManager != null
@@ -261,6 +281,9 @@ public final class SettingsDialog {
                 ? Messages.get("settings.logRefresh.clear")
                 : Messages.get("settings.logRefresh.keep"));
         logJvmDiagnostics.setSelected(SettingsManager.isJvmDiagnostics());
+
+        // 右键菜单集成：按钮文案与状态由当前注册表状态推导
+        refreshShellMenuState(shellMenuBtn, shellMenuStatus);
 
         // ---- 监听即时写入 ----
         themeCombo.valueProperty().addListener((o, a, b) -> {
@@ -350,6 +373,60 @@ public final class SettingsDialog {
                 new ButtonType(Messages.get("dialog.close"), ButtonBar.ButtonData.OK_DONE));
 
         dialog.showAndWait();
+    }
+
+    /**
+     * 按当前注册表状态刷新右键菜单按钮的文案与状态提示。
+     *
+     * <p>按钮文案即当前可执行的动作：未注入时为「注入」，已注入时为「移除」。
+     *
+     * @param button  注入/移除按钮
+     * @param status  状态提示标签
+     */
+    private static void refreshShellMenuState(Button button, Label status) {
+        if (!FileAssociation.isSupported()) {
+            button.setDisable(true);
+            button.setText(Messages.get("settings.shellMenu.install"));
+            status.setText(Messages.get("settings.shellMenu.status.unsupported"));
+            return;
+        }
+        boolean installed = FileAssociation.isContextMenuInstalled();
+        button.setText(Messages.get(installed
+                ? "settings.shellMenu.remove"
+                : "settings.shellMenu.install"));
+        status.setText(Messages.get(installed
+                ? "settings.shellMenu.status.installed"
+                : "settings.shellMenu.status.absent"));
+    }
+
+    /**
+     * 执行右键菜单的注入或移除，写注册表放在后台线程避免卡住界面。
+     *
+     * @param button 注入/移除按钮
+     * @param status 状态提示标签
+     */
+    private static void toggleShellContextMenu(Button button, Label status) {
+        button.setDisable(true);
+        status.setText(Messages.get("settings.shellMenu.status.working"));
+
+        Thread worker = new Thread(() -> {
+            // 读状态与写注册表都在后台线程完成，避免 reg 调用阻塞界面
+            boolean wasInstalled = FileAssociation.isContextMenuInstalled();
+            boolean ok = wasInstalled
+                    ? FileAssociation.uninstallContextMenu()
+                    : FileAssociation.installContextMenu();
+            Platform.runLater(() -> {
+                button.setDisable(false);
+                refreshShellMenuState(button, status);
+                if (!ok) {
+                    status.setText(Messages.get("settings.shellMenu.status.failed"));
+                } else if (wasInstalled) {
+                    status.setText(Messages.get("settings.shellMenu.status.removed"));
+                }
+            });
+        }, "shell-context-menu");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private static Label section(String text) {

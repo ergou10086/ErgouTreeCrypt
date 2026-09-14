@@ -811,8 +811,8 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     Button(
                         onClick = { if (mediaMode) doMediaEncrypt() else doEncrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用
-                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading && !busy
+                        // 允许无密码模式（密码留空即用内置公开密码）；选择处理中或全局其他操作运行中禁用
+                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading && !busy
                     ) {
                         Icon(Icons.Default.Lock, null)
                         Text(if (mediaMode) "  格式保持加密" else "  加密")
@@ -960,7 +960,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码") },
+                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -980,9 +980,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "请输入密码",
+                    "未输入密码 — 文件将使用系统默认约定密码进行无密码加密",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             } else {
                 PasswordStrengthMeter(password = password, modifier = Modifier.fillMaxWidth())

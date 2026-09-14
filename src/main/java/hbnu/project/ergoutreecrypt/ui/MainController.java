@@ -18,7 +18,9 @@ import hbnu.project.ergoutreecrypt.ui.support.*;
 import hbnu.project.ergoutreecrypt.volume.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
@@ -492,6 +494,58 @@ public class MainController {
         }
         updateThemeButton();
         new WindowChrome(rootStack, titleBar, this::stage).install();
+        installTabShortcuts();
+    }
+
+    /**
+     * 为顶部标签条注册键盘切换手势。
+     *
+     * <p>标签多、窗口窄时总有标签排不下，键盘切换比伸手去点更顺手：
+     * {@code Ctrl+Tab} / {@code Ctrl+Shift+Tab} 前后循环，{@code Ctrl+1..9} 直达第 n 个标签。
+     */
+    private void installTabShortcuts() {
+        Scene scene = rootStack.getScene();
+        if (scene == null) {
+            return;
+        }
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (!e.isControlDown() || e.isAltDown() || e.isMetaDown()) {
+                return;
+            }
+            int count = mainTabs.getTabs().size();
+            if (count == 0) {
+                return;
+            }
+            if (e.getCode() == KeyCode.TAB) {
+                int current = Math.max(0, mainTabs.getSelectionModel().getSelectedIndex());
+                int next = e.isShiftDown()
+                        ? (current - 1 + count) % count
+                        : (current + 1) % count;
+                mainTabs.getSelectionModel().select(next);
+                e.consume();
+                return;
+            }
+            int index = tabIndexForKey(e.getCode());
+            if (index >= 0 && index < count) {
+                mainTabs.getSelectionModel().select(index);
+                e.consume();
+            }
+        });
+    }
+
+    /**
+     * 把数字键映射为从 0 开始的标签序号。
+     *
+     * @param code 按键
+     * @return 0..8 对应第 1..9 个标签；非数字键返回 -1
+     */
+    private static int tabIndexForKey(KeyCode code) {
+        if (!code.isDigitKey()) {
+            return -1;
+        }
+        String name = code.name();
+        int digit = name.charAt(name.length() - 1) - '0';
+        return digit >= 1 && digit <= 9 ? digit - 1 : -1;
     }
 
     /**
@@ -843,14 +897,98 @@ public class MainController {
         LogCompanionWindow.toggle(stage());
     }
 
+    /**
+     * 打开「关于」对话框：分页展示工具信息、许可证、使用规约与开源致谢。
+     *
+     * <p>许可证与使用规约是长文本，单独分页并以只读文本域承载，
+     * 便于阅读与复制；正文继承主窗当前的浅色/深色主题。
+     */
     @FXML
     private void onAbout() {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.initOwner(stage());
-        alert.setTitle(Messages.get("menu.about"));
-        alert.setHeaderText("ErgouTreeCrypt");
-        alert.setContentText(Messages.get("about.text") + "\n\n" + Messages.get("about.version"));
-        alert.showAndWait();
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.initOwner(stage());
+        dialog.setTitle(Messages.get("about.title"));
+        dialog.setHeaderText(null);
+        dialog.setResizable(true);
+
+        DialogPane pane = dialog.getDialogPane();
+        pane.getStyleClass().add("root");
+        pane.getStyleClass().add(currentThemeClass());
+        pane.getStylesheets().add(MainController.class.getResource(
+                "/hbnu/project/ergoutreecrypt/ui/styles/win11.css").toExternalForm());
+        pane.getButtonTypes().add(new ButtonType(
+                Messages.get("dialog.close"), ButtonBar.ButtonData.OK_DONE));
+
+        TabPane tabs = new TabPane();
+        // 与主窗口顶部标签条共用同一套外观（下划线指示器 + 主题色文字）
+        tabs.getStyleClass().add("tab-strip");
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabs.getTabs().addAll(
+                aboutOverviewTab(),
+                aboutTextTab(Messages.get("about.tab.license"),
+                        Messages.get("about.license.title") + "\n\n"
+                                + Messages.get("about.license.body")),
+                aboutTextTab(Messages.get("about.tab.terms"), Messages.get("about.terms.body")),
+                aboutTextTab(Messages.get("about.tab.credits"), Messages.get("about.credits.body")));
+
+        pane.setContent(tabs);
+        pane.setPrefSize(640, 480);
+        dialog.showAndWait();
+    }
+
+    /**
+     * 构建「关于」对话框的概览页签：名称、标语、版本与简介。
+     *
+     * @return 概览页签
+     */
+    private static Tab aboutOverviewTab() {
+        Label name = new Label(Messages.get("about.name"));
+        name.getStyleClass().add("about-name");
+        Label tagline = new Label(Messages.get("about.tagline"));
+        tagline.getStyleClass().add("about-tagline");
+        Label version = new Label(Messages.get("about.version"));
+        version.getStyleClass().add("about-version");
+        Label author = new Label(Messages.get("about.author"));
+        author.getStyleClass().add("about-author");
+        Label desc = new Label(Messages.get("about.text"));
+        desc.getStyleClass().add("about-desc");
+        desc.setWrapText(true);
+
+        VBox box = new VBox(6, name, tagline, version, new Separator(), desc, author);
+        box.getStyleClass().add("about-overview");
+        box.setPadding(new Insets(20));
+        return new Tab(Messages.get("about.tab.about"), box);
+    }
+
+    /**
+     * 构建「关于」对话框中的长文本页签。
+     *
+     * @param title 页签标题
+     * @param body  正文，可含换行
+     * @return 只读文本页签
+     */
+    private static Tab aboutTextTab(String title, String body) {
+        TextArea area = new TextArea(body);
+        area.getStyleClass().add("about-text");
+        area.setEditable(false);
+        area.setWrapText(true);
+        return new Tab(title, area);
+    }
+
+    /**
+     * 取当前窗口正在使用的主题样式类名，供独立对话框继承主题。
+     *
+     * @return {@code "dark"} 或 {@code "light"}
+     */
+    private String currentThemeClass() {
+        if (rootStack != null) {
+            for (String cls : rootStack.getStyleClass()) {
+                if ("dark".equals(cls) || "light".equals(cls)) {
+                    return cls;
+                }
+            }
+        }
+        return "light";
     }
 
     // ================================================================

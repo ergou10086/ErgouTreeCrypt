@@ -87,7 +87,7 @@ fun ClassicalScreen(onOpenHistory: () -> Unit = {}) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CompactTopBar(
-                title = "文本加密",
+                title = "字符串加密",
                 actions = {
                     IconButton(onClick = onOpenHistory) {
                         Icon(Icons.Outlined.History, contentDescription = "操作历史")

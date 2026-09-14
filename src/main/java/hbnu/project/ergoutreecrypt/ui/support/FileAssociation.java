@@ -1,5 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
@@ -11,8 +12,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Windows 文件类型关联工具：将 {@code .ergou} 扩展名注册到 HKCU，
- * 使加密文件在资源管理器中显示应用图标。
+ * Windows 外壳集成工具：将 {@code .ergou} 扩展名注册到 HKCU，
+ * 使加密文件在资源管理器中显示应用图标；并提供资源管理器右键菜单的注入与移除。
  *
  * <p>写 {@code HKEY_CURRENT_USER} 不需要管理员权限。注册后会通知 Shell 刷新图标缓存
  *
@@ -24,6 +25,17 @@ public final class FileAssociation {
     private static final String EXT = ".ergou";
     private static final String PROG_ID = "ErgouTreeCrypt.ergou";
     private static final String APP_NAME = "ErgouTreeCrypt 加密文件";
+
+    /**
+     * 资源管理器右键菜单「使用 ErgouTreeCrypt 打开」的注册表位置。
+     *
+     * <p>挂在 {@code HKCU\Software\Classes\*} 下表示对所有文件类型生效。
+     * 键名固定为 {@code ErgouTreeCrypt}，既不含版本号也不含可执行文件路径，
+     * 因此不同版本注入的是同一个位置：新版本启动时能检测到旧版本的注入，
+     * 新版本重新注入会直接覆盖旧版本的命令行（旧 exe 路径随之失效也不会残留）。
+     */
+    private static final String MENU_KEY =
+            "HKCU\\Software\\Classes\\*\\shell\\ErgouTreeCrypt";
 
     /**
      * classpath 中作为应用图标的 .ico 资源。
@@ -79,34 +91,23 @@ public final class FileAssociation {
      * 从 classpath 资源提取图标到用户 AppData 并写入注册表。
      *
      * <p>应用图标（logo-96x.ico）和文件类型图标（file.png→file.ico）
-     * 均落盘到 {@code %APPDATA%/ErgouTreeCrypt/}。若已注册且两个图标均存在则跳过。
+     * 均落盘到 {@code %APPDATA%/ErgouTreeCrypt/}，每次启动覆盖写入。
      *
      * <p>加密文件（.ergou）在 Windows 资源管理器中会显示 {@code file.png} 的图案。
+     * 本方法只负责文件关联与图标，不涉及右键菜单；右键菜单由用户在设置中
+     * 通过 {@link #installContextMenu()} 手动注入。
      */
     public static void autoRegister() {
         if (!isWindows()) {
             return;
         }
         try {
-            Path iconDir = Paths.get(System.getenv("APPDATA"), "ErgouTreeCrypt");
-            Files.createDirectories(iconDir);
-            Path appIconFile = iconDir.resolve("ergou-app.ico");
-            Path fileIconFile = iconDir.resolve("ergou-file.ico");
-
-            // 1) 提取应用图标（logo-96x.ico）
-            try (InputStream in = FileAssociation.class.getResourceAsStream(APP_ICON_RESOURCE)) {
-                if (in != null) {
-                    Files.copy(in, appIconFile, StandardCopyOption.REPLACE_EXISTING);
-                }
+            String[] icons = extractIcons();
+            if (icons == null) {
+                return;
             }
-
-            // 2) 将 file.png 转换为 .ico 并落盘 —— 作为 .ergou 文件类型图标
-            try (InputStream in = FileAssociation.class.getResourceAsStream(FILE_ICON_RESOURCE)) {
-                if (in != null) {
-                    byte[] icoBytes = IconUtils.pngToIco(in);
-                    Files.write(fileIconFile, icoBytes);
-                }
-            }
+            String appIconPath = icons[0];
+            String fileIconPath = icons[1];
 
             String openCommand = buildOpenCommand();
             String exeName = currentExecutableName();
@@ -115,18 +116,155 @@ public final class FileAssociation {
                 return;
             }
 
-            String appIconPath = appIconFile.toAbsolutePath().toString();
-            String fileIconPath = fileIconFile.toAbsolutePath().toString();
-
-            // 3) 注册默认打开关联（.ergou → ProgID → open command）
+            // 1) 注册默认打开关联（.ergou → ProgID → open command）
             registerFileAssociation(fileIconPath, openCommand);
 
-            // 4) 补齐 Default Programs 的应用注册层
+            // 2) 补齐 Default Programs 的应用注册层
             registerApplication(exeName, appIconPath, openCommand);
         } catch (IOException ignored) {
             // 静默失败，不影响应用启动
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * 把两个图标资源提取到 {@code %APPDATA%/ErgouTreeCrypt/}。
+     *
+     * @return 长度为 2 的数组，依次为应用图标路径与 .ergou 文件类型图标路径；
+     *         任一图标缺失或落盘失败时返回 {@code null}
+     */
+    private static String[] extractIcons() throws IOException {
+        Path iconDir = Paths.get(System.getenv("APPDATA"), "ErgouTreeCrypt");
+        Files.createDirectories(iconDir);
+        Path appIconFile = iconDir.resolve("ergou-app.ico");
+        Path fileIconFile = iconDir.resolve("ergou-file.ico");
+
+        // 1) 提取应用图标（logo-96x.ico）
+        try (InputStream in = FileAssociation.class.getResourceAsStream(APP_ICON_RESOURCE)) {
+            if (in == null) {
+                return null;
+            }
+            Files.copy(in, appIconFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // 2) 将 file.png 转换为 .ico 并落盘 —— 作为 .ergou 文件类型图标
+        try (InputStream in = FileAssociation.class.getResourceAsStream(FILE_ICON_RESOURCE)) {
+            if (in == null) {
+                return null;
+            }
+            Files.write(fileIconFile, IconUtils.pngToIco(in));
+        }
+
+        return new String[]{
+                appIconFile.toAbsolutePath().toString(),
+                fileIconFile.toAbsolutePath().toString()};
+    }
+
+    // ================================================================
+    // 资源管理器右键菜单
+    // ================================================================
+
+    /**
+     * 当前系统是否支持外壳集成（非 Windows 平台一律不支持）。
+     *
+     * @return Windows 平台返回 {@code true}
+     */
+    public static boolean isSupported() {
+        return isWindows();
+    }
+
+    /**
+     * 右键菜单是否已注入。
+     *
+     * <p>只在固定的 {@link #MENU_KEY} 上做存在性判断，与注入时用的版本、
+     * 可执行文件路径均无关，因此升级后依旧能识别出旧版本留下的菜单。
+     *
+     * @return 已注入时返回 {@code true}
+     */
+    public static boolean isContextMenuInstalled() {
+        return isWindows() && regKeyExists(MENU_KEY);
+    }
+
+    /**
+     * 注入「使用 ErgouTreeCrypt 打开」到所有文件的右键菜单。
+     *
+     * <p>菜单命令指向当前正在运行的可执行文件，图标复用应用图标资源。
+     * 重复注入等价于覆盖，不会产生多余条目。
+     *
+     * @return 注入并复检成功后返回 {@code true}
+     */
+    public static boolean installContextMenu() {
+        if (!isWindows()) {
+            return false;
+        }
+        try {
+            java.util.Optional<Path> exe = currentExecutablePath();
+            if (exe.isEmpty()) {
+                LogService.warn("FileAssociation", "右键菜单注入失败: 未能定位当前可执行文件");
+                return false;
+            }
+            String[] icons = extractIcons();
+            if (icons == null) {
+                LogService.warn("FileAssociation", "右键菜单注入失败: 图标资源缺失");
+                return false;
+            }
+            String command = regQuoted(exe.get().toAbsolutePath().toString())
+                    + " " + regQuoted("%1");
+
+            runReg("add", MENU_KEY, "/ve", "/d", Messages.get("shell.openWith"), "/f");
+            runReg("add", MENU_KEY, "/v", "Icon", "/t", "REG_SZ",
+                    "/d", regQuoted(icons[0]) + ",0", "/f");
+            runReg("add", MENU_KEY + "\\command", "/ve", "/d", command, "/f");
+
+            notifyShellIconChanged();
+            return isContextMenuInstalled();
+        } catch (Exception e) {
+            LogService.warn("FileAssociation", "右键菜单注入失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 移除已注入的右键菜单。
+     *
+     * @return 确认已不存在时返回 {@code true}
+     */
+    public static boolean uninstallContextMenu() {
+        if (!isWindows()) {
+            return false;
+        }
+        try {
+            if (regKeyExists(MENU_KEY)) {
+                runReg("delete", MENU_KEY, "/f");
+            }
+            notifyShellIconChanged();
+            return !isContextMenuInstalled();
+        } catch (Exception e) {
+            LogService.warn("FileAssociation", "右键菜单移除失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 查询注册表键是否存在。
+     *
+     * @param key 完整键路径（如 {@code HKCU\Software\Classes\*\shell\X}）
+     * @return 键存在时返回 {@code true}
+     */
+    private static boolean regKeyExists(String key) {
+        try {
+            Process p = new ProcessBuilder("reg", "query", key)
+                    .redirectErrorStream(true)
+                    .start();
+            p.getInputStream().readAllBytes();
+            if (!p.waitFor(5, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                return false;
+            }
+            return p.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 

@@ -107,7 +107,7 @@ fun ErgouNavGraph() {
     val bottomNavItems = listOf(
         BottomNavItem(Routes.ENCRYPT_PAGE, "加密", Icons.Filled.Lock, Icons.Outlined.Lock),
         BottomNavItem(Routes.DECRYPT_PAGE, "解密", Icons.Filled.LockOpen, Icons.Outlined.LockOpen),
-        BottomNavItem(Routes.TEXT_CRYPTO_PAGE, "文本加密", Icons.Filled.Edit, Icons.Outlined.Edit),
+        BottomNavItem(Routes.TEXT_CRYPTO_PAGE, "字符串加密", Icons.Filled.Edit, Icons.Outlined.Edit),
         BottomNavItem(Routes.STEGO_PAGE, "隐写", Icons.Filled.Visibility, Icons.Outlined.Visibility),
         BottomNavItem(Routes.STEGO_EXTRACT_PAGE, "隐写提取", Icons.Filled.VisibilityOff, Icons.Outlined.VisibilityOff),
         BottomNavItem(Routes.SETTINGS_PAGE, "设置", Icons.Filled.Settings, Icons.Outlined.Settings)

@@ -359,7 +359,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasSecret = secretPath != null
     val hasCarrier = carrierPath != null && carrierValid
-    val canStart = hasSecret && hasCarrier && password.isNotEmpty() && !isRunning && !secretLoading && !carrierLoading && !busy
+    val canStart = hasSecret && hasCarrier && !isRunning && !secretLoading && !carrierLoading && !busy
 
     // ---- 开始隐写 ----
     fun doHide() {
@@ -871,7 +871,7 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码") },
+                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -890,9 +890,9 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(4.dp))
             if (password.isEmpty()) {
                 Text(
-                    "请输入密码",
+                    "未输入密码 — 文件将使用系统默认约定密码进行无密码加密",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             } else {
                 PasswordStrengthMeter(password = password, modifier = Modifier.fillMaxWidth())

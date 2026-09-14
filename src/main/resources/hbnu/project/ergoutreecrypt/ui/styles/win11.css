@@ -165,6 +165,18 @@
     /* 图标色 (Ikonli font-icon) */
     -icon-color:          #5f6368;
     -icon-accent:         #0067c0;
+
+    /* 文本选中高亮 (Selection)
+       浅色下若沿用默认白色高亮，白底白字几乎不可见，故改用中灰底 + 深色字 */
+    -selection-bg:        #b6bac0;
+    -selection-fg:        #1a1a1a;
+
+    /* 日志级别配色 (Log Level)
+       ERROR/WARN 用功能色，INFO 用主文字色，TRACE 用三级灰以退到背景层 */
+    -log-error:           #c42b1c;
+    -log-warn:            #a15c00;
+    -log-info:            #1a1a1a;
+    -log-trace:           #8d9299;
 }
 
 /* ---------- 深色主题 ---------- */
@@ -222,6 +234,17 @@
     /* 图标色 */
     -icon-color:          #cacaca;
     -icon-accent:         #4cc2ff;
+
+    /* 文本选中高亮 (Selection)
+       深色下使用白底 + 深色字，避免浅字配浅底看不出来 */
+    -selection-bg:        #ffffff;
+    -selection-fg:        #1a1a1a;
+
+    /* 日志级别配色 (Log Level) */
+    -log-error:           #ff8a80;
+    -log-warn:            #ffcc80;
+    -log-info:            #f2f2f2;
+    -log-trace:           #7f7f7f;
 }
 
 /* ==========================================================================
@@ -458,11 +481,12 @@
 
 /* ==========================================================================
  * SECTION 5 — 标签页 (TabPane)
- *    对应 FXML 中的 .main-tabs (TabPane, tabClosingPolicy="UNAVAILABLE")
+ *    对应 .tab-strip：主窗口顶部标签条与「关于」对话框共用同一套外观
+ *    (TabPane, tabClosingPolicy="UNAVAILABLE")
  *    覆盖 Modena 默认标签样式
  * ========================================================================== */
 
-.main-tabs {
+.tab-strip {
     -fx-background-color: transparent;
     -fx-tab-min-height: 36;
     -fx-tab-max-height: 36;
@@ -471,66 +495,94 @@
 }
 
 /* 标签头部区域背景透明 */
-.main-tabs > .tab-header-area {
-    -fx-padding: 0 16 0 16;
+.tab-strip > .tab-header-area {
+    -fx-padding: 0 12 0 12;
 }
 
-.main-tabs > .tab-header-area > .tab-header-background {
+.tab-strip > .tab-header-area > .tab-header-background {
     -fx-background-color: transparent;
     -fx-border-color: transparent transparent -border-soft transparent;
     -fx-border-width: 0 0 1 0;
 }
 
-/* 标签头部滚动按钮隐藏（UNAVAILABLE 模式） */
-.main-tabs > .tab-header-area > .control-buttons-tab {
-    -fx-opacity: 0;
-    -fx-pref-width: 0;
-    -fx-max-width: 0;
+/* 溢出控件：标签多到一行放不下时，TabPane 会自动显示出这个下箭头按钮，
+   点开即列出全部标签（原生 ContextMenu，已由 SECTION 4 统一配色）。
+   它平时完全不占位、不可见，只在需要时出现，因此不必占用常驻界面空间。 */
+.tab-strip > .tab-header-area > .control-buttons-tab {
+    -fx-padding: 0 0 0 2;
 }
 
-/* 单个标签 */
-.main-tabs .tab {
+.tab-strip > .tab-header-area > .control-buttons-tab > .container {
+    -fx-padding: 4 0 0 0;
+}
+
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+    -fx-padding: 5 5 5 5;
+    -fx-cursor: hand;
+}
+
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* SECTION 0 把 -fx-mark-color 置为 transparent，箭头填充色必须在此重新给出，
+   否则溢出按钮可见但箭头不可见 */
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button > .arrow {
+    -fx-background-color: -text-secondary;
+    -fx-padding: 3 4 3 4;
+}
+
+/* 注意：选择器不能折行书写 —— JavaFX 的 CSS 解析器把换行视为选择器结束，
+   折行会直接报 "Expected LBRACE" 并丢弃整条规则 */
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button:hover > .arrow {
+    -fx-background-color: -accent;
+}
+
+/* 单个标签：内边距收紧，使全部标签在默认 520px 宽的窗口里也能一行排下 */
+.tab-strip .tab {
     -fx-background-color: transparent;
     -fx-background-radius: 0;
-    -fx-padding: 8 20 8 20;
+    -fx-padding: 8 12 8 12;
     -fx-cursor: hand;
     -fx-border-color: transparent;
     -fx-border-width: 0;
 }
 
-.main-tabs .tab .tab-label {
+.tab-strip .tab .tab-label {
     -fx-text-fill: -text-secondary;
     -fx-font-size: 13px;
     -fx-font-weight: 600;
 }
 
-.main-tabs .tab:hover .tab-label {
+.tab-strip .tab:hover .tab-label {
     -fx-text-fill: -text-primary;
 }
 
 /* 选中标签：底部 2px 强调色下划线指示器 */
-.main-tabs .tab:selected {
+.tab-strip .tab:selected {
     -fx-border-color: transparent transparent -accent transparent;
     -fx-border-width: 0 0 2 0;
     -fx-background-color: transparent;
 }
 
-.main-tabs .tab:selected .tab-label {
+.tab-strip .tab:selected .tab-label {
     -fx-text-fill: -accent;
 }
 
 /* 去除选中标签的默认虚线焦点 */
-.main-tabs .tab:focused {
+.tab-strip .tab:focused {
     -fx-background-insets: 0;
 }
 
-.main-tabs > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+.tab-strip > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
     -fx-border-color: transparent;
     -fx-border-width: 0;
 }
 
 /* 标签内容区域 */
-.main-tabs .tab-content-area {
+.tab-strip .tab-content-area {
     -fx-background-color: transparent;
     -fx-padding: 0;
 }
@@ -897,6 +949,29 @@
 
 .text-area .scroll-pane .viewport {
     -fx-background-color: transparent;
+}
+
+/* 选中文本高亮
+   JavaFX 默认取 -fx-accent 作为高亮色，而 SECTION 0 已把 -fx-accent 置为 transparent，
+   导致选中区域要么不可见、要么落到 Modena 的白色默认值上（浅色下白底白字）。
+   此处显式指定高亮底色与选中文字色，并覆盖 ComboBox / Spinner 内嵌的文本编辑器。 */
+.text-input,
+.text-field,
+.password-field,
+.text-area,
+.combo-box .text-input,
+.spinner .text-field {
+    -fx-highlight-fill: -selection-bg;
+    -fx-highlight-text-fill: -selection-fg;
+}
+
+/* 选中且失焦时（例如点开右键菜单）同样保持可见 */
+.text-input:focused,
+.text-field:focused,
+.password-field:focused,
+.text-area:focused {
+    -fx-highlight-fill: -selection-bg;
+    -fx-highlight-text-fill: -selection-fg;
 }
 
 /* ==========================================================================
@@ -2168,15 +2243,96 @@
     -fx-padding: 4 0 0 0;
 }
 
-.log-textarea {
-    -fx-background-color: -bg-card;
+/* 日志列表：沿用 SECTION 31 的 .list-view 卡片外观，仅收紧行距 */
+.log-list {
+    -fx-padding: 2;
     -fx-background-radius: 6;
-    -fx-border-color: -border-soft;
     -fx-border-radius: 6;
-    -fx-padding: 4 8 4 8;
+}
+
+.log-list .list-cell {
+    -fx-padding: 3 8 3 8;
+    -fx-background-radius: 3;
+}
+
+/* 单行日志：文本颜色由级别样式类通过 -fx-text-fill 指定 */
+.log-line {
     -fx-font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
     -fx-font-size: 11px;
+}
+
+.log-line-error {
+    -fx-text-fill: -log-error;
+}
+
+.log-line-warn {
+    -fx-text-fill: -log-warn;
+}
+
+.log-line-info {
+    -fx-text-fill: -log-info;
+}
+
+.log-line-trace {
+    -fx-text-fill: -log-trace;
+}
+
+/* 暂无日志时的占位提示 */
+.log-hint {
+    -fx-text-fill: -text-tertiary;
+    -fx-font-size: 12px;
+}
+
+/* ==========================================================================
+ * SECTION — 关于对话框 (About Dialog)
+ *    概览页用标签排版，许可证 / 使用规约 / 致谢页用只读文本域承载长文本
+ * ========================================================================== */
+
+.about-overview {
+    -fx-background-color: transparent;
+}
+
+.about-name {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
     -fx-text-fill: -text-primary;
+}
+
+.about-tagline {
+    -fx-font-size: 12px;
+    -fx-text-fill: -accent;
+}
+
+.about-version {
+    -fx-font-size: 13px;
+    -fx-text-fill: -text-secondary;
+}
+
+.about-author {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+    -fx-padding: 8 0 0 0;
+}
+
+.about-desc {
+    -fx-font-size: 13px;
+    -fx-text-fill: -text-secondary;
+}
+
+/* 长文本页：去掉输入框外观，只保留可滚动、可复制的正文 */
+.about-text {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 12 14 12 14;
+    -fx-font-size: 12px;
+}
+
+.about-text:hover,
+.about-text:focused {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
 }
 
 /* ==========================================================================

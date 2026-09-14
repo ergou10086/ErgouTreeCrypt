@@ -931,8 +931,8 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     Button(
                         onClick = { if (mediaDecryptMode) doMediaDecrypt() else doDecrypt() },
                         modifier = Modifier.fillMaxWidth(),
-                        // 移动端已移除无密码模式：要求非空密码；选择处理中或全局其他操作运行中禁用；加密前压缩的文件禁用
-                        enabled = hasFile && password.isNotEmpty() && !fileLoading && !folderLoading && !keyfileLoading && !busy && compressedNotice == null
+                        // 允许无密码模式（密码留空即用内置公开密码）；选择处理中或全局其他操作运行中禁用；加密前压缩的文件禁用
+                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !busy && compressedNotice == null
                     ) {
                         Icon(Icons.Default.LockOpen, null)
                         Text(if (mediaDecryptMode) "  格式保持解密" else "  解密")
@@ -1084,7 +1084,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("密码") },
-                placeholder = { Text("请输入密码") },
+                placeholder = { Text("请输入密码（可留空使用无密码模式）") },
                 enabled = !isRunning,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -1102,7 +1102,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
 
             Spacer(Modifier.height(4.dp))
             if (password.isEmpty()) {
-                Text("请输入密码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                Text("未输入密码 — 使用系统默认约定密码解密", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
 
             // 粘贴按钮（方角，自适应文字大小）

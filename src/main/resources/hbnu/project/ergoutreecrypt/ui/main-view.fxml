@@ -44,8 +44,8 @@
             </Menu>
         </MenuBar>
 
-        <!-- ===== 标签页：文件加密 / 音视频加密 ===== -->
-        <TabPane fx:id="mainTabs" styleClass="main-tabs" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+        <!-- ===== 标签页：文件加密 / 格式保持加密 ===== -->
+        <TabPane fx:id="mainTabs" styleClass="tab-strip" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
             <Tab fx:id="fileTab">
                 <VBox styleClass="tab-body">
 
@@ -303,7 +303,7 @@
                 </VBox>
             </Tab>
 
-            <!-- 音视频加密标签页（独立 FXML + 控制器） -->
+            <!-- 格式保持加密标签页（独立 FXML + 控制器） -->
             <Tab fx:id="mediaTab">
                 <fx:include fx:id="mediaView" source="av-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>

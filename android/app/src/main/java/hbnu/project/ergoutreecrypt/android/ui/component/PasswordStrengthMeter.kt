@@ -19,8 +19,8 @@ import androidx.compose.ui.unit.dp
  * 密码强度等级。
  */
 enum class StrengthLevel(val label: String, val fraction: Float, val color: Color) {
-    /** 未输入密码 */
-    NONE("未输入密码", 0f, Color.Gray),
+    /** 无密码模式（密码留空，使用内置公开密码） */
+    NONE("无密码模式", 0f, Color.Gray),
     /** 弱 */
     WEAK("弱", 0.25f, Color(0xFFDC2626)),
     /** 中等 */

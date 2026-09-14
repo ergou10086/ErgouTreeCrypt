@@ -6,6 +6,7 @@ import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter;
 import hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierRegistry;
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -503,23 +504,15 @@ public class FileStegoController {
             toast.info(Messages.get("fileStego.toast.no.secret"));
             return;
         }
-        if (matchedAdapter == null) {
-            toast.error(Messages.format("fileStego.toast.invalid.carrier",
-                    getExtension(carrierFile.getName())));
-            return;
-        }
-
-        // 容量检查：若载体有容量限制且待隐藏文件过大，提前拦截避免打开保存对话框
-        long capacity = Long.MAX_VALUE;
-        try {
-            capacity = matchedAdapter.capacity(carrierFile.toPath());
-        } catch (Exception ignored) {
-            // 查询失败时不拦截
-        }
-        if (capacity != Long.MAX_VALUE && secretFile.length() > capacity) {
-            toast.error(Messages.format("fileStego.toast.capacity.exceeded",
-                    FileSizes.human(secretFile.length()),
-                    FileSizes.human(capacity)));
+        // 启动前拦截：载体格式须受支持，且待隐藏文件不得超过载体容量
+        FileInputGuard.GuardResult guard = FileInputGuard.check(
+                FileInputGuard.Feature.FILE_STEGO_HIDE,
+                FileInputGuard.Options.builder()
+                        .secretSizeBytes(secretFile.length())
+                        .build(),
+                carrierFile.toPath());
+        if (guard.rejected()) {
+            toast.error(guard.message());
             return;
         }
 
@@ -594,6 +587,16 @@ public class FileStegoController {
             toast.info(Messages.get("fileStego.toast.no.carrier"));
             return;
         }
+        // 启动前拦截：载体须为受支持格式且确实含本工具隐写数据，
+        // 避免把普通 PNG/ZIP 当作隐写载体后得到一句泛化的「提取失败」
+        FileInputGuard.GuardResult guard = FileInputGuard.check(
+                FileInputGuard.Feature.FILE_STEGO_EXTRACT, FileInputGuard.Options.none(),
+                carrierFile.toPath());
+        if (guard.rejected()) {
+            toast.error(guard.message());
+            return;
+        }
+
         if (outputDir == null) {
             // 未选输出目录时直接弹出目录选择器
             onChooseOutput();

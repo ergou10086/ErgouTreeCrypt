@@ -285,6 +285,26 @@ public final class HeaderReader {
     }
 
     /**
+     * 只读判断输入流开头是否为合法卷头（version 字段可解码且形如 {@code v\d.\d\d}）。
+     *
+     * <p>供文件选择预检使用：仅消费 version 字段、不读取后续数据。与直接调用
+     * {@link #peekVersion} 的区别在于，本方法还会校验解码结果是否真的形如版本号——
+     * 任意字节经 RS 解码后可能得到一个"看起来没损坏"的字符串，必须再比对格式，
+     * 否则会把普通文件误判为加密卷。任何探测失败一律返回 {@code false}。
+     *
+     * @param in header 数据的输入流
+     * @param rs 预初始化的 RS 编解码器集合
+     * @return true 表示该文件像本工具的加密卷
+     */
+    public static boolean looksLikeVolume(InputStream in, RsCodecs rs) {
+        try {
+            return matchVersion(peekVersion(in, rs).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException | CryptoException e) {
+            return false;
+        }
+    }
+
+    /**
      * 检查 version 字节是否匹配格式 {@code v\d.\d\d}。
      *
      * @param b 解码后的 version 字节

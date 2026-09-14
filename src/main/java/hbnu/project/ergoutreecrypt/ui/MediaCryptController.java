@@ -11,6 +11,8 @@ import java.util.stream.Stream;
 import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard;
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -404,59 +406,39 @@ public class MediaCryptController {
     }
 
     private String computeDefaultOutput() {
-        if (selectedFile == null) return "";
-        String fullName = selectedFile.getName();
+        if (selectedFile == null) {
+            return "";
+        }
+        Path input = selectedFile.toPath();
         String parent = selectedFile.getParent();
 
-        // 解密模式：若勾选解压后解密且输入为压缩包，先剥掉压缩包扩展名再计算解密输出
+        // 解密模式：若勾选解压后解密且输入为压缩包，先剥掉压缩包扩展名与 .enc 标记，
+        // 得到归档内加密媒体原本的文件名（对齐桌面端「解压后解密」的还原语义）
         if (mode == Mode.DECRYPT
                 && avDecompressAfterCheck.isSelected()
-                && ArchiveExtractor.isArchive(selectedFile.toPath())) {
-            String innerName = fullName;
-            // 剥掉压缩包扩展名（支持 .tar.gz 双扩展名）
-            if (innerName.toLowerCase().endsWith(".tar.gz")) {
-                innerName = innerName.substring(0, innerName.length() - ".tar.gz".length());
-            } else {
-                int dot = innerName.lastIndexOf('.');
-                innerName = dot > 0 ? innerName.substring(0, dot) : innerName;
-            }
-            // 剥掉 .enc 标记得到原始文件名
-            return parent + File.separator + stripEncMarker(innerName);
+                && ArchiveExtractor.isArchive(input)) {
+            String innerName = stripArchiveExtension(selectedFile.getName());
+            return parent + File.separator + OutputNaming.stripFpeMarker(innerName);
         }
 
-        int idx = fullName.lastIndexOf('.');
-        String ext = idx >= 0 ? fullName.substring(idx) : "";
-        String base = idx >= 0 ? fullName.substring(0, idx) : fullName;
-        if (mode == Mode.ENCRYPT) {
-            return parent + File.separator + base + ".enc" + ext;
-        } else {
-            if (base.endsWith(".enc")) {
-                return parent + File.separator
-                        + base.substring(0, base.length() - 4) + ".dec" + ext;
-            }
-            return parent + File.separator + base + ".dec" + ext;
-        }
+        String name = mode == Mode.ENCRYPT
+                ? OutputNaming.fpeEncryptOutputName(selectedFile.getName())
+                : OutputNaming.fpeDecryptOutputName(selectedFile.getName());
+        return parent + File.separator + name;
     }
 
     /**
-     * 去掉文件名中的 .enc 标记。
-     * 例如 {@code song.enc.mp4 → song.mp4}，{@code song.enc → song}。
+     * 去掉压缩包扩展名（支持 {@code .tar.gz} 双扩展名）。
+     *
+     * @param name 压缩包文件名
+     * @return 去掉扩展名的文件名
      */
-    private static String stripEncMarker(String name) {
-        // 找到 .enc 的位置（最后一个 .ext 之前如果是 .enc 则去掉）
-        int lastDot = name.lastIndexOf('.');
-        if (lastDot > 0) {
-            String base = name.substring(0, lastDot);
-            if (base.toLowerCase().endsWith(".enc")) {
-                return base.substring(0, base.length() - ".enc".length())
-                        + name.substring(lastDot);
-            }
+    private static String stripArchiveExtension(final String name) {
+        if (name.toLowerCase().endsWith(".tar.gz")) {
+            return name.substring(0, name.length() - ".tar.gz".length());
         }
-        // 无扩展名但以 .enc 结尾
-        if (name.toLowerCase().endsWith(".enc")) {
-            return name.substring(0, name.length() - ".enc".length());
-        }
-        return name;
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     @FXML
@@ -555,9 +537,11 @@ public class MediaCryptController {
     private void startMediaVerify(String pwd) {
         Path input = selectedFile.toPath();
 
-        // 格式校验
-        if (MediaFormat.fromExtension(input) == null) {
-            toast.error(Messages.get("av.toast.unsupported"));
+        // 启动前拦截：须为受支持媒体，且加密时开启了「存储完整性校验」
+        FileInputGuard.GuardResult guard = FileInputGuard.check(
+                FileInputGuard.Feature.MEDIA_VERIFY, FileInputGuard.Options.none(), input);
+        if (guard.rejected()) {
+            toast.error(guard.message());
             return;
         }
 
@@ -573,17 +557,26 @@ public class MediaCryptController {
 
     private void startEncrypt(String pwd) {
         Path input = selectedFile.toPath();
-        if (MediaFormat.fromExtension(input) == null) {
-            toast.error(Messages.get("av.toast.unsupported"));
+
+        // 启动前拦截：须为受支持媒体，且所选档位与文件格式匹配
+        ProfileItem selected = avProfileCombo.getValue();
+        FileInputGuard.GuardResult guard = FileInputGuard.check(
+                FileInputGuard.Feature.FPE_ENCRYPT,
+                FileInputGuard.Options.builder()
+                        .mediaProfile(selected == null ? null : selected.profile())
+                        .build(),
+                input);
+        if (guard.rejected()) {
+            toast.error(guard.message());
             return;
         }
+
         String outPath = avOutputFileField.getText();
         if (outPath == null || outPath.isEmpty()) {
             outPath = computeDefaultOutput();
         }
         Path output = Path.of(outPath);
 
-        ProfileItem item = avProfileCombo.getValue();
         // M1：透传桌面端 KDF 档位（默认均衡 256 MiB），使格式保持加密的媒体文件
         // 记录实际 Argon2 参数，移动端可据此在堆内秒级解密。档位与 paranoid 标志
         // 正交：paranoid 仅控制 Serpent/HMAC-SHA3，不影响 KDF 三元组。
@@ -594,12 +587,10 @@ public class MediaCryptController {
                 .argon2MemoryKib(kdf.getMemoryKib())
                 .argon2Passes(kdf.getPasses())
                 .argon2Threads(kdf.getThreads());
-        if (item != null && item.profile != null) {
-            // 仅当所选档位与文件格式匹配时才采用，否则回退默认。
-            MediaFormat fmt = MediaFormat.fromExtension(input);
-            if (item.profile.format() == fmt) {
-                builder.profile(item.profile);
-            }
+        // 档位与文件格式的匹配性已由启动前预检（FileInputGuard）保证；
+        // 此处 profile 为 null 时即「自动档」，交由核心按格式选默认安全档。
+        if (selected != null && selected.profile() != null) {
+            builder.profile(selected.profile());
         }
         MediaCryptOptions options = builder.build();
 
@@ -697,12 +688,18 @@ public class MediaCryptController {
         boolean decompressFirst = avDecompressAfterCheck.isSelected();
         boolean isArchive = ArchiveExtractor.isArchive(input);
 
-        // 若未勾选解压后解密且输入不是支持的媒体格式，报错
-        if (!decompressFirst || !isArchive) {
-            if (MediaFormat.fromExtension(input) == null) {
-                toast.error(Messages.get("av.toast.unsupported"));
-                return;
-            }
+        // 启动前拦截：媒体密文（或勾选解压后解密时的归档）方可放行；
+        // 开启「噪音文件解密」时还要求文件确实含本工具加密元数据
+        FileInputGuard.GuardResult guard = FileInputGuard.check(
+                FileInputGuard.Feature.FPE_DECRYPT,
+                FileInputGuard.Options.builder()
+                        .mediaDecompressFirst(decompressFirst)
+                        .mediaNoiseCheck(avNoiseDecryptCheck.isSelected())
+                        .build(),
+                input);
+        if (guard.rejected()) {
+            toast.error(guard.message());
+            return;
         }
 
         String outPath = avOutputFileField.getText();

@@ -107,6 +107,8 @@ import hbnu.project.ergoutreecrypt.history.OperationType
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -295,7 +297,7 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
                     // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
-                outName = inName?.let { "${FileNameSanitizer.sanitize(it)}.ergou" }
+                outName = inName?.let { OutputNaming.encryptOutputName(FileNameSanitizer.sanitize(it)) }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (filePickJob === myJob) {
@@ -436,9 +438,37 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasFile = inPath != null
 
+    /**
+     * 对所选输入执行启动前预检；不合规则以 Toast 给出「该去哪个功能 / 勾选哪个选项」的引导。
+     *
+     * @param feature 当前功能（通用加密 / 格式保持加密）
+     * @param options 与输入类型相关的当前选项
+     * @return true 表示可以继续启动
+     */
+    suspend fun guardAllows(
+        feature: FileInputGuard.Feature,
+        options: FileInputGuard.Options
+    ): Boolean {
+        val p = inPath ?: return true
+        val message = withContext(Dispatchers.IO) {
+            val result = FileInputGuard.check(feature, options, File(p).toPath())
+            if (result.rejected()) result.message() else null
+        }
+        if (message != null) {
+            Toast.makeText(ctx, message, Toast.LENGTH_LONG).show()
+            return false
+        }
+        return true
+    }
+
     // ---- 开始加密 ----
     fun doEncrypt() {
         scope.launch {
+            // 启动前拦截：通用加密接受任意文件/文件夹，仅拦截路径已失效等异常输入
+            if (!guardAllows(FileInputGuard.Feature.GENERIC_ENCRYPT,
+                    FileInputGuard.Options.none())) {
+                return@launch
+            }
             // 输出目录：SAF 树优先，其次用户显式路径，最后按权限能力解析默认目录
             // （MediaStore 回退时先写内部临时目录，完成后再提交）
             val safUri = outDirUri
@@ -514,6 +544,11 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
     /** 格式保持加密入口。档位自动选择推荐安全档，不开放手动选择。 */
     fun doMediaEncrypt() {
         scope.launch {
+            // 启动前拦截：格式保持加密仅接受 MP3 / MP4 / M4A / M4V / MOV / WAV
+            if (!guardAllows(FileInputGuard.Feature.FPE_ENCRYPT,
+                    FileInputGuard.Options.none())) {
+                return@launch
+            }
             val safUri = outDirUri
             val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
             val writeDir = when {
@@ -534,9 +569,9 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             // 格式保持加密输出必须保留原媒体扩展名（桌面端约定 base.enc.ext），
             // 使两端解密时能按扩展名识别媒体格式。此前误用了通用加密的 .ergou 后缀，
             // 导致加密产物既无法被播放器识别、也无法被两端格式保持解密。
-            val base = inName?.substringBeforeLast('.', "") ?: ""
-            val ext = inName?.substringAfterLast('.', "") ?: ""
-            val mediaOutName = if (ext.isNotEmpty()) "$base.enc.$ext" else "encrypted.media"
+            val mediaOutName = OutputNaming.fpeEncryptOutputName(
+                FileNameSanitizer.sanitize(inName ?: "encrypted.media")
+            )
             outName = mediaOutName
             val outFile = "$writeDir/${FileNameSanitizer.sanitize(mediaOutName)}"
             val tier = argon2Mode.resolve()

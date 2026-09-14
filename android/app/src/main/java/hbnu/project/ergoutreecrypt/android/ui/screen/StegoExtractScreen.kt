@@ -85,6 +85,7 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.android.viewmodel.StegoViewModel
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -258,6 +259,18 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 开始提取 ----
     fun doExtract() {
         scope.launch {
+            // 启动前拦截：载体须为受支持格式且确实含本工具隐写数据，
+            // 避免把普通 PNG/ZIP 当作隐写载体后得到一句泛化的「提取失败」
+            val guardMessage = withContext(Dispatchers.IO) {
+                val path = stegoPath ?: return@withContext null
+                val result = FileInputGuard.check(FileInputGuard.Feature.FILE_STEGO_EXTRACT,
+                    FileInputGuard.Options.none(), File(path).toPath())
+                if (result.rejected()) result.message() else null
+            }
+            if (guardMessage != null) {
+                Toast.makeText(ctx, guardMessage, Toast.LENGTH_LONG).show()
+                return@launch
+            }
             val safUri = outDirUri
             val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
             val outputDir = when {

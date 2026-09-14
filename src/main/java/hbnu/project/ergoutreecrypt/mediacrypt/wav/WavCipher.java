@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.mediacrypt.wav;
 
 import hbnu.project.ergoutreecrypt.mediacrypt.*;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -157,7 +158,8 @@ public final class WavCipher extends AbstractMediaCipher {
         WavParser parser = WavParser.parse(input);
         WavChunk meta = parser.findChunk(WavParser.META_CHUNK_ID);
         if (meta == null) {
-            throw new MediaCryptException("WAV 中未找到加密元数据（EgTc chunk），可能不是本工具加密的文件");
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "WAV 中未找到加密元数据（EgTc chunk），可能不是本工具加密的文件");
         }
 
         byte[] metaBytes;

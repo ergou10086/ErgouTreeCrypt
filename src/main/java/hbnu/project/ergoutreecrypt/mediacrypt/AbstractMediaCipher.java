@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.mediacrypt;
 import hbnu.project.ergoutreecrypt.crypto.Mac;
 import hbnu.project.ergoutreecrypt.crypto.MacFactory;
 import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.IOException;
@@ -107,7 +108,8 @@ public abstract class AbstractMediaCipher implements MediaCipher {
         MediaMetadata metadata = plan.metadata();
 
         if (metadata.format() != format()) {
-            throw new MediaCryptException("元数据格式 " + metadata.format()
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "元数据格式 " + metadata.format()
                     + " 与解密器 " + format() + " 不匹配");
         }
 
@@ -139,7 +141,8 @@ public abstract class AbstractMediaCipher implements MediaCipher {
             byte[] expected = metadata.plainMac();
             if (!MessageDigest.isEqual(expected, recomputedMac)) {
                 Files.deleteIfExists(output);
-                throw new MediaCryptException("完整性校验失败：密码错误或文件已损坏/被篡改");
+                throw new MediaCryptException(ErrorKind.TAMPERED_DATA,
+                        "完整性校验失败：密码错误或文件已损坏/被篡改");
             }
         }
     }
@@ -160,7 +163,8 @@ public abstract class AbstractMediaCipher implements MediaCipher {
             MediaMetadata metadata = plan.metadata();
 
             if (metadata.format() != format()) {
-                throw new MediaCryptException("元数据格式 " + metadata.format()
+                throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                        "元数据格式 " + metadata.format()
                         + " 与解密器 " + format() + " 不匹配");
             }
 
@@ -189,7 +193,8 @@ public abstract class AbstractMediaCipher implements MediaCipher {
             // 6. 常量时间比对
             byte[] expected = metadata.plainMac();
             if (!MessageDigest.isEqual(expected, recomputedMac)) {
-                throw new MediaCryptException("完整性校验失败：密码错误或文件已损坏/被篡改");
+                throw new MediaCryptException(ErrorKind.TAMPERED_DATA,
+                        "完整性校验失败：密码错误或文件已损坏/被篡改");
             }
             return true;
         } finally {

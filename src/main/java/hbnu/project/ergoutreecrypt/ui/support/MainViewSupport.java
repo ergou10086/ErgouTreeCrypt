@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
+
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.util.Duration;
@@ -93,19 +95,16 @@ public final class MainViewSupport {
      * 依据输入文件名推导单文件解密的默认输出路径。
      *
      * <p>去除 {@code .ergou} / {@code .pcv} 扩展名；其它情况追加 {@code .decrypted}。
+     * 命名规则统一委托 {@link OutputNaming}，与移动端保持同一套约定。
      *
      * @param in 输入文件绝对路径
      * @return 默认输出路径
      */
     public static String deriveDecryptOutput(final String in) {
-        String lower = in.toLowerCase();
-        if (lower.endsWith(".ergou")) {
-            return in.substring(0, in.length() - ".ergou".length());
-        }
-        if (lower.endsWith(".pcv")) {
-            return in.substring(0, in.length() - ".pcv".length());
-        }
-        return in + ".decrypted";
+        Path path = Path.of(in);
+        Path parent = path.getParent();
+        String name = OutputNaming.decryptOutputName(path.getFileName().toString());
+        return parent != null ? parent.resolve(name).toString() : name;
     }
 
     /**

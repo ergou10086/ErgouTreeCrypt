@@ -105,6 +105,8 @@ import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
 import hbnu.project.ergoutreecrypt.fileops.Splitter
 import hbnu.project.ergoutreecrypt.volume.DecryptRequest
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -370,13 +372,7 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                     Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
                 name.let { n ->
-                    outName = when {
-                        n.endsWith(".ergou", true) ->
-                            FileNameSanitizer.sanitize(n.removeSuffix(".ergou").removeSuffix(".ERGOU"))
-                        n.endsWith(".pcv", true) ->
-                            FileNameSanitizer.sanitize(n.removeSuffix(".pcv").removeSuffix(".PCV"))
-                        else -> FileNameSanitizer.sanitize("$n.decrypted")
-                    }
+                    outName = FileNameSanitizer.sanitize(OutputNaming.decryptOutputName(n))
                 }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
@@ -498,6 +494,31 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
         scope.launch {
             val input = inPath
 
+            // 启动前拦截：按「当前功能 + 当前选项」校验输入文件，不合规则立即给出引导
+            val guardMessage = withContext(Dispatchers.IO) {
+                if (input == null) {
+                    null
+                } else {
+                    val path = File(input).toPath()
+                    val result = if (verifyOnly && !isFolder) {
+                        FileInputGuard.check(FileInputGuard.Feature.VERIFY_INTEGRITY,
+                            FileInputGuard.Options.none(), path)
+                    } else {
+                        FileInputGuard.check(FileInputGuard.Feature.GENERIC_DECRYPT,
+                            FileInputGuard.Options.builder()
+                                .autoUnzip(autoUnzip)
+                                .decryptThenExtract(decryptThenExtract)
+                                .build(),
+                            path)
+                    }
+                    if (result.rejected()) result.message() else null
+                }
+            }
+            if (guardMessage != null) {
+                Toast.makeText(ctx, guardMessage, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
             // 校验完整性模式：仅做只读校验，不产生明文输出
             if (verifyOnly && input != null && !isFolder) {
                 vm.startVerify(
@@ -570,6 +591,20 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
     /** 格式保持解密入口。噪音检测 + 完整性校验 + 解密。 */
     fun doMediaDecrypt() {
         scope.launch {
+            // 启动前拦截：须为受支持媒体；开启「噪音文件解密」时还要求确实含本工具加密元数据
+            val guardMessage = withContext(Dispatchers.IO) {
+                val p = inPath ?: return@withContext null
+                val result = FileInputGuard.check(FileInputGuard.Feature.FPE_DECRYPT,
+                    FileInputGuard.Options.builder()
+                        .mediaNoiseCheck(mediaNoiseMode)
+                        .build(),
+                    File(p).toPath())
+                if (result.rejected()) result.message() else null
+            }
+            if (guardMessage != null) {
+                Toast.makeText(ctx, guardMessage, Toast.LENGTH_LONG).show()
+                return@launch
+            }
             val safUri = outDirUri
             val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
             val writeDir = when {
@@ -588,10 +623,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
             // 格式保持解密输出：去掉 .enc 标记后加 .dec，保留原媒体扩展名（对齐桌面端）。
-            val base = inName?.substringBeforeLast('.', "") ?: ""
-            val ext = inName?.substringAfterLast('.', "") ?: ""
-            val stem = base.removeSuffix(".enc").removeSuffix(".ENC")
-            val mediaOutName = if (ext.isNotEmpty()) "$stem.dec.$ext" else "decrypted_media"
+            val mediaOutName = OutputNaming.fpeDecryptOutputName(
+                FileNameSanitizer.sanitize(inName ?: "decrypted_media")
+            )
             outName = mediaOutName
             val outFile = "$writeDir/${FileNameSanitizer.sanitize(mediaOutName)}"
             mediaVm.startDecrypt(

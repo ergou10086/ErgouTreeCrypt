@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.mediacrypt.mp3;
 
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptException;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -105,7 +106,7 @@ public final class Mp3MetadataTrailer {
             int metaLen = suffix.getInt(0);
             for (int i = 0; i < TRAILER_MAGIC.length; i++) {
                 if (suffix.get(4 + i) != TRAILER_MAGIC[i]) {
-                    throw new MediaCryptException("MP3 加密尾块魔数不符");
+                    throw new MediaCryptException(ErrorKind.INVALID_HEADER, "MP3 加密尾块魔数不符");
                 }
             }
             if (metaLen < 0 || metaLen + TRAILER_SUFFIX_LEN > size) {

@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.filestego;
 
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
 import hbnu.project.ergoutreecrypt.crypto.RandomBytes;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.filestego.api.CarrierException;
 import hbnu.project.ergoutreecrypt.filestego.api.EmbedOptions;
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoException;
@@ -144,19 +145,21 @@ public final class FileStegoCodec {
         long plaintextSize = Files.size(secretFile);
         long capacity = adapter.capacity(carrierFile);
         if (capacity != Long.MAX_VALUE && plaintextSize > capacity) {
-            throw new FileStegoException(String.format(
-                    "载体容量不足：待隐藏文件 %s (%s) 过大，"
-                            + "%s 载体最多可嵌入约 %s 数据。"
-                            + " 建议：切换为 ZIP 或 PNG 等无容量限制的载体格式。",
-                    fileName, formatSize(plaintextSize),
-                    adapter.displayName(), formatSize(capacity)));
+            throw new FileStegoException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    String.format(
+                            "载体容量不足：待隐藏文件 %s (%s) 过大，"
+                                    + "%s 载体最多可嵌入约 %s 数据。"
+                                    + " 建议：切换为 ZIP 或 PNG 等无容量限制的载体格式。",
+                            fileName, formatSize(plaintextSize),
+                            adapter.displayName(), formatSize(capacity)),
+                    formatSize(plaintextSize), formatSize(capacity));
         }
         // 低内存模式护栏：大载荷且适配器未实现流式嵌入 → 提前友好失败
         long threshold = lowMemoryThreshold(options);
         if (options.isLowMemoryMode()
                 && plaintextSize > threshold
                 && !adapter.supportsStreamingEmbed()) {
-            throw new FileStegoException(String.format(
+            throw new FileStegoException(ErrorKind.UNSUPPORTED_FORMAT, String.format(
                     "该载体格式暂不支持大文件（>%s）流式嵌入，请改用 ZIP、PNG 或 MP4 载体。",
                     formatSize(threshold)));
         }
@@ -195,11 +198,13 @@ public final class FileStegoCodec {
             // 步骤 6：确保组合后的数据不超过载体容量限制
             long combinedLen = metaBytes.length + payloadSize;
             if (capacity != Long.MAX_VALUE && combinedLen > capacity) {
-                throw new FileStegoException(String.format(
-                        "载体容量不足：加密后数据 (%s) 超过 %s 载体最大容量 (%s)。"
-                                + " 建议：切换为 ZIP 等无容量限制的载体格式。",
-                        formatSize(combinedLen),
-                        adapter.displayName(), formatSize(capacity)));
+                throw new FileStegoException(ErrorKind.CAPACITY_INSUFFICIENT,
+                        String.format(
+                                "载体容量不足：加密后数据 (%s) 超过 %s 载体最大容量 (%s)。"
+                                        + " 建议：切换为 ZIP 等无容量限制的载体格式。",
+                                formatSize(combinedLen),
+                                adapter.displayName(), formatSize(capacity)),
+                        formatSize(combinedLen), formatSize(capacity));
             }
 
             // 步骤 7：委托适配器嵌入（meta 与 payload 分离传递），阶段 0.60~0.95
@@ -209,9 +214,11 @@ public final class FileStegoCodec {
             adapter.embedFromFile(carrierFile, metaBytes, payloadFile, output,
                     effectivePwd, embedOpts, embedListener);
         } catch (CarrierException e) {
-            throw new FileStegoException("载体嵌入失败: " + e.getMessage(), e);
+            throw new FileStegoException(ErrorKind.CARRIER_INVALID,
+                    "载体嵌入失败: " + e.getMessage(), e);
         } catch (PayloadException e) {
-            throw new FileStegoException("Payload 加密失败: " + e.getMessage(), e);
+            throw new FileStegoException(ErrorKind.PAYLOAD_INVALID,
+                    "Payload 加密失败: " + e.getMessage(), e);
         } finally {
             Files.deleteIfExists(payloadFile);
         }
@@ -295,9 +302,10 @@ public final class FileStegoCodec {
         BruteForceGuard guard = BruteForceGuard.getInstance();
         String filePath = stegoFile.toAbsolutePath().toString();
         if (!guard.allowAttempt(filePath)) {
-            throw new FileStegoException(
+            throw new FileStegoException(ErrorKind.BRUTE_FORCE_LOCKED,
                     "解密尝试次数过多（" + guard.getMaxAttempts()
-                    + " 次），请稍后再试或确认密码是否正确");
+                    + " 次），请稍后再试或确认密码是否正确",
+                    guard.getMaxAttempts());
         }
 
         // 步骤 2：查找匹配的适配器
@@ -313,7 +321,7 @@ public final class FileStegoCodec {
             if (options.isLowMemoryMode()
                     && Files.size(stegoFile) > threshold
                     && !adapter.supportsStreamingExtract()) {
-                throw new FileStegoException(String.format(
+                throw new FileStegoException(ErrorKind.UNSUPPORTED_FORMAT, String.format(
                         "该载体格式暂不支持大文件（>%s）流式提取，请使用桌面端提取。",
                         formatSize(threshold)));
             }
@@ -367,10 +375,12 @@ public final class FileStegoCodec {
             }
         } catch (CarrierException e) {
             guard.recordFailure(filePath);
-            throw new FileStegoException("载体提取失败: " + e.getMessage(), e);
+            throw new FileStegoException(ErrorKind.CARRIER_INVALID,
+                    "载体提取失败: " + e.getMessage(), e);
         } catch (PayloadException e) {
             guard.recordFailure(filePath);
-            throw new FileStegoException("Payload 解密失败: " + e.getMessage(), e);
+            throw new FileStegoException(ErrorKind.PAYLOAD_INVALID,
+                    "Payload 解密失败: " + e.getMessage(), e);
         }
     }
 
@@ -462,8 +472,9 @@ public final class FileStegoCodec {
         String ext = getExtension(carrierFile);
         Optional<CarrierAdapter> adapter = CarrierRegistry.findByExtension(ext);
         if (adapter.isEmpty()) {
-            throw new FileStegoException("不支持的载体格式: " + ext
-                    + "。支持的格式: " + supportedExtensionsString());
+            throw new FileStegoException(ErrorKind.UNSUPPORTED_FORMAT,
+                    "不支持的载体格式: " + ext
+                    + "。支持的格式: " + supportedExtensionsString(), ext);
         }
         return adapter.get();
     }
@@ -475,7 +486,7 @@ public final class FileStegoCodec {
             throws FileStegoException {
         Optional<CarrierAdapter> adapter = CarrierRegistry.detectAdapter(stegoFile);
         if (adapter.isEmpty()) {
-            throw new FileStegoException(
+            throw new FileStegoException(ErrorKind.NO_STEGO_DATA,
                     "未检测到可识别的隐写数据。请确认文件来源。");
         }
         return adapter.get();

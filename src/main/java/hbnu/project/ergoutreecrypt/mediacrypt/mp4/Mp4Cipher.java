@@ -12,6 +12,7 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptException;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaMetadata;
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 
 /**
  * MP4（ISO-BMFF）格式保持加密。
@@ -66,7 +67,8 @@ public final class Mp4Cipher extends AbstractMediaCipher {
             uuidBox = BoxParser.scanForMetaUuidBox(input);
         }
         if (uuidBox == null) {
-            throw new MediaCryptException("MP4 中未找到加密元数据（uuid box），可能不是本工具加密的文件");
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "MP4 中未找到加密元数据（uuid box），可能不是本工具加密的文件");
         }
         byte[] metaBytes = Mp4UuidMetadata.readMetadata(input, uuidBox);
         MediaMetadata metadata = MediaMetadata.fromBytes(metaBytes);

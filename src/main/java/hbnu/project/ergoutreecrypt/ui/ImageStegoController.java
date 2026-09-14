@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.ui;
 
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
 import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -509,6 +510,10 @@ public class ImageStegoController {
         if (selectedSecretFile == null) {
             toast.info(Messages.get("stego.toast.no.file")); return;
         }
+        // 启动前拦截：LSB 方案的容器必须是 PNG 图片
+        if (!guardImage(FileInputGuard.Feature.IMAGE_STEGO_HIDE, selectedImageFile)) {
+            return;
+        }
         File outFile = chooseSavePng(Messages.get("stego.save.stego"),
                 "stego_" + selectedImageFile.getName());
         if (outFile == null) return;
@@ -559,6 +564,10 @@ public class ImageStegoController {
         if (selectedImageFile == null) {
             toast.info(Messages.get("stego.toast.no.image")); return;
         }
+        // 启动前拦截：LSB 方案只能从 PNG 图片提取
+        if (!guardImage(FileInputGuard.Feature.IMAGE_STEGO_EXTRACT, selectedImageFile)) {
+            return;
+        }
         File outDir = chooseDirectory(Messages.get("stego.choose.output.dir"));
         if (outDir == null) return;
 
@@ -593,6 +602,10 @@ public class ImageStegoController {
         }
         if (chunkSecretFile == null) {
             toast.info(Messages.get("stego.toast.no.file")); return;
+        }
+        // 启动前拦截：Chunk 方案的容器必须是 PNG 图片
+        if (!guardImage(FileInputGuard.Feature.IMAGE_STEGO_HIDE, chunkImageFile)) {
+            return;
         }
         File outFile = chooseSavePng(Messages.get("stego.save.stego"),
                 "stego_" + chunkImageFile.getName());
@@ -642,6 +655,10 @@ public class ImageStegoController {
         if (chunkImageFile == null) {
             toast.info(Messages.get("stego.toast.no.image")); return;
         }
+        // 启动前拦截：Chunk 方案只能从 PNG 图片提取
+        if (!guardImage(FileInputGuard.Feature.IMAGE_STEGO_EXTRACT, chunkImageFile)) {
+            return;
+        }
         File outDir = chooseDirectory(Messages.get("stego.choose.output.dir"));
         if (outDir == null) return;
 
@@ -662,6 +679,23 @@ public class ImageStegoController {
                 toast.error(ExceptionMapper.friendlyMessage(ex));
             });
         });
+    }
+
+    /**
+     * 对图像隐写所选容器执行启动前预检，不合规则弹出引导提示。
+     *
+     * @param feature 图像隐写功能（隐藏 / 提取）
+     * @param image   所选 PNG 容器
+     * @return true 表示可以继续启动
+     */
+    private boolean guardImage(final FileInputGuard.Feature feature, final File image) {
+        FileInputGuard.GuardResult result =
+                FileInputGuard.check(feature, FileInputGuard.Options.none(), image.toPath());
+        if (result.rejected()) {
+            toast.error(result.message());
+            return false;
+        }
+        return true;
     }
 
     // ---- 文件选择器工具 ----

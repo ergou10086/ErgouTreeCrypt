@@ -7,6 +7,8 @@ import hbnu.project.ergoutreecrypt.fileops.ArchivePasswordProvider;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePostExtract;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard;
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
 import hbnu.project.ergoutreecrypt.history.HistoryService;
 import hbnu.project.ergoutreecrypt.history.OperationType;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
@@ -1004,7 +1006,7 @@ public class MainController {
                 File parent = selectedFile.getParentFile();
                 return parent != null ? parent.getAbsolutePath() : path;
             }
-            return path + ".ergou";
+            return OutputNaming.encryptOutput(selectedFile.toPath()).toString();
         }
         // 解密：文件夹/压缩包/分卷碎片输出到父目录；单文件去扩展名
         if (selectedFile.isDirectory()
@@ -1180,11 +1182,43 @@ public class MainController {
                 return;
             }
         }
+        // 启动前拦截：按「当前功能 + 当前选项」校验输入文件，不合规则立即给出引导
         if (mode == Mode.ENCRYPT) {
+            if (!guardAllows(FileInputGuard.Feature.GENERIC_ENCRYPT, FileInputGuard.Options.none())) {
+                return;
+            }
             startEncrypt(pwd);
         } else {
+            FileInputGuard.Options opts = FileInputGuard.Options.builder()
+                    .autoUnzip(autoUnzipCheck.isSelected())
+                    .decryptThenExtract(decryptThenExtractCheck.isSelected())
+                    .build();
+            if (!guardAllows(FileInputGuard.Feature.GENERIC_DECRYPT, opts)) {
+                return;
+            }
             startDecrypt(pwd);
         }
+    }
+
+    /**
+     * 对当前所选文件执行启动前预检，不合规则弹出引导提示。
+     *
+     * @param feature 当前功能
+     * @param options 与输入类型相关的当前选项
+     * @return true 表示可以继续启动；false 表示已提示并应中止
+     */
+    private boolean guardAllows(final FileInputGuard.Feature feature,
+                                final FileInputGuard.Options options) {
+        if (selectedFile == null) {
+            return true;
+        }
+        FileInputGuard.GuardResult result =
+                FileInputGuard.check(feature, options, selectedFile.toPath());
+        if (result.rejected()) {
+            toast.error(result.message());
+            return false;
+        }
+        return true;
     }
 
     @FXML
@@ -1194,6 +1228,9 @@ public class MainController {
         }
         if (selectedFile == null) {
             toast.error(Messages.get("toast.no.file"));
+            return;
+        }
+        if (!guardAllows(FileInputGuard.Feature.VERIFY_INTEGRITY, FileInputGuard.Options.none())) {
             return;
         }
         String pwd = passwordField.getText();

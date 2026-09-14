@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.mediacrypt;
 
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -196,10 +198,12 @@ public final class MediaMetadata {
      */
     public static MediaMetadata fromBytes(byte[] data) throws MediaCryptException {
         if (data == null || data.length < BASE_LEN_V1) {
-            throw new MediaCryptException("元数据长度不足，可能不是本工具加密的文件");
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "元数据长度不足，可能不是本工具加密的文件");
         }
         if (!hasMagic(data)) {
-            throw new MediaCryptException("元数据魔数不符，可能不是本工具加密的文件");
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "元数据魔数不符，可能不是本工具加密的文件");
         }
         byte version = data[OFF_VERSION];
         boolean hasArgon2;
@@ -208,7 +212,8 @@ public final class MediaMetadata {
         } else if (version == VERSION_V1) {
             hasArgon2 = false;
         } else {
-            throw new MediaCryptException("不支持的元数据版本: " + version);
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "不支持的元数据版本: " + version);
         }
         int baseLen = hasArgon2 ? BASE_LEN : BASE_LEN_V1;
 
@@ -218,7 +223,8 @@ public final class MediaMetadata {
             format = MediaFormat.fromId(data[OFF_FORMAT]);
             profile = MediaCryptProfile.fromCode(data[OFF_PROFILE]);
         } catch (IllegalArgumentException e) {
-            throw new MediaCryptException("元数据中的格式/档位无法识别: " + e.getMessage(), e);
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "元数据中的格式/档位无法识别: " + e.getMessage(), e);
         }
 
         int flags = data[OFF_FLAGS] & 0xff;
@@ -226,7 +232,8 @@ public final class MediaMetadata {
         boolean hasMac = (flags & FLAG_HAS_INTEGRITY) != 0;
 
         if (hasMac && data.length < baseLen + MAC_LEN) {
-            throw new MediaCryptException("元数据标记含完整性 MAC 但长度不足");
+            throw new MediaCryptException(ErrorKind.INVALID_HEADER,
+                    "元数据标记含完整性 MAC 但长度不足");
         }
 
         byte[] salt = Arrays.copyOfRange(data, OFF_SALT, OFF_SALT + SALT_LEN);

@@ -100,6 +100,8 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.StegoViewModel
 import hbnu.project.ergoutreecrypt.filestego.api.FileStegoOptions
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
+import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -299,13 +301,8 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                         if (f.exists()) f.length() else null
                     }
                     carrierSize = size
-                    // 生成输出文件名
-                    val dotIdx = name.lastIndexOf('.')
-                    outName = if (dotIdx >= 0) {
-                        "${name.substring(0, dotIdx)}_stego${name.substring(dotIdx)}"
-                    } else {
-                        "${name}_stego"
-                    }
+                    // 生成输出文件名（统一走共享命名的 _stego 约定）
+                    outName = OutputNaming.stegoOutputName(name)
                     // 加载图像预览（仅 PNG，解码在 IO 线程）
                     carrierBitmap = if (isImageCarrier(name)) {
                         withContext(Dispatchers.IO) {
@@ -367,6 +364,20 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     // ---- 开始隐写 ----
     fun doHide() {
         scope.launch {
+            // 启动前拦截：载体须为受支持格式，且待隐藏文件不得超过载体容量
+            val guardMessage = withContext(Dispatchers.IO) {
+                val carrier = carrierPath ?: return@withContext null
+                val result = FileInputGuard.check(FileInputGuard.Feature.FILE_STEGO_HIDE,
+                    FileInputGuard.Options.builder()
+                        .secretSizeBytes(secretSize ?: FileInputGuard.Options.UNKNOWN_SIZE)
+                        .build(),
+                    File(carrier).toPath())
+                if (result.rejected()) result.message() else null
+            }
+            if (guardMessage != null) {
+                Toast.makeText(ctx, guardMessage, Toast.LENGTH_LONG).show()
+                return@launch
+            }
             val safUri = outDirUri
             val resolved = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
             val writeDir = when {

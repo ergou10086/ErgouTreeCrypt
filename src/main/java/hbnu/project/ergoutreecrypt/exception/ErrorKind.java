@@ -75,6 +75,16 @@ public enum ErrorKind {
     INVALID_HEADER("error.invalidHeader"),
 
     /**
+     * 输入不是 EGTC-IMG 图片密文。
+     */
+    NOT_IMAGE_CRYPT("error.notImageCrypt"),
+
+    /**
+     * 协议版本不被当前 reader 支持。
+     */
+    UNSUPPORTED_VERSION("error.unsupportedVersion"),
+
+    /**
      * 压缩包密码错误。
      */
     ARCHIVE_PASSWORD("error.archivePassword"),

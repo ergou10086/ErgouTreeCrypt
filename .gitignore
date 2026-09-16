@@ -9,6 +9,9 @@ target/
 # --- Android ---
 android/.gradle/
 android/build/
+# 互操作语料由 Gradle 从 src/test/resources/imagecrypt/interop 同步而来，
+# 唯一真源在桌面侧；这里只保存构建产物，避免两份二进制副本各自漂移
+android/app/src/androidTest/assets/imagecrypt/
 android/app/build/
 android/app/debug/
 android/app/release/

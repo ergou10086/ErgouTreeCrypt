@@ -19,16 +19,15 @@ import java.util.zip.ZipException;
 /**
  * 从标准 RGB8 非交错 PNG 中流式恢复逻辑字节。
  *
- * <p>reader 验证 PNG 签名、IHDR、所有块 CRC、关键块次序、IDAT 连续性、zlib 精确结束和
- * IEND 物理文件末尾。扫描线按 filter 0–4 反滤波，但只接受 EGTC-IMG v1 规定的 RGB8、
- * 非交错画布。维度在分配行缓冲前受 8192 单边上限约束，因此内存仅与单行及固定压缩缓冲有关。
+ * <p>reader 验证 PNG 签名、IHDR、所有块 CRC、关键块次序、IDAT 连续性、zlib 精确结束和 IEND 物理文件末尾。
+ * 扫描线按 filter 0–4 反滤波，但只接受 EGTC-IMG v1 规定的 RGB8、非交错画布。维度在分配行缓冲前受 8192 单边上限约束，因此内存仅与单行及固定压缩缓冲有关。
  *
- * <p>{@link #readFrame(InputStream, OutputStream)} 先缓冲并校验 184 字节 OuterHeader，再按头中
- * 的 ciphertextLength 只向下游输出协议帧，padding 仍会被消费和校验但不会暴露给调用方。
+ * <p>{@link #readFrame(InputStream, OutputStream)} 先缓冲并校验 184 字节 OuterHeader
+ * 再按头中的 ciphertextLength 只向下游输出协议帧，padding 仍会被消费和校验但不会暴露给调用方。
  * 本类不关闭输入流或输出流。
  *
- * <p>{@link #peekFrame(InputStream)} 是同一解析流程的<b>提前停止</b>变体：只解压到协议头读完
- * 为止，供路由与预检做有界只读探测；它不做任何认证，也不能替代 {@code readFrame}。
+ * <p>{@link #peekFrame(InputStream)} 是同一解析流程的<b>提前停止</b>变体：
+ * 只解压到协议头读完为止，供路由与预检做有界只读探测；它不做任何认证，也不能替代 {@code readFrame}。
  *
  * @author ErgouTree
  * @since 2026/9/16

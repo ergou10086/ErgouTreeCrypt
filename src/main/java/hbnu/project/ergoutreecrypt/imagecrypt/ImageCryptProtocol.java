@@ -224,6 +224,50 @@ public final class ImageCryptProtocol {
      */
     public static final int KEY_CONFIRM_COVERED_HEADER_LENGTH = 164;
 
+    // ==================== PNG 外层容器 ====================
+
+    /**
+     * PNG 每个像素承载的逻辑字节数：R、G、B 各 1 字节。
+     */
+    public static final int PNG_BYTES_PER_PIXEL = 3;
+
+    /**
+     * PNG IHDR 的固定长度（字节）。
+     */
+    public static final int PNG_IHDR_LENGTH = 13;
+
+    /**
+     * v1 外层 PNG 位深，固定为 8-bit。
+     */
+    public static final int PNG_BIT_DEPTH = 8;
+
+    /**
+     * v1 外层 PNG 颜色类型，固定为 2（RGB truecolour）。
+     */
+    public static final int PNG_COLOR_TYPE_RGB = 2;
+
+    /**
+     * v1 外层 PNG 压缩方法，固定为 zlib/deflate 方法 0。
+     */
+    public static final int PNG_COMPRESSION_METHOD = 0;
+
+    /**
+     * v1 外层 PNG 过滤方法，固定为自适应过滤方法 0。
+     */
+    public static final int PNG_FILTER_METHOD = 0;
+
+    /**
+     * v1 外层 PNG 隔行方法，固定为非隔行 0。
+     */
+    public static final int PNG_INTERLACE_NONE = 0;
+
+    /**
+     * writer 的默认 IDAT 数据块大小（字节）。
+     *
+     * <p>分块位置不属于跨端相等条件；该值只限制工作内存并避免产生过多小块。
+     */
+    public static final int PNG_IDAT_CHUNK_BYTES = 1 << 20;
+
     // ==================== flags 位定义 ====================
 
     /**
@@ -425,7 +469,7 @@ public final class ImageCryptProtocol {
         }
         try {
             long pixels = Math.multiplyExact((long) canvasWidth, (long) canvasHeight);
-            return Math.multiplyExact(pixels, 3L);
+            return Math.multiplyExact(pixels, (long) PNG_BYTES_PER_PIXEL);
         } catch (ArithmeticException e) {
             return 0;
         }
@@ -459,7 +503,7 @@ public final class ImageCryptProtocol {
         try {
             long frameBytes = Math.addExact((long) OUTER_HEADER_LENGTH, ciphertextLength);
             frameBytes = Math.addExact(frameBytes, (long) AUTH_TAG_LENGTH);
-            return (frameBytes + 2L) / 3L;
+            return (frameBytes + PNG_BYTES_PER_PIXEL - 1L) / PNG_BYTES_PER_PIXEL;
         } catch (ArithmeticException e) {
             return -1L;
         }

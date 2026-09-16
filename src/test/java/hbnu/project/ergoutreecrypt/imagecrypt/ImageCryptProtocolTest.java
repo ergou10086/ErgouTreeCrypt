@@ -85,6 +85,12 @@ final class ImageCryptProtocolTest {
         assertEquals("ErgouTreeCrypt/EGTC-IMG/v1", ImageCryptProtocol.HKDF_INFO);
         assertEquals(ImageCryptProtocol.INNER_MANIFEST_FIXED_LENGTH,
                 8 + 1 + 1 + 2 + 4 + 8 + 2 + 1 + 1);
+        assertEquals(3, ImageCryptProtocol.PNG_BYTES_PER_PIXEL);
+        assertEquals(13, ImageCryptProtocol.PNG_IHDR_LENGTH);
+        assertEquals(8, ImageCryptProtocol.PNG_BIT_DEPTH);
+        assertEquals(2, ImageCryptProtocol.PNG_COLOR_TYPE_RGB);
+        assertEquals(0, ImageCryptProtocol.PNG_INTERLACE_NONE);
+        assertEquals(1 << 20, ImageCryptProtocol.PNG_IDAT_CHUNK_BYTES);
     }
 
     /**

@@ -41,6 +41,7 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.log;
     exports hbnu.project.ergoutreecrypt.exception;
     exports hbnu.project.ergoutreecrypt.imagecrypt;
+    exports hbnu.project.ergoutreecrypt.imagecrypt.png;
     exports hbnu.project.ergoutreecrypt.volume;
     exports hbnu.project.ergoutreecrypt.mediacrypt;
     exports hbnu.project.ergoutreecrypt.mediacrypt.wav;

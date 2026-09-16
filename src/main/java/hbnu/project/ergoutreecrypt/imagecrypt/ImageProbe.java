@@ -124,9 +124,35 @@ public final class ImageProbe {
         String fileName = input.getFileName() == null ? "" : input.getFileName().toString();
         byte[] prefix;
         try (InputStream in = Files.newInputStream(input)) {
-            prefix = in.readNBytes(PROBE_PREFIX_BYTES);
+            prefix = readPrefix(in, PROBE_PREFIX_BYTES);
         }
         return probeBytes(prefix, fileName);
+    }
+
+    /**
+     * 从流中读取不超过 {@code limit} 字节的前缀。
+     *
+     * <p>刻意不用 {@code InputStream#readNBytes(int)}：它自 Android 13（API 33）才存在，而本项目
+     * minSdk 为 26，依赖它会让共享核心在旧设备上崩溃——这类问题在宿主 JVM 测试中完全不可见。
+     * 这里只使用 JDK 8 就已具备的 {@code read(byte[], int, int)}。文件短于上限时返回实际长度，
+     * 与 {@code readNBytes} 的语义一致。
+     *
+     * @param input 输入流；本方法不会关闭
+     * @param limit 读取上限
+     * @return 实际读到的前缀字节（长度不超过 {@code limit}）
+     * @throws IOException 读取失败
+     */
+    private static byte[] readPrefix(final InputStream input, final int limit) throws IOException {
+        byte[] buffer = new byte[limit];
+        int read = 0;
+        while (read < limit) {
+            int count = input.read(buffer, read, limit - read);
+            if (count < 0) {
+                break;
+            }
+            read += count;
+        }
+        return read == limit ? buffer : java.util.Arrays.copyOf(buffer, read);
     }
 
     /**

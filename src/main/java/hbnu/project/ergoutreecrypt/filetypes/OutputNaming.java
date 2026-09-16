@@ -57,6 +57,29 @@ public final class OutputNaming {
      */
     public static final String STEGO_MARKER = "_stego";
 
+    /**
+     * 图片加密产物的标记后缀（EGTC-IMG）。
+     *
+     * <p>刻意不复用格式保持的 {@link #FPE_MARKER}：图片密文本身就是 PNG，若沿用 {@code .enc}
+     * 会让后续的输入护栏把 {@code .egimg.png} 误路由到格式保持分支。
+     */
+    public static final String IMAGE_CRYPT_MARKER = ".egimg";
+
+    /**
+     * 图片恢复产物的标记后缀（插在基名与扩展名之间）。
+     */
+    public static final String IMAGE_RESTORED_SUFFIX = ".restored";
+
+    /**
+     * 图片加密产物的兜底扩展名。
+     */
+    public static final String IMAGE_CRYPT_EXTENSION = "png";
+
+    /**
+     * 清单名称不可用时使用的恢复基名。
+     */
+    public static final String IMAGE_RESTORED_FALLBACK_STEM = "restored";
+
     private OutputNaming() {
     }
 
@@ -190,6 +213,85 @@ public final class OutputNaming {
      */
     public static Path stegoOutput(final Path carrier) {
         return carrier.resolveSibling(stegoOutputName(carrier.getFileName().toString()));
+    }
+
+    /**
+     * 计算图片加密产物的输出文件名。
+     *
+     * <p>形如 {@code holiday.jpg → holiday.egimg.png}：丢掉原扩展名并追加
+     * {@link #IMAGE_CRYPT_MARKER}，因为产物统一是 PNG 外壳，而原始格式身份由加密区内的
+     * InnerManifest 保存，不依赖文件名。
+     *
+     * @param fileName 输入图片文件名（不含路径）
+     * @return 形如 {@code 基名.egimg.png} 的文件名
+     */
+    public static String imageCryptOutputName(final String fileName) {
+        return stemOf(fileName) + IMAGE_CRYPT_MARKER + "." + IMAGE_CRYPT_EXTENSION;
+    }
+
+    /**
+     * 计算图片加密产物的输出路径（与输入同目录）。
+     *
+     * @param input 输入图片路径
+     * @return 同目录下形如 {@code holiday.egimg.png} 的输出路径
+     */
+    public static Path imageCryptOutput(final Path input) {
+        return input.resolveSibling(imageCryptOutputName(input.getFileName().toString()));
+    }
+
+    /**
+     * 计算图片恢复产物的输出文件名。
+     *
+     * <p>恢复名来自加密区内的清单，因此与当前文件叫什么无关：文件被改名后依然能恢复出
+     * 原始名字。三种情形与协议文档一致：
+     * <ul>
+     *   <li>清单名称可用：{@code holiday.jpg → holiday.restored.jpg}；</li>
+     *   <li>文件名被改过但清单可用：{@code random.png → holiday.restored.jpg}；</li>
+     *   <li>清单名称缺失或非法：{@code random.png → restored.jpg}。</li>
+     * </ul>
+     *
+     * <p>插入 {@code .restored} 标记使恢复产物不会覆盖用户手里那份原始文件；调用方仍须
+     * 按覆盖设置做最终确认。清单名称必须先经 {@code InnerManifest.safeBasename()} 清洗，
+     * 本方法<b>不</b>承担路径穿越防护。
+     *
+     * @param originalName 清单中的 basename，可为空串
+     * @param extension    规范化小写扩展名（不含点），可为空串
+     * @return 恢复文件名
+     */
+    public static String imageRestoredOutputName(final String originalName, final String extension) {
+        String suffix = extension == null || extension.isEmpty() ? "" : "." + extension;
+        String stem = stemOf(originalName == null ? "" : originalName);
+        if (stem.isEmpty()) {
+            return IMAGE_RESTORED_FALLBACK_STEM + suffix;
+        }
+        return stem + IMAGE_RESTORED_SUFFIX + suffix;
+    }
+
+    /**
+     * 计算图片恢复产物的输出路径。
+     *
+     * @param outputDirectory 输出目录
+     * @param originalName    清单中的 basename，可为空串
+     * @param extension       规范化小写扩展名（不含点），可为空串
+     * @return 输出目录下的恢复文件路径
+     */
+    public static Path imageRestoredOutput(final Path outputDirectory, final String originalName,
+                                           final String extension) {
+        return outputDirectory.resolve(imageRestoredOutputName(originalName, extension));
+    }
+
+    /**
+     * 取文件名的基名（去掉最后一个点之后的扩展名）。
+     *
+     * @param fileName 文件名（不含路径，可为空串）
+     * @return 基名；无有效扩展名时返回原文件名
+     */
+    private static String stemOf(final String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot <= 0) {
+            return fileName;
+        }
+        return fileName.substring(0, dot);
     }
 
     /**

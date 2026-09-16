@@ -1,5 +1,7 @@
 package hbnu.project.ergoutreecrypt.imagecrypt;
 
+import hbnu.project.ergoutreecrypt.exception.ErrorKind;
+
 /**
  * EGTC-IMG v1 图片密文协议的<b>唯一常量来源</b>。
  *
@@ -235,6 +237,13 @@ public final class ImageCryptProtocol {
      * PNG IHDR 的固定长度（字节）。
      */
     public static final int PNG_IHDR_LENGTH = 13;
+
+    /**
+     * PNG 标准 8 字节签名。
+     */
+    public static final byte[] PNG_SIGNATURE = {
+            (byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a
+    };
 
     /**
      * v1 外层 PNG 位深，固定为 8-bit。
@@ -507,5 +516,64 @@ public final class ImageCryptProtocol {
         } catch (ArithmeticException e) {
             return -1L;
         }
+    }
+
+    /**
+     * 原图长宽比的裁剪区间下限：1/16。
+     */
+    public static final double CANVAS_RATIO_MIN = 1.0 / 16.0;
+
+    /**
+     * 原图长宽比的裁剪区间上限：16。
+     */
+    public static final double CANVAS_RATIO_MAX = 16.0;
+
+    /**
+     * 为给定载荷挑选外层 PNG 画布尺寸。
+     *
+     * <p>规则见协议规范"画布尺寸"一节：优先按原图长宽比挑选接近 {@code requiredPixels} 的矩形，
+     * 长宽比先裁剪到 {@code [1/16, 16]}，避免极端长条图产生无法打开的画布；当某一维触碰
+     * {@link #LIMIT_CANVAS_SIDE} 时按上限回退重算另一维。所有运算使用 {@code long} 且带显式
+     * 溢出检查，因此伪造的超大载荷不会导致整数回绕或数组分配。
+     *
+     * <p>返回的画布保证 {@code 3 × width × height ≥ frameBytes}，因此调用方无需再做容量判定；
+     * 但画布仍需由 writer 写入 IHDR，并由 reader 复核与协议头 {@code canvasWidth/Height} 一致。
+     *
+     * @param requiredPixels 所需像素数，来自 {@link #requiredPixels(long)}
+     * @param sourceWidth    原图宽度提示，未知或非法时传 0
+     * @param sourceHeight   原图高度提示，未知或非法时传 0
+     * @return 二元数组 {@code [width, height]}
+     * @throws ImageCryptException 载荷超过画布总容量上限
+     */
+    public static int[] chooseCanvasSize(final long requiredPixels, final int sourceWidth,
+                                         final int sourceHeight) throws ImageCryptException {
+        if (requiredPixels <= 0) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT, "载荷长度非法，无法编排画布");
+        }
+        long maxPixels = (long) LIMIT_CANVAS_SIDE * LIMIT_CANVAS_SIDE;
+        if (requiredPixels > maxPixels) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    "载荷需要 " + requiredPixels + " 像素，超过画布上限 " + maxPixels);
+        }
+
+        double ratio = 1.0;
+        if (sourceWidth > 0 && sourceHeight > 0) {
+            ratio = (double) sourceWidth / (double) sourceHeight;
+            ratio = Math.max(CANVAS_RATIO_MIN, Math.min(CANVAS_RATIO_MAX, ratio));
+        }
+
+        long width = (long) Math.ceil(Math.sqrt((double) requiredPixels * ratio));
+        width = Math.max(1L, Math.min(width, LIMIT_CANVAS_SIDE));
+        long height = (requiredPixels + width - 1L) / width;
+        if (height > LIMIT_CANVAS_SIDE) {
+            height = LIMIT_CANVAS_SIDE;
+            width = (requiredPixels + height - 1L) / height;
+        }
+        if (width <= 0 || width > LIMIT_CANVAS_SIDE
+                || height <= 0 || height > LIMIT_CANVAS_SIDE) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    "无法在画布上限内编排载荷: " + requiredPixels + " 像素");
+        }
+        return new int[]{(int) width, (int) height};
     }
 }

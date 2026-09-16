@@ -307,6 +307,10 @@
             <Tab fx:id="mediaTab">
                 <fx:include fx:id="mediaView" source="av-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>
+            <!-- EGTC-IMG 图片加密标签页（独立 FXML + 控制器） -->
+            <Tab fx:id="imageCryptTab">
+                <fx:include fx:id="imageCryptView" source="image-crypt-view.fxml" VBox.vgrow="ALWAYS"/>
+            </Tab>
             <Tab fx:id="classicalTab">
                 <fx:include fx:id="classicalView" source="classical-view.fxml" VBox.vgrow="ALWAYS"/>
             </Tab>

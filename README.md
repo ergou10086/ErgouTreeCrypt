@@ -30,6 +30,7 @@
 | ------------------------ | ---------------------------------------------------------- |
 | 🔐**通用文件加密/解密**  | 对任意文件/文件夹进行高强度加密，输出`.ergou` 加密卷       |
 | 🎵**音视频格式保持加密** | 加密后仍是合法可播放的媒体文件，内容为噪声，解密逐字节还原 |
+| 🖼️**图片混淆加密**      | PNG/JPEG/GIF/BMP/WebP 封装为可预览噪声 PNG，并逐字节还原  |
 | 🔄**Picocrypt 兼容**     | 可解密 Go Picocrypt 生成的`.pcv` 文件                      |
 | 🛡️**偏执模式**         | Serpent-CTR + XChaCha20 双重加密                           |
 | 📐**Reed-Solomon 纠错**  | 抵抗文件部分损坏，牺牲约 6% 空间换取数据可恢复性           |
@@ -45,8 +46,9 @@
 打开的噪声图，解密后原文件**逐字节一致**（JPEG 量化表、EXIF、ICC、动画帧、调色板与循环次数
 全部保留），支持 PNG/APNG、JPEG、GIF、BMP、WebP 输入，提供「公开恢复」与「密码保护」两种模式。
 
-**当前状态：共享核心、真实双端互操作和共享业务接入均已完成；命名、输入护栏、错误分类、
-阶段文案与操作历史由两端共用。但桌面与 Android 的界面入口尚未接入，从这个版本还无法在界面上使用。**
+**当前状态：共享核心、真实双端互操作、共享业务接入与桌面 JavaFX 页面均已完成。2.8.0 的
+桌面开发构建已可在独立“图片加密”标签页完成加密、还原与完整性校验；Android Compose 页面
+仍属于 Phase 7，因此该功能尚未作为稳定的双端 writer 对外发布。**
 
 这是有意的顺序——双端互操作硬闸门（真实 Desktop JVM 与 Android ART 之间交换产物）是发布阻断项，
 必须先于 UI 通过。该闸门现已完成：
@@ -55,6 +57,8 @@
 - 上述三档设备各自生成的 6 份产物均被拉回桌面 JVM 逐字节还原；
 - Argon2 在 BouncyCastle 堆内、Java 离堆与 native libargon2 三条执行路径上给出相同密钥；
 - Phase 5 的三类图片输入护栏、通用入口分流、历史类型与双语阶段文案已接入共享层。
+- Phase 6 的桌面页已接入后台预检、公开/密码模式、固定 64 MiB 跨端 KDF、进度取消、历史日志、
+  双语主题、结果路径动作和有界缩略预览，并以五种真实格式 × 两种保护模式完成逐字节往返。
 
 首次在真机上运行该闸门时立刻发现并修复了一个在宿主 JVM 上完全不可见的崩溃
 （`Files.getFileStore` 在 Android 上抛 `SecurityException`），详见更新日志。
@@ -72,6 +76,7 @@
 - **Strong cryptography**: Argon2id key derivation (4 passes / 1 GiB memory normal, 8 passes / 1 GiB paranoid) → XChaCha20 stream cipher → BLAKE2b-512 / HMAC-SHA3-512 MAC
 - **Reed-Solomon error correction**: RS(128, 136) on all header fields and payload blocks — recovers from partial file corruption
 - **Format-preserving media encryption**: MP3 / MP4 / WAV files remain valid & playable after encryption (content is noise); decryption restores exact original bytes
+- **Image obfuscation encryption (desktop beta)**: PNG/JPEG/GIF/BMP/WebP inputs become viewable noise PNGs and restore byte-for-byte, with public-recovery and password-protected modes
 - **Full Picocrypt compatibility**: Decrypts legacy `.pcv` files (v1 and v2 header formats), including paranoid, keyfile, RS, and deniability modes
 - **Deniable encryption**: Outer XChaCha20 wrapper provides plausible deniability
 - **Keyfile support**: File-based additional entropy, with optional ordered mode
@@ -615,5 +620,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt Desktop v2.7.0 · Android v2.7.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.8.0 · Android v2.8.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

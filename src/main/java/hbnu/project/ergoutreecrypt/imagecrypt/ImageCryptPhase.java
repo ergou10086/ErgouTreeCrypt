@@ -16,45 +16,68 @@ public enum ImageCryptPhase {
     /**
      * 有界只读探测：魔数、格式身份与尺寸提示。
      */
-    PROBE,
+    PROBE("imageCrypt.phase.probe"),
 
     /**
      * 读取输入并统计长度。
      */
-    READING,
+    READING("imageCrypt.phase.reading"),
 
     /**
      * 密码模式密钥派生（Argon2id）与 keyConfirm 校验。
      */
-    KDF,
+    KDF("imageCrypt.phase.kdf"),
 
     /**
      * 内容变换（XChaCha20 流式加解密）。
      */
-    ENCRYPTING,
+    ENCRYPTING("imageCrypt.phase.encrypting"),
 
     /**
      * 密文像素映射与 PNG 写出。
      */
-    PNG_WRITING,
+    PNG_WRITING("imageCrypt.phase.pngWriting"),
 
     /**
      * PNG 读取、反滤波与载荷抽取。
      */
-    PNG_READING,
+    PNG_READING("imageCrypt.phase.pngReading"),
 
     /**
      * 完整认证标签校验。
      */
-    MAC_VERIFY,
+    MAC_VERIFY("imageCrypt.phase.macVerify"),
 
     /**
      * 临时文件提交到最终位置。
      */
-    COMMITTING,
+    COMMITTING("imageCrypt.phase.committing"),
 
     /**
      * 流程完成。
      */
-    DONE
+    DONE("imageCrypt.phase.done");
+
+    /**
+     * 双端共享的阶段文案资源键。
+     */
+    private final String i18nKey;
+
+    /**
+     * 创建图片加解密阶段。
+     *
+     * @param i18nKey 双语文案资源键
+     */
+    ImageCryptPhase(final String i18nKey) {
+        this.i18nKey = i18nKey;
+    }
+
+    /**
+     * 返回双端 UI 应使用的阶段文案资源键。
+     *
+     * @return {@code messages_*.properties} 中的稳定资源键
+     */
+    public String i18nKey() {
+        return i18nKey;
+    }
 }

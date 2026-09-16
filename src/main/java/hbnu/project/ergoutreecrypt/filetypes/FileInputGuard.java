@@ -9,6 +9,9 @@ import hbnu.project.ergoutreecrypt.fileops.ArchiveExtractor;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptCodec;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptException;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageProbe;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptCodec;
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile;
@@ -63,6 +66,21 @@ public final class FileInputGuard {
      * 引导文案：这是格式保持加密的媒体文件，应到音视频页校验完整性。
      */
     public static final String GUARD_FPE_VERIFY = "guard.redirect.fpeVerify";
+
+    /**
+     * 引导文案：这是 EGTC-IMG 图片密文，应到图片加密页还原。
+     */
+    public static final String GUARD_IMAGE_CRYPT_DECRYPT = "guard.redirect.imageCryptDecrypt";
+
+    /**
+     * 引导文案：这是 EGTC-IMG 图片密文，应到图片加密页校验。
+     */
+    public static final String GUARD_IMAGE_CRYPT_VERIFY = "guard.redirect.imageCryptVerify";
+
+    /**
+     * 引导文案：图片加密只接受首期支持的五种图片格式。
+     */
+    public static final String GUARD_IMAGE_CRYPT_UNSUPPORTED = "guard.imageCrypt.unsupportedInput";
 
     /**
      * 引导文案：这是隐写载体，应到隐写页提取。
@@ -145,6 +163,14 @@ public final class FileInputGuard {
     private static final RsCodecs RS_CODECS = new RsCodecs();
 
     /**
+     * EGTC-IMG 轻探测门面。
+     *
+     * <p>这里只调用无状态的 {@link ImageCryptCodec#peekMetadata(Path)}；不会派生密钥或
+     * 读取加密载荷。
+     */
+    private static final ImageCryptCodec IMAGE_CRYPT_CODEC = new ImageCryptCodec();
+
+    /**
      * 扩展名不匹配载体格式时，仍做一次隐写魔数探测的文件大小上限（64 MiB）。
      *
      * <p>与 {@code FileStegoCodec} 的只读预检上限一致：超过该大小的非载体扩展名文件
@@ -189,6 +215,21 @@ public final class FileInputGuard {
          * 音视频完整性校验。
          */
         MEDIA_VERIFY,
+
+        /**
+         * EGTC-IMG 图片加密。
+         */
+        IMAGE_CRYPT_ENCRYPT,
+
+        /**
+         * EGTC-IMG 图片还原。
+         */
+        IMAGE_CRYPT_DECRYPT,
+
+        /**
+         * EGTC-IMG 完整性或认证校验。
+         */
+        IMAGE_CRYPT_VERIFY,
 
         /**
          * 图像隐写：隐藏（容器必须为 PNG）。
@@ -458,6 +499,9 @@ public final class FileInputGuard {
             case FPE_ENCRYPT -> checkFpeEncrypt(input, directory, opts);
             case FPE_DECRYPT -> checkFpeDecrypt(input, directory, opts);
             case MEDIA_VERIFY -> checkMediaVerify(input, directory);
+            case IMAGE_CRYPT_ENCRYPT -> checkImageCryptEncrypt(input, directory);
+            case IMAGE_CRYPT_DECRYPT, IMAGE_CRYPT_VERIFY ->
+                    checkImageCryptEnvelope(input, directory);
             case IMAGE_STEGO_HIDE, IMAGE_STEGO_EXTRACT -> checkImageStego(input, directory);
             case FILE_STEGO_HIDE -> checkFileStegoHide(input, directory, opts);
             case FILE_STEGO_EXTRACT -> checkFileStegoExtract(input, directory);
@@ -482,25 +526,35 @@ public final class FileInputGuard {
         if (Splitter.isSplitChunkPath(input.toString())) {
             return GuardResult.accept();
         }
-        // 3. 媒体密文：.enc.<mediaExt> 形态或含本工具媒体元数据 → 引导去音视频页解密
+        // 3. EGTC-IMG 图片密文：只读协议头后引导到图片还原
+        GuardResult imageCryptProbe = probeImageCryptEnvelope(input);
+        if (imageCryptProbe.accepted()) {
+            return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT,
+                    GUARD_IMAGE_CRYPT_DECRYPT);
+        }
+        if (imageCryptProbe.kind() == ErrorKind.UNSUPPORTED_VERSION
+                || imageCryptProbe.kind() == ErrorKind.IO_ERROR) {
+            return imageCryptProbe;
+        }
+        // 4. 媒体密文：.enc.<mediaExt> 形态或含本工具媒体元数据 → 引导去音视频页解密
         if (looksLikeFpeCiphertext(input)) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_FPE_DECRYPT);
         }
-        // 4. 隐写载体：含隐写魔数（普通 PNG/ZIP 不会命中）→ 引导去隐写页提取
+        // 5. 隐写载体：含隐写魔数（普通 PNG/ZIP 不会命中）→ 引导去隐写页提取
         if (detectCarrier(input)) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_STEGO_EXTRACT);
         }
-        // 5. 通用加密卷：按扩展名或卷头 version 判定（须在媒体扩展名判断之前，
+        // 6. 通用加密卷：按扩展名或卷头 version 判定（须在媒体扩展名判断之前，
         //    否则被改名的加密卷会被误判成"普通媒体文件"）
         if (isGenericVolume(input)) {
             return GuardResult.accept();
         }
-        // 6. 普通媒体文件：通用解密无能为力，引导切换到「格式保持解密」
+        // 7. 普通媒体文件：通用解密无能为力，引导切换到「格式保持解密」
         if (MediaFormat.fromExtension(input) != null) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_MEDIA_DECRYPT);
         }
-        // 7. 明文压缩包：仅在勾选「解压后解密」时放行。
-        // 注意「解密后解压」针对的是加密归档（x.zip.ergou，已在第 5 步放行），
+        // 8. 明文压缩包：仅在勾选「解压后解密」时放行。
+        // 注意「解密后解压」针对的是加密归档（x.zip.ergou，已在第 6 步放行），
         // 单独勾选它并不能让明文压缩包变得可解密，故不作放行条件。
         if (ArchiveExtractor.isArchive(input)) {
             if (opts.autoUnzip()) {
@@ -508,7 +562,7 @@ public final class FileInputGuard {
             }
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_NOT_ENCRYPTED);
         }
-        // 8. 其余：不是本工具加密的文件
+        // 9. 其余：不是本工具加密的文件
         return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_NOT_ENCRYPTED);
     }
 
@@ -525,6 +579,15 @@ public final class FileInputGuard {
         }
         if (Splitter.isSplitChunkPath(input.toString())) {
             return GuardResult.accept();
+        }
+        GuardResult imageCryptProbe = probeImageCryptEnvelope(input);
+        if (imageCryptProbe.accepted()) {
+            return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT,
+                    GUARD_IMAGE_CRYPT_VERIFY);
+        }
+        if (imageCryptProbe.kind() == ErrorKind.UNSUPPORTED_VERSION
+                || imageCryptProbe.kind() == ErrorKind.IO_ERROR) {
+            return imageCryptProbe;
         }
         if (looksLikeFpeCiphertext(input)) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_FPE_VERIFY);
@@ -601,6 +664,57 @@ public final class FileInputGuard {
             return GuardResult.reject(ErrorKind.INVALID_HEADER, GUARD_INTEGRITY_MISSING);
         }
         return GuardResult.accept();
+    }
+
+    /**
+     * 图片加密：只接受五种首期格式的普通文件，并阻止把已有 EGTC-IMG 产物误作原图再次封装。
+     *
+     * @param input     输入路径
+     * @param directory 输入是否为目录
+     * @return 预检结果
+     */
+    private static GuardResult checkImageCryptEncrypt(final Path input,
+                                                       final boolean directory) {
+        if (directory) {
+            return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_REQUIRE_FILE);
+        }
+        GuardResult imageCryptProbe = probeImageCryptEnvelope(input);
+        if (imageCryptProbe.accepted()) {
+            return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT,
+                    GUARD_IMAGE_CRYPT_DECRYPT);
+        }
+        if (imageCryptProbe.kind() == ErrorKind.UNSUPPORTED_VERSION
+                || imageCryptProbe.kind() == ErrorKind.IO_ERROR) {
+            return imageCryptProbe;
+        }
+        try {
+            if (ImageProbe.probe(input).recognized()) {
+                return GuardResult.accept();
+            }
+        } catch (java.io.IOException e) {
+            return GuardResult.reject(ErrorKind.IO_ERROR, ErrorKind.IO_ERROR.i18nKey(),
+                    shortDetail(e));
+        }
+        return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT,
+                GUARD_IMAGE_CRYPT_UNSUPPORTED);
+    }
+
+    /**
+     * 图片还原与校验：要求输入具备可解析的 EGTC-IMG 外层头，并保留协议层错误分类。
+     *
+     * <p>使用 {@link ImageCryptCodec#peekMetadata(Path)} 只读取 184 字节协议头；未知版本、
+     * 非 EGTC-IMG 与损坏头分别保持原有 {@link ErrorKind}，不会被压扁成泛化格式错误。
+     *
+     * @param input     输入路径
+     * @param directory 输入是否为目录
+     * @return 预检结果
+     */
+    private static GuardResult checkImageCryptEnvelope(final Path input,
+                                                        final boolean directory) {
+        if (directory) {
+            return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_REQUIRE_FILE);
+        }
+        return probeImageCryptEnvelope(input);
     }
 
     /**
@@ -689,6 +803,41 @@ public final class FileInputGuard {
         } catch (java.io.IOException e) {
             return false;
         }
+    }
+
+    /**
+     * 轻量探测输入的 EGTC-IMG 外层协议头。
+     *
+     * <p>成功时返回放行结果；失败时保留协议或 I/O 错误分类。调用方可把
+     * {@link ErrorKind#NOT_IMAGE_CRYPT} 与普通 PNG 的 {@link ErrorKind#INVALID_HEADER}
+     * 视为“未命中”并继续其它护栏，同时必须直接返回未知版本与 I/O 错误。
+     *
+     * @param input 输入路径
+     * @return 协议头探测结果
+     */
+    private static GuardResult probeImageCryptEnvelope(final Path input) {
+        try {
+            IMAGE_CRYPT_CODEC.peekMetadata(input);
+            return GuardResult.accept();
+        } catch (ImageCryptException e) {
+            Object[] args = e.args();
+            return args == null
+                    ? GuardResult.reject(e.kind(), e.kind().i18nKey())
+                    : GuardResult.reject(e.kind(), e.kind().i18nKey(), args);
+        } catch (java.io.IOException e) {
+            return GuardResult.reject(ErrorKind.IO_ERROR, ErrorKind.IO_ERROR.i18nKey(),
+                    shortDetail(e));
+        }
+    }
+
+    /**
+     * 生成不包含路径的简短 I/O 诊断文本。
+     *
+     * @param error I/O 异常
+     * @return 可用于通用 I/O 文案的简短说明
+     */
+    private static String shortDetail(final java.io.IOException error) {
+        return error.getClass().getSimpleName();
     }
 
     /**

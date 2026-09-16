@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Visibility
@@ -64,8 +65,13 @@ private val TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
  */
 private fun typeIcon(type: OperationType): ImageVector {
     return when (type) {
-        OperationType.GENERIC_ENCRYPT, OperationType.FPE_ENCRYPT -> Icons.Filled.Lock
-        OperationType.GENERIC_DECRYPT, OperationType.FPE_DECRYPT -> Icons.Filled.LockOpen
+        OperationType.GENERIC_ENCRYPT,
+        OperationType.FPE_ENCRYPT,
+        OperationType.IMAGE_ENCRYPT -> Icons.Filled.Lock
+        OperationType.GENERIC_DECRYPT,
+        OperationType.FPE_DECRYPT,
+        OperationType.IMAGE_DECRYPT -> Icons.Filled.LockOpen
+        OperationType.IMAGE_VERIFY -> Icons.Filled.CheckCircle
         OperationType.STEGO_ENCODE -> Icons.Filled.Visibility
         OperationType.STEGO_EXTRACT -> Icons.Filled.VisibilityOff
     }

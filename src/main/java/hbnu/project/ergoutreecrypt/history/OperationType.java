@@ -24,6 +24,15 @@ public enum OperationType {
     /** 格式保持解密 */
     FPE_DECRYPT("格式保持解密", "history.type.fpeDecrypt"),
 
+    /** 图片加密 */
+    IMAGE_ENCRYPT("图片加密", "history.type.imageEncrypt"),
+
+    /** 图片还原 */
+    IMAGE_DECRYPT("图片还原", "history.type.imageDecrypt"),
+
+    /** 图片校验 */
+    IMAGE_VERIFY("图片校验", "history.type.imageVerify"),
+
     /** 隐写加密 */
     STEGO_ENCODE("隐写加密", "history.type.stegoEncode"),
 

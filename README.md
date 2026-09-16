@@ -45,15 +45,16 @@
 打开的噪声图，解密后原文件**逐字节一致**（JPEG 量化表、EXIF、ICC、动画帧、调色板与循环次数
 全部保留），支持 PNG/APNG、JPEG、GIF、BMP、WebP 输入，提供「公开恢复」与「密码保护」两种模式。
 
-**当前状态：共享核心已完成（协议冻结 + 流式 PNG 容器 + 完整编解码流程），并且已在真实
-Android 运行时（ART）上打通双端互操作；但两端界面入口尚未接入，从这个版本还无法在界面上使用。**
+**当前状态：共享核心、真实双端互操作和共享业务接入均已完成；命名、输入护栏、错误分类、
+阶段文案与操作历史由两端共用。但桌面与 Android 的界面入口尚未接入，从这个版本还无法在界面上使用。**
 
 这是有意的顺序——双端互操作硬闸门（真实 Desktop JVM 与 Android ART 之间交换产物）是发布阻断项，
 必须先于 UI 通过。该闸门现已完成：
 
-- 桌面 JVM 生成的 6 份产物在 ART（API 36 / x86_64）上逐字节还原；
-- 设备生成的 6 份产物被拉回桌面 JVM 逐字节还原；
-- Argon2 在 BouncyCastle 堆内、Java 离堆与 native libargon2 三条执行路径上给出相同密钥。
+- 桌面 JVM 生成的 6 份产物已在 API 26 x86_64、API 36 x86_64 与 API 36 arm64 ART 上逐字节还原；
+- 上述三档设备各自生成的 6 份产物均被拉回桌面 JVM 逐字节还原；
+- Argon2 在 BouncyCastle 堆内、Java 离堆与 native libargon2 三条执行路径上给出相同密钥；
+- Phase 5 的三类图片输入护栏、通用入口分流、历史类型与双语阶段文案已接入共享层。
 
 首次在真机上运行该闸门时立刻发现并修复了一个在宿主 JVM 上完全不可见的崩溃
 （`Files.getFileStore` 在 Android 上抛 `SecurityException`），详见更新日志。
@@ -614,5 +615,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt Desktop v2.6.0 · Android v2.6.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.7.0 · Android v2.7.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

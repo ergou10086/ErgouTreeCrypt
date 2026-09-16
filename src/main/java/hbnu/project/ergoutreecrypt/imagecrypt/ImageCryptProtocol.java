@@ -11,14 +11,14 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * 禁止任一端自行定义第二套常量或按平台默认值推断。
  *
  * <h3>冻结规则</h3>
- * <p>本类中任何随稳定版发布的取值，其语义、偏移与字节序都<b>不可原位修改</b>。需要变更时
- * 只能提升 {@link #VERSION} 并把新语义放进新版本，旧版本 reader 必须长期保留。规范正文见
- * {@code docs/EGTC-IMG-v1协议规范.md}。
+ * <p>本类中任何随稳定版发布的取值，其语义、偏移与字节序都<b>不可原位修改</b>。
+ * 需要变更时只能提升 {@link #VERSION} 并把新语义放进新版本，旧版本 reader 必须长期保留。
+ * 规范正文见{@code docs/EGTC-IMG-v1协议规范.md}。
  *
  * <h3>安全语义</h3>
  * <p>公开恢复（{@link ImageCryptMode#PUBLIC_RECOVERY}）把每文件随机主密钥明文写入协议头，
- * 因此只阻止直接查看，<b>不提供任何保密性</b>，不宣称来源真实性。只有密码保护模式通过
- * Argon2id 派生密钥提供机密性与完整性。
+ * 因此只阻止直接查看，<b>不提供任何保密性</b>，不宣称来源真实性。
+ * 只有密码保护模式通过 Argon2id 派生密钥提供机密性与完整性。
  *
  * @author ErgouTree
  * @since 2026/9/15

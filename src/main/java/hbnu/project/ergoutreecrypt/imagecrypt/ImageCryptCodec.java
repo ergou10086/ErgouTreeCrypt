@@ -673,6 +673,11 @@ public final class ImageCryptCodec {
      * <p>空间不足必须尽早发现：等写满磁盘才失败会让用户在目标目录留下半个文件，而写入已经
      * 消耗了等待时间。无法查询可用空间时不做阻断，交由实际写入阶段报错。
      *
+     * <p>这是一次<b>尽力而为</b>的预检，因此必须容忍各平台查询文件系统信息时的差异。
+     * Android 的 ART 会在 {@code Files.getFileStore} 上抛出 {@link SecurityException}
+     * ——平台的 {@code statvfs} 实现受 SELinux 策略约束，宿主 JVM 上完全看不到这个问题。
+     * 若只捕获 {@code IOException}，一次成功的加密就会因为一个纯提示性的预检而在设备上崩溃。
+     *
      * @param directory     目标目录
      * @param requiredBytes 预计需要的字节数
      * @throws ImageCryptException 可用空间不足
@@ -689,8 +694,9 @@ public final class ImageCryptCodec {
                 throw new ImageCryptException(ErrorKind.DISK_FULL,
                         "磁盘空间不足: 需要约 " + requiredBytes + " 字节，可用 " + usable + " 字节");
             }
-        } catch (IOException e) {
-            LogService.trace(LOG_CATEGORY, "无法查询磁盘可用空间，跳过预检: " + e.getMessage());
+        } catch (IOException | SecurityException | UnsupportedOperationException e) {
+            LogService.trace(LOG_CATEGORY, "无法查询磁盘可用空间，跳过预检: "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 

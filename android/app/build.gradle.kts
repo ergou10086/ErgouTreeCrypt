@@ -35,6 +35,17 @@ val syncI18n by tasks.registering(Copy::class) {
 }
 
 // ============================================================
+// 同步 EGTC-IMG 跨端互操作语料：桌面测试资源 → androidTest assets
+//
+// 这是互操作闸门成立的前提：两端必须读到**同一批产物的字节**，而不是各自生成一份再互相比对。
+// 目标目录是构建产物，已在 .gitignore 中排除，桌面侧那份才是唯一真源。
+// ============================================================
+val syncInteropCorpus by tasks.registering(Copy::class) {
+    from("../../src/test/resources/imagecrypt/interop")
+    into("src/androidTest/assets/imagecrypt/interop")
+}
+
+// ============================================================
 // 版本号：文件级变量，供 android 块和 APK 重命名任务共用
 // ============================================================
 val appVersionName = "2.6.0"
@@ -145,6 +156,10 @@ android {
 
 // 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n) }
+
+// androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料
+tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }
+    .configureEach { dependsOn(syncInteropCorpus) }
 
 // ============================================================
 // 自定义 APK 输出文件名：ErgouTreeCrypt-v2.6.0-release.apk

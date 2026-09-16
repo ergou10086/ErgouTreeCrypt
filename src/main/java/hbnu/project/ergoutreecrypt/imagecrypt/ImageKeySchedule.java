@@ -29,9 +29,8 @@ import java.util.Arrays;
  *   macKey = keyMaterial[32..63]   （keyed BLAKE2b-512）
  * </pre>
  *
- * <p>HKDF 的 info 必须绑定到图片协议域：直接复用媒体协议的空 info 会让同一主密钥在
- * 不同场景派生出相同材料。两条分支之后完全相同，因此解密端只依赖文件头中的
- * {@code protectionMode} 与 KDF 参数即可复现。
+ * <p>HKDF 的 info 必须绑定到图片协议域：直接复用媒体协议的空 info 会让同一主密钥在不同场景派生出相同材料。
+ * 两条分支之后完全相同，因此解密端只依赖文件头中的{@code protectionMode} 与 KDF 参数即可复现。
  *
  * <h3>KDF 参数是规范性固定值</h3>
  * <p>v1 密码模式只使用 {@link ImageCryptProtocol#ARGON2_MEMORY_KIB} /

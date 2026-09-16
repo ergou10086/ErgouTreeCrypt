@@ -101,3 +101,87 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/apk/release/*.apk
+
+  # ============================================================
+  # 图片加密双端互操作硬闸门（P0 发布阻断项）
+  #
+  # 这是唯一能在真实 ART 上验证 EGTC-IMG v1 的作业。宿主 JVM 上的
+  # ImageCryptInteropCorpusTest 与 android/shared-test 都**不能**替代它：
+  # 它们既不会加载 APK 内的 Bouncy Castle，也不会执行 native libargon2，
+  # 更没有经过 Android 的文件系统与 SELinux 策略。
+  #
+  # 流程：模拟器上跑设备侧用例（Desktop → Android + KDF 三路径）→ 把设备生成的
+  # 产物拉回宿主 → 用桌面 JVM 还原验证（Android → Desktop）。两个方向在同一个
+  # 作业里完成，产物不跨作业传递，避免"各自生成一份再互相比对"的伪互操作。
+  #
+  # 尚未启用：计划中"API 26 + 当前目标 API 双档、x86_64 模拟器 + arm64 真机"的
+  # 完整矩阵。当前只固化已在本地验证过的 API 36 / x86_64 一档——在无法就地验证的
+  # 前提下铺开矩阵，只会得到一堆无法区分"协议不兼容"与"环境问题"的红灯。
+  # 扩展方式见 docs/图片加密双端实现详细计划.md 的 Phase 4 一节。
+  # ============================================================
+  image-crypt-interop:
+    name: Image Crypt Interop (ART, API 36)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # 启用 KVM；否则模拟器退化为纯软件模拟，会慢到超时
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run interop gate on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          working-directory: android
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            ./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon --stacktrace
+            adb shell am instrument -w \
+              -e class hbnu.project.ergoutreecrypt.android.ImageCryptInteropTest \
+              hbnu.project.ergoutreecrypt.debug.test/androidx.test.runner.AndroidJUnitRunner
+
+      # 必须用 installDebug + am instrument 而不是 connectedAndroidTest：
+      # 后者会在结束时卸载被测应用，设备上导出的产物会一并消失
+      - name: Pull device-generated artifacts
+        run: |
+          mkdir -p build/interop-export
+          adb pull /sdcard/Android/data/hbnu.project.ergoutreecrypt.debug/files/imagecrypt-interop-out/. \
+            build/interop-export/
+
+      - name: Verify Android artifacts on desktop JVM
+        run: |
+          mvn -B test \
+            -Dtest=ImageCryptAndroidArtifactTest \
+            -DfailIfNoSpecifiedTests=false \
+            -Dimagecrypt.android.export=build/interop-export
+
+      - name: Upload interop artifacts and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-crypt-interop
+          if-no-files-found: ignore
+          path: |
+            build/interop-export/
+            android/app/build/reports/androidTests/

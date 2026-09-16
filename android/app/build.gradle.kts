@@ -48,8 +48,8 @@ val syncInteropCorpus by tasks.registering(Copy::class) {
 // ============================================================
 // 版本号：文件级变量，供 android 块和 APK 重命名任务共用
 // ============================================================
-val appVersionName = "2.7.0"
-val appVersionCode = 20700
+val appVersionName = "2.8.0"
+val appVersionCode = 20800
 
 // ============================================================
 // 签名配置：从 keystore.properties 读取（该文件已加入 .gitignore，不提交到仓库）
@@ -162,7 +162,7 @@ tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }
     .configureEach { dependsOn(syncInteropCorpus) }
 
 // ============================================================
-// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.7.0-release.apk
+// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.8.0-release.apk
 // 原理：在所有 assemble 任务完成后，扫描 outputs/apk 目录并复制一份重命名后的 APK
 // ============================================================
 val renameApks by tasks.registering {

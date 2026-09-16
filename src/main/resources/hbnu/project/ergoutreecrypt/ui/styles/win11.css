@@ -1522,6 +1522,41 @@
     -fx-background-color: linear-gradient(to right, transparent, -warning, transparent);
 }
 
+/* 图片加密公开模式安全说明：始终显示，不依赖当前保护模式。 */
+.image-warning-card {
+    -fx-background-color: derive(-warning, 88%);
+    -fx-background-radius: 10;
+    -fx-border-color: derive(-warning, 25%);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 14;
+}
+
+.image-warning-text {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.warning-text {
+    -fx-text-fill: -warning;
+    -fx-font-size: 12px;
+}
+
+.image-preview-card {
+    -fx-alignment: center;
+}
+
+.image-preview-card .image-view {
+    -fx-effect: dropshadow(gaussian, -shadow, 12, 0.1, 0, 3);
+}
+
+.image-result-card {
+    -fx-border-color: derive(-success, 30%);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+}
+
 /* ==========================================================================
  * SECTION 19 — 提示框 (Tooltip)
  *    对应 FXML 中的 .tooltip, .info-tooltip

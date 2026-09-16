@@ -93,6 +93,10 @@ public class MainController {
     @FXML
     private MediaCryptController mediaViewController;
     @FXML
+    private Tab imageCryptTab;
+    @FXML
+    private ImageCryptController imageCryptViewController;
+    @FXML
     private Tab classicalTab;
     @FXML
     private ClassicalCryptController classicalViewController;
@@ -641,6 +645,12 @@ public class MainController {
         if (mediaViewController != null) {
             mediaViewController.applyTexts();
         }
+        if (imageCryptTab != null) {
+            imageCryptTab.setText(Messages.get("tab.imageCrypt"));
+        }
+        if (imageCryptViewController != null) {
+            imageCryptViewController.applyTexts();
+        }
         if (classicalTab != null) {
             classicalTab.setText(Messages.get("tab.classical"));
         }
@@ -809,6 +819,9 @@ public class MainController {
         taskRunner.shutdown();
         if (mediaViewController != null) {
             mediaViewController.shutdown();
+        }
+        if (imageCryptViewController != null) {
+            imageCryptViewController.shutdown();
         }
         if (classicalViewController != null) {
             classicalViewController.shutdown();

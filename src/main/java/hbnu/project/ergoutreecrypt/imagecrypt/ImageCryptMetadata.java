@@ -4,12 +4,11 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * 只读探测出的 EGTC-IMG 元数据。
  *
  * <h3>可信范围</h3>
- * <p>本记录的全部字段都来自<b>外层 PNG 的前 184 字节协议头</b>，只经过结构合法性与 CRC 校验，
- * <b>尚未经过任何认证</b>。公开恢复模式里这些字段本就明文可见；密码保护模式里它们也必须在
- * 解密前展示（UI 需要据此提示"该文件需要密码""需要 64 MiB 内存"），因此同样不能承载秘密。
+ * <p>本记录的全部字段都来自<b>外层 PNG 的前 184 字节协议头</b>，只经过结构合法性与 CRC 校验，<b>尚未经过任何认证</b>。
+ * 公开恢复模式里这些字段本就明文可见；密码保护模式里它们也必须在解密前展示（UI 需要据此提示"该文件需要密码""需要 64 MiB 内存"），因此同样不能承载秘密。
  *
- * <p>原始文件名、MIME 与真实扩展名位于加密区内，{@link ImageCryptCodec#peekMetadata} 不会
- * 也不会尝试读出它们；只有完整认证通过后，{@link ImageCryptCodec#decrypt} 才可能返回清单。
+ * <p>原始文件名、MIME 与真实扩展名位于加密区内，{@link ImageCryptCodec#peekMetadata} 不会也不会尝试读出它们；
+ * 只有完整认证通过后，{@link ImageCryptCodec#decrypt} 才可能返回清单。
  *
  * <h3>恢复大小的区间性</h3>
  * <p>待解密的封装区长度 {@link #payloadLength()} 可以精确读出，但其中清单描述区的长度取决于

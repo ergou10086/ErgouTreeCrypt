@@ -36,7 +36,7 @@ import java.util.Objects;
  * <pre>
  *   加密  [原文件] → ImageProbe → InnerManifest ┐
  *                                              ├→ XChaCha20 → BLAKE2b → RGB 扫描行 → PNG
- *   还原  [PNG] → 反滤波取 RGB → OuterHeader ──┘
+ *    还原  [PNG] → 反滤波取 RGB → OuterHeader ──┘
  * </pre>
  * 加解密共用同一条流式管线：加密侧 {@link FrameSource} 把 {@code 头 || 密文 || 认证标签}
  * 当作逻辑字节流交给 {@link PixelPngWriter}；解密侧 {@link DecryptingFrameSink} 把 RGB 样本
@@ -45,26 +45,22 @@ import java.util.Objects;
  *
  * <h3>阶段上报的语义</h3>
  * <p>加密路径的"读原文件 → 加密 → 累积 MAC → 写 PNG 扫描行"由同一条拉取式管线完成，
- * 无法拆成互不重叠的两段，因此只上报 {@link ImageCryptPhase#ENCRYPTING}。解密路径同理，
- * 由 {@link ImageCryptPhase#PNG_READING} 覆盖"解析 PNG → 解密 → 写临时文件"，
+ * 无法拆成互不重叠的两段，因此只上报 {@link ImageCryptPhase#ENCRYPTING}。
+ * 解密路径同理，由 {@link ImageCryptPhase#PNG_READING} 覆盖"解析 PNG → 解密 → 写临时文件"，
  * 其后依次是 {@link ImageCryptPhase#MAC_VERIFY} 与 {@link ImageCryptPhase#COMMITTING}。
  * KDF 阶段的 pass 进度走 {@link ImageCryptProgress#onKdfPass(int, int)}，不与字节进度混用。
  *
  * <h3>临时文件与提交</h3>
- * <p>还原产物一律先写目标同目录下的随机 {@code .part} 文件，只有 64 字节认证标签通过后才
- * 原子移动到目标名。任何失败路径（密码错误、标签不符、取消、I/O 异常）都会删除临时文件，
- * 因此<b>绝不会有未经认证的内容出现在目标位置</b>，目标位置也不会留下半成品。
+ * <p>还原产物一律先写目标同目录下的随机 {@code .part} 文件，只有 64 字节认证标签通过后才原子移动到目标名。
+ * 任何失败路径（密码错误、标签不符、取消、I/O 异常）都会删除临时文件，因此<b>绝不会有未经认证的内容出现在目标位置</b>，目标位置也不会留下半成品。
  *
  * <h3>安全语义</h3>
- * <p>{@link ImageCryptMode#PUBLIC_RECOVERY} 把每文件随机主密钥明文写入协议头，只阻止直接查看，
- * <b>不提供保密性</b>；其 MAC 校验只能称为"完整性通过"，不能称为"认证通过"。
- * 密码模式的 protectionMode、KDF 参数、cipherId 与 macId 全部落在认证范围内，篡改后无法
- * 把密码文件降级为公开文件。
+ * <p>{@link ImageCryptMode#PUBLIC_RECOVERY} 把每文件随机主密钥明文写入协议头，只阻止直接查看，<b>不提供保密性</b>；其 MAC 校验只能称为"完整性通过"，不能称为"认证通过"。
+ * 密码模式的 protectionMode、KDF 参数、cipherId 与 macId 全部落在认证范围内，篡改后无法把密码文件降级为公开文件。
  *
  * <h3>生命周期</h3>
  * <p>密码字节由<b>调用方</b>负责清零；核心在使用前克隆一份并在 finally 中清零自己的副本，
- * 因此不会意外改写调用方的数组，也不会把密码留到垃圾回收。日志只记录文件名，
- * 不记录完整路径、密码、密钥或 nonce。
+ * 因此不会意外改写调用方的数组，也不会把密码留到垃圾回收。日志只记录文件名，不记录完整路径、密码、密钥或 nonce。
  *
  * @author ErgouTree
  * @since 2026/9/16

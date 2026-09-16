@@ -115,18 +115,25 @@ mvn test -Dtest=ImageCryptAndroidArtifactTest \
 >
 > 另外，测试进程用的是**被测应用**的上下文（`targetContext`）而不是测试 APK 的上下文：
 > 真实流程读写的是应用自己的私有目录，而且测试运行器包的数据目录在部分设备上不会被预先创建。
+>
+> OnePlus/ColorOS 可能把没有前台 Activity 的 instrumentation 目标进程冻结在
+> `do_freezer_trap`。若测试长时间无输出，可在另一个终端执行：
+> `adb -s <serial> shell am start -n hbnu.project.ergoutreecrypt.debug/hbnu.project.ergoutreecrypt.android.MainActivity`。
+> 这会让同一个测试进程继续，不会清除已经生成的导出产物。
 
 ## 实测结果（2026-09-16）
 
 | 方向 | 环境 | 结果 |
 |---|---|---|
 | Desktop → Android | ART，API 36，x86_64 模拟器 | ✅ 6 份产物逐字节还原 |
-| Android → Desktop | JDK 21.0.4 | ✅ 6 份产物逐字节还原 |
-| Argon2 三执行路径 | 设备（native libargon2 可用，未跳过） | ✅ 与 BC 堆内、离堆逐字节一致 |
-| NFC 组合字符口令 | 两端 | ✅ NFC 与 NFD 导出相同字节 |
+| Desktop → Android | ART，API 26，x86_64 模拟器 | ✅ 6 份产物逐字节还原 |
+| Desktop → Android | ART，API 36，arm64-v8a 真机（OnePlus PLK110） | ✅ 6 份产物逐字节还原 |
+| Android → Desktop | JDK 21.0.4，读取上述三档 Android 导出产物 | ✅ 每档 6 份产物逐字节还原 |
+| Argon2 三执行路径 | API 26 x86_64、API 36 x86_64、API 36 arm64（native libargon2 均可用，未跳过） | ✅ 与 BC 堆内、离堆逐字节一致 |
+| NFC 组合字符口令 | 桌面与上述三档 Android ART | ✅ NFC 与 NFD 导出相同字节 |
 
 ## 尚未覆盖
 
 - 本语料目前只由**桌面端**生成。Android 端生成的产物经 instrumentation 导出后由桌面 JVM
   校验，但尚未作为永久黄金文件归档（计划在 Phase 8 固化）。
-- 尚未在 API 26 模拟器与 arm64 真机上执行（需要相应设备与系统镜像）。
+- `image-crypt-interop` CI 作业尚未完成首次远端运行；工作流当前只存在于尚未推送的本地提交中。

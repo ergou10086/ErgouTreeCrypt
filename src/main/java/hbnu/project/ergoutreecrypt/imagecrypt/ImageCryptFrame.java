@@ -12,16 +12,14 @@ import java.util.zip.CRC32;
  * EGTC-IMG v1 外层协议头（184 字节固定长度）。
  *
  * <h3>布局</h3>
- * <p>字段偏移、字节序与合法值全部来自 {@link ImageCryptProtocol}，本类只负责编解码与合法性
- * 校验，不持有任何密钥生命周期语义。所有整数为无符号语义、大端序，读取后立即扩展到
- * {@code long} 并检查上限，禁止依赖平台默认字节序。
+ * <p>字段偏移、字节序与合法值全部来自 {@link ImageCryptProtocol}，本类只负责编解码与合法性校验，不持有任何密钥生命周期语义。
+ * 所有整数为无符号语义、大端序，读取后立即扩展到 {@code long} 并检查上限，禁止依赖平台默认字节序。
  *
  * <h3>认证关系</h3>
  * <ul>
  *   <li>{@link #keyConfirmPrefixBytes()} 返回 {@code [0, 164)}，是 keyConfirm 的 MAC 输入前缀；</li>
  *   <li>{@link #authenticationPrefixBytes()} 返回 {@code [0, 180)}，是完整认证标签的头覆盖范围；</li>
- *   <li>{@code headerCrc32} 只用于在进入 KDF 或载荷处理前快速发现传输错误，<b>不纳入 MAC</b>，
- *       避免把可重算的校验值当作认证数据。</li>
+ *   <li>{@code headerCrc32} 只用于在进入 KDF 或载荷处理前快速发现传输错误，<b>不纳入 MAC</b>，避免把可重算的校验值当作认证数据。</li>
  * </ul>
  *
  * <h3>不可变性</h3>

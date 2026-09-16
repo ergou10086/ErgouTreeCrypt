@@ -14,8 +14,8 @@ import java.util.Locale;
  * EGTC-IMG v1 内层清单（InnerManifest）。
  *
  * <h3>为什么放在加密区</h3>
- * <p>清单携带原始文件名、MIME 和扩展名。若放在明文协议头里，密码模式会直接泄漏用户
- * 的文件命名与格式偏好。因此清单整体位于加密封装区之内，只有密钥正确时才能读出。
+ * <p>清单携带原始文件名、MIME 和扩展名。若放在明文协议头里，密码模式会直接泄漏用户的文件命名与格式偏好。
+ * 因此清单整体位于加密封装区之内，只有密钥正确时才能读出。
  *
  * <h3>二进制布局（全部大端）</h3>
  * <pre>
@@ -33,8 +33,7 @@ import java.util.Locale;
  *   extension        变长 例如 jpg
  * </pre>
  *
- * <p>{@code manifestLength} <b>不含</b> originalFile 载荷，这样 reader 在开始读取大载荷前
- * 就能完成描述区的边界校验；{@link #totalLength()} 才是清单在原文件之前的完整占位长度。
+ * <p>{@code manifestLength} <b>不含</b> originalFile 载荷，这样 reader 在开始读取大载荷前就能完成描述区的边界校验；{@link #totalLength()} 才是清单在原文件之前的完整占位长度。
  *
  * <h3>路径安全</h3>
  * <p>写入侧只接受 basename 并拒绝任何路径分隔符；读取侧不信任文件内容，

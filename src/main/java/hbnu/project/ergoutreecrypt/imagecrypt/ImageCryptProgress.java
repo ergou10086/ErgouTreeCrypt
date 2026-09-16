@@ -48,6 +48,19 @@ public interface ImageCryptProgress {
     void onBytes(long processed, long total);
 
     /**
+     * 密码模式的 Argon2id pass 进度回调。
+     *
+     * <p>专门与 {@link #onBytes(long, long)} 分开，避免 UI 把 pass 计数当成字节数显示。
+     * KDF 阶段没有线性字节进度，界面应呈现为不定进度或 {@code 已完成 pass / 总 pass}。
+     * 公开恢复模式不执行 Argon2，因此永远不会收到该回调。
+     *
+     * @param completedPasses 已完成的 pass 数，从 1 开始
+     * @param totalPasses     总 pass 数
+     */
+    default void onKdfPass(int completedPasses, int totalPasses) {
+    }
+
+    /**
      * 是否已请求取消。
      *
      * <p>核心在 I/O 循环中每块检查一次（间隔不超过 1 MiB），返回 true 时尽快中止并抛出

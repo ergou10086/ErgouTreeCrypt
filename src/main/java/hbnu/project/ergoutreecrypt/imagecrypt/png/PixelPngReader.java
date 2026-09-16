@@ -27,6 +27,9 @@ import java.util.zip.ZipException;
  * 的 ciphertextLength 只向下游输出协议帧，padding 仍会被消费和校验但不会暴露给调用方。
  * 本类不关闭输入流或输出流。
  *
+ * <p>{@link #peekFrame(InputStream)} 是同一解析流程的<b>提前停止</b>变体：只解压到协议头读完
+ * 为止，供路由与预检做有界只读探测；它不做任何认证，也不能替代 {@code readFrame}。
+ *
  * @author ErgouTree
  * @since 2026/9/16
  */
@@ -75,6 +78,98 @@ public final class PixelPngReader {
         LogicalExtractor extractor = LogicalExtractor.frame(frameOutput);
         decode(input, extractor);
         return extractor.frame();
+    }
+
+    /**
+     * 有界只读探测：只解压到足以读出 184 字节 OuterHeader 为止。
+     *
+     * <p>与 {@link #readFrame(InputStream, OutputStream)} 的关键区别是<b>提前停止</b>：本方法
+     * 不会消费完整张 PNG，不会验证 IEND、尾部数据、zlib 结束状态或密文与 AuthTag。
+     * 因此它只回答"这是不是一个声明了 EGTC-IMG 帧的 PNG"，<b>不构成任何认证</b>：
+     * 协议头本身在公开恢复模式下就是明文，在密码保护模式下也从未被认证。
+     *
+     * <p>停止条件由画布几何决定：所需行数约为 {@code ceil(184 / (3 × width))}，对常规宽度
+     * 只需 1–2 行，因此耗时与内存都不随图片分辨率增长。输入流保持在协议头之后的位置，
+     * 调用方若需要完整校验应重新打开文件并走 {@link #readFrame(InputStream, OutputStream)}。
+     *
+     * @param input PNG 输入流；本方法不会关闭
+     * @return 已通过结构校验、且画布与 IHDR 一致的外层协议头
+     * @throws IOException          底层读取失败
+     * @throws ImageCryptException  PNG 结构非法、帧字段非法或样本不足以容纳协议头
+     */
+    public ImageCryptFrame peekFrame(final InputStream input) throws IOException, ImageCryptException {
+        Objects.requireNonNull(input, "input");
+        PngChunkReader chunks = new PngChunkReader(input);
+        chunks.readSignature();
+
+        PngChunkReader.ChunkHeader ihdrHeader = chunks.nextChunk();
+        if (ihdrHeader == null || !ihdrHeader.isType("IHDR")) {
+            throw invalid("PNG 的第一个块必须是 IHDR");
+        }
+        int[] geometry = readIhdr(chunks, ihdrHeader);
+        int width = geometry[0];
+        int height = geometry[1];
+
+        PngChunkReader.ChunkHeader firstIdat = findFirstIdat(chunks);
+        IdatSequenceInputStream idatInput = new IdatSequenceInputStream(chunks, firstIdat);
+        Inflater inflater = new Inflater();
+        InflaterInputStream zlibInput = new InflaterInputStream(
+                idatInput, inflater, INFLATE_INPUT_BYTES);
+        ImageCryptFrame frame;
+        try {
+            frame = readHeaderSamples(zlibInput, width, height);
+        } catch (PngStreamException e) {
+            throw e.imageCause();
+        } catch (EOFException | ZipException e) {
+            throw new ImageCryptException(ErrorKind.INVALID_HEADER,
+                    "PNG zlib 数据损坏或提前结束", e);
+        } finally {
+            inflater.end();
+        }
+        if (frame.canvasWidth() != width || frame.canvasHeight() != height) {
+            throw invalid("EGTC-IMG 头部画布尺寸与 PNG IHDR 不一致");
+        }
+        return frame;
+    }
+
+    /**
+     * 逐行反滤波并收集样本，直到协议头字节数满足或画布行数耗尽。
+     *
+     * @param zlibInput zlib 解压流
+     * @param width     画布宽度
+     * @param height    画布高度
+     * @return 解析出的外层协议头
+     * @throws IOException         底层读写失败
+     * @throws ImageCryptException zlib 提前结束、过滤器非法或样本不足以容纳协议头
+     */
+    private static ImageCryptFrame readHeaderSamples(final InputStream zlibInput,
+                                                     final int width, final int height)
+            throws IOException, ImageCryptException {
+        byte[] headerBytes = new byte[ImageCryptProtocol.OUTER_HEADER_LENGTH];
+        int collected = 0;
+        int rowBytes = Math.multiplyExact(width, ImageCryptProtocol.PNG_BYTES_PER_PIXEL);
+        byte[] previous = null;
+        byte[] current = new byte[rowBytes];
+        byte[] filter = new byte[1];
+
+        for (int y = 0; y < height && collected < headerBytes.length; y++) {
+            readInflatedFully(zlibInput, filter, 0, 1);
+            readInflatedFully(zlibInput, current, 0, current.length);
+            PngFilters.unfilter(filter[0] & 0xff, current, previous,
+                    ImageCryptProtocol.PNG_BYTES_PER_PIXEL);
+            int count = Math.min(current.length, headerBytes.length - collected);
+            System.arraycopy(current, 0, headerBytes, collected, count);
+            collected += count;
+
+            byte[] completed = current;
+            current = previous == null ? new byte[rowBytes] : previous;
+            previous = completed;
+        }
+
+        if (collected < headerBytes.length) {
+            throw invalid("PNG RGB 样本不足以容纳完整 EGTC-IMG 头");
+        }
+        return ImageCryptFrame.fromBytes(headerBytes);
     }
 
     /**

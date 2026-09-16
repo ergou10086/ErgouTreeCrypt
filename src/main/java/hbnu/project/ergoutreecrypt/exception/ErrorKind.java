@@ -70,6 +70,11 @@ public enum ErrorKind {
     FILE_IN_USE("error.fileInUse"),
 
     /**
+     * 目标文件已存在且未允许覆盖。
+     */
+    FILE_EXISTS("error.fileExists"),
+
+    /**
      * 卷头损坏、非法 version 或注释长度非法。
      */
     INVALID_HEADER("error.invalidHeader"),

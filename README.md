@@ -39,6 +39,22 @@
 | 📦**归档与分卷**         | ZIP 原生 AES 密码；GZ/TAR.GZ/7Z 可选「工具特有加密」包裹（仅本工具可解）；独立橙色进度条 |
 | 🌓**主题与国际化**       | 浅色/深色/跟随系统；中/英文实时切换，进度说明严格跟随所选语言                       |
 
+### 🚧 开发中：图片加密（EGTC-IMG v1）
+
+把完整原文件字节加密封装进一张标准 8-bit RGB PNG 的像素里：产物在普通看图软件中是能正常
+打开的噪声图，解密后原文件**逐字节一致**（JPEG 量化表、EXIF、ICC、动画帧、调色板与循环次数
+全部保留），支持 PNG/APNG、JPEG、GIF、BMP、WebP 输入，提供「公开恢复」与「密码保护」两种模式。
+
+**当前状态：共享核心已完成（协议冻结 + 流式 PNG 容器 + 完整编解码流程），但两端界面入口尚未
+接入，从这个版本还无法在界面上使用。** 这是有意的顺序——双端互操作硬闸门（真实 Desktop JVM 与
+Android ART 之间交换产物）是发布阻断项，必须先于 UI 通过。
+
+> ⚠️ **公开恢复模式仅阻止直接查看，不保护秘密。** 每文件随机主密钥明文写在文件里，
+> 任何拿到文件和本工具的人都能还原原图。该模式只做「完整性检查」，不提供机密性。
+
+协议规范见 [docs/EGTC-IMG-v1协议规范.md](docs/EGTC-IMG-v1协议规范.md)，
+实施计划与阶段状态见 [docs/图片加密双端实现详细计划.md](docs/图片加密双端实现详细计划.md)。
+
 ---
 
 ## ✨ Features
@@ -589,5 +605,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt Desktop v2.5.0 · Android v2.5.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.6.0 · Android v2.6.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

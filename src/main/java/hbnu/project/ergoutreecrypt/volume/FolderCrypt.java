@@ -86,6 +86,13 @@ public final class FolderCrypt {
      */
     public static void encryptFolder(Path inputDir, Path outputDir, EncryptOptions opts) throws Exception {
         String folderName = inputDir.getFileName().toString();
+
+        // 压缩后加密：整个文件夹先打成单个归档，再对归档整体加密，不逐文件处理
+        if (isPreArchive(opts)) {
+            encryptFolderAsArchive(inputDir, outputDir, folderName, opts);
+            return;
+        }
+
         int maxDepth = opts.encryptDepth;
 
         // Step 1: 按深度收集待加密文件与"深目录"
@@ -102,104 +109,429 @@ public final class FolderCrypt {
             throw new CryptoException(ErrorKind.INVALID_HEADER, "input folder is empty: " + inputDir);
         }
 
-        // 加密结果先落到一个工作目录（与输入同名），再视情况打包
-        Path workDir = outputDir.resolve(folderName);
-        Files.createDirectories(workDir);
+        // 加密结果先落到一个工作目录，再视情况打包。
+        // 勾选「加密后压缩」时必须落在临时目录：否则一旦输出目录就是输入目录的父目录
+        // （默认就是如此），工作目录会与输入文件夹重合，导致归档把原文件与密文一并收进去、
+        // 收尾清理再把原文件夹整个删掉。
+        boolean archiving = hasArchiveFormat(opts.archiveFormat);
+        Path workDir = createWorkDir(outputDir, folderName, archiving);
+        boolean staging = archiving;
+
+        try {
+            ProgressReporter reporter = opts.reporter;
+            int total = filesToEncrypt.size() + deepDirs.size();
+
+            // 预创建所有目标目录（单线程，避免竞态）
+            for (Path src : filesToEncrypt) {
+                Path rel = inputDir.relativize(src);
+                Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
+                Files.createDirectories(destEnc.getParent());
+                if (opts.split) {
+                    Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
+                    Files.createDirectories(chunkDir);
+                }
+            }
+            for (Path deepDir : deepDirs) {
+                Path rel = inputDir.relativize(deepDir);
+                // 深目录的加密输出放在其父目录镜像位置下：例如 sub1/deep/ → sub1/deep.zip.ergou
+                Path parentInWork = rel.getParent() != null
+                        ? workDir.resolve(rel.getParent().toString())
+                        : workDir;
+                Path destEnc = parentInWork.resolve(rel.getFileName().toString() + ".zip.ergou");
+                Files.createDirectories(destEnc.getParent());
+                if (opts.split) {
+                    Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
+                    Files.createDirectories(chunkDir);
+                }
+            }
+
+            // 线程数：总大小达阈值则单线程；并行时用聚合器以最慢任务为基准
+            BatchResult result = new BatchResult();
+            opts.batchResult = result;
+            long totalBytes = sumFileSizes(filesToEncrypt) + sumDirSizes(deepDirs);
+            int threads = Math.max(1, Math.min(
+                    resolveThreadCount(opts.threadCount, totalBytes, false, result), total));
+            result.setThreadCountUsed(threads);
+            LogService.info("FolderCrypt", "开始加密文件夹 " + folderName
+                    + " files=" + filesToEncrypt.size()
+                    + " deepDirs=" + deepDirs.size()
+                    + " size=" + LogService.humanSize(totalBytes)
+                    + " threads=" + threads);
+            ParallelProgressAggregator progress = (reporter != null && threads > 1)
+                    ? new ParallelProgressAggregator(reporter, total) : null;
+            AtomicInteger completed = new AtomicInteger(0);
+
+            List<BatchJob> jobs = new ArrayList<>(total);
+            for (Path src : filesToEncrypt) {
+                final Path file = src;
+                jobs.add(new BatchJob(inputDir.relativize(file).toString(), taskReporter ->
+                        encryptPlainFile(file, inputDir, workDir, opts, taskReporter)));
+            }
+            for (Path deepDir : deepDirs) {
+                final Path dir = deepDir;
+                Path rel = inputDir.relativize(dir);
+                String label = rel.getFileName() + " (archived)";
+                jobs.add(new BatchJob(label, taskReporter ->
+                        encryptDeepDirectory(dir, inputDir, workDir, opts, taskReporter)));
+            }
+
+            processJobs(jobs, threads, true, reporter, progress, completed, total, result);
+
+            if (result.succeededCount() == 0 && result.failedCount() > 0) {
+                BatchResult.Failure first = result.failures().get(0);
+                throw new CryptoException(ErrorKind.IO_ERROR,
+                        "全部文件加密失败：" + first.name() + " — " + first.message());
+            }
+
+            // 若启用压缩：只打包工作目录中已成功写出的文件（失败文件不会落盘）。
+            if (archiving && result.succeededCount() > 0) {
+                packStagedDirectory(workDir, outputDir, folderName, opts, reporter);
+            }
+
+            if (reporter != null) {
+                reporter.setProgress(1f, "");
+            }
+            result.logSummary("FolderCrypt");
+            LogService.info("FolderCrypt", "文件夹加密完成: " + folderName);
+        } finally {
+            if (staging) {
+                // 临时工作目录用完即弃；输入文件夹完全不受影响
+                deleteRecursivelyQuietly(workDir);
+            }
+        }
+    }
+
+    /**
+     * 「压缩后加密」的文件夹路径：先把整个文件夹打成一个归档，再对归档整体加密。
+     *
+     * <p>输出为 {@code 输出目录/文件夹名.归档扩展名.ergou} 单个文件；归档内保留原有目录结构。
+     *
+     * @param inputDir   输入文件夹
+     * @param outputDir  输出目录
+     * @param folderName 文件夹名（作为产物基名）
+     * @param opts       加密选项
+     * @throws Exception 打包或加密失败
+     */
+    private static void encryptFolderAsArchive(Path inputDir, Path outputDir, String folderName,
+                                               EncryptOptions opts) throws Exception {
+        List<Path> entries;
+        try (Stream<Path> walk = Files.walk(inputDir)) {
+            entries = walk.filter(Files::isRegularFile).sorted().toList();
+        }
+        if (entries.isEmpty()) {
+            throw new CryptoException(ErrorKind.INVALID_HEADER, "input folder is empty: " + inputDir);
+        }
 
         ProgressReporter reporter = opts.reporter;
-        int total = filesToEncrypt.size() + deepDirs.size();
-
-        // 预创建所有目标目录（单线程，避免竞态）
-        for (Path src : filesToEncrypt) {
-            Path rel = inputDir.relativize(src);
-            Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
-            Files.createDirectories(destEnc.getParent());
-            if (opts.split) {
-                Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
-                Files.createDirectories(chunkDir);
-            }
-        }
-        for (Path deepDir : deepDirs) {
-            Path rel = inputDir.relativize(deepDir);
-            // 深目录的加密输出放在其父目录镜像位置下：例如 sub1/deep/ → sub1/deep.zip.ergou
-            Path parentInWork = rel.getParent() != null
-                    ? workDir.resolve(rel.getParent().toString())
-                    : workDir;
-            Path destEnc = parentInWork.resolve(rel.getFileName().toString() + ".zip.ergou");
-            Files.createDirectories(destEnc.getParent());
-            if (opts.split) {
-                Path chunkDir = destEnc.getParent().resolve(stripExt(destEnc.getFileName().toString()));
-                Files.createDirectories(chunkDir);
-            }
-        }
-
-        // 线程数：总大小达阈值则单线程；并行时用聚合器以最慢任务为基准
+        ArchivePacker.Format fmt = effectiveArchiveFormat(opts.preArchiveFormat);
+        Files.createDirectories(outputDir);
+        Path tempArchive = Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
+        Path destEnc = outputDir.resolve(
+                folderName + ArchivePacker.extOf(fmt) + ENC_EXT);
         BatchResult result = new BatchResult();
         opts.batchResult = result;
-        long totalBytes = sumFileSizes(filesToEncrypt) + sumDirSizes(deepDirs);
-        int threads = Math.max(1, Math.min(
-                resolveThreadCount(opts.threadCount, totalBytes, false, result), total));
-        result.setThreadCountUsed(threads);
-        LogService.info("FolderCrypt", "开始加密文件夹 " + folderName
-                + " files=" + filesToEncrypt.size()
-                + " deepDirs=" + deepDirs.size()
-                + " size=" + LogService.humanSize(totalBytes)
-                + " threads=" + threads);
-        ParallelProgressAggregator progress = (reporter != null && threads > 1)
-                ? new ParallelProgressAggregator(reporter, total) : null;
-        AtomicInteger completed = new AtomicInteger(0);
-
-        List<BatchJob> jobs = new ArrayList<>(total);
-        for (Path src : filesToEncrypt) {
-            final Path file = src;
-            jobs.add(new BatchJob(inputDir.relativize(file).toString(), taskReporter ->
-                    encryptPlainFile(file, inputDir, workDir, opts, taskReporter)));
+        try {
+            ArchivePacker.packEntries(tempArchive, inputDir, entries, fmt,
+                    ArchivePacker.resolveArchivePassword(
+                            opts.preArchivePassword, null, fmt), reporter);
+            EncryptRequest req = buildRequest(tempArchive, destEnc, opts, reporter);
+            req.setSplit(opts.split);
+            req.setArchiveFormat(null);
+            Encryptor.encrypt(req);
+            result.addSuccess(destEnc.getFileName().toString());
+            result.setThreadCountUsed(1);
+            if (reporter != null) {
+                reporter.setProgress(1f, "");
+            }
+            LogService.info("FolderCrypt", "文件夹压缩后加密完成: " + folderName
+                    + " entries=" + entries.size());
+        } finally {
+            try {
+                Files.deleteIfExists(tempArchive);
+            } catch (IOException ignored) {
+                // 临时归档清理失败不影响已完成的加密结果
+            }
         }
-        for (Path deepDir : deepDirs) {
-            final Path dir = deepDir;
-            Path rel = inputDir.relativize(dir);
-            String label = rel.getFileName() + " (archived)";
-            jobs.add(new BatchJob(label, taskReporter ->
-                    encryptDeepDirectory(dir, inputDir, workDir, opts, taskReporter)));
-        }
+    }
 
-        processJobs(jobs, threads, true, reporter, progress, completed, total, result);
+    // ================================================================
+    // 加密：多文件（视为一个扁平文件夹）
+    // ================================================================
 
-        if (result.succeededCount() == 0 && result.failedCount() > 0) {
-            BatchResult.Failure first = result.failures().get(0);
+    /**
+     * 加密多个独立文件，把它们当作「同一个文件夹里的多个文件」处理。
+     *
+     * <h2>各选项下的行为</h2>
+     * <ul>
+     *   <li><b>仅加密</b>：每个文件各自加密为 {@code 输出目录/批名/文件名.ergou}（扁平，不再有子目录）；</li>
+     *   <li><b>压缩后加密</b>：所有文件合并进同一个归档（条目名按文件名去重），再整体加密为
+     *       {@code 输出目录/批名.归档扩展名.ergou}；</li>
+     *   <li><b>加密后压缩</b>：先在临时目录逐文件加密，再整体打成 {@code 输出目录/批名.归档扩展名}；</li>
+     *   <li><b>分卷</b>：与文件夹一致，每个文件成为自己的碎片子文件夹；</li>
+     *   <li><b>使用 ZStandard 压缩</b>：逐个文件先压缩再加密。</li>
+     * </ul>
+     *
+     * <p>不可处理的条目（不存在、是目录、不可读）不会中断整批，而是记入
+     * {@link EncryptOptions#batchResult} 的失败列表，由调用方在结束弹窗中汇报。
+     *
+     * @param inputFiles 待加密的文件列表（应为常规文件；目录等非文件项会被跳过并记录）
+     * @param outputDir  输出目录
+     * @param opts       加密选项；{@link EncryptOptions#batchName} 决定虚拟文件夹名
+     * @throws Exception 全部条目都不可处理，或用户取消
+     */
+    public static void encryptFiles(List<Path> inputFiles, Path outputDir, EncryptOptions opts)
+            throws Exception {
+        String batchName = resolveBatchName(opts);
+        BatchResult result = new BatchResult();
+        opts.batchResult = result;
+
+        List<Path> valid = filterEncryptable(inputFiles, result);
+        if (valid.isEmpty()) {
             throw new CryptoException(ErrorKind.IO_ERROR,
-                    "全部文件加密失败：" + first.name() + " — " + first.message());
+                    "没有可加密的文件，已跳过 " + result.failedCount() + " 个");
         }
 
-        // 若启用压缩：只打包工作目录中已成功写出的文件（失败文件不会落盘）。
-        if (opts.archiveFormat != null && !opts.archiveFormat.isEmpty()
-                && result.succeededCount() > 0) {
+        ProgressReporter reporter = opts.reporter;
+        List<String> entryNames = ArchivePacker.uniqueEntryNames(null, valid);
+
+        // 压缩后加密：合并为一个归档再整体加密，走单文件加密管线
+        if (isPreArchive(opts)) {
+            encryptFilesAsArchive(valid, entryNames, outputDir, batchName, opts, result);
+            return;
+        }
+
+        boolean archiving = hasArchiveFormat(opts.archiveFormat);
+        Path workDir = createWorkDir(outputDir, batchName, archiving);
+        try {
+            int total = valid.size();
+            long totalBytes = sumFileSizes(valid);
+            int threads = Math.max(1, Math.min(
+                    resolveThreadCount(opts.threadCount, totalBytes, false, result), total));
+            result.setThreadCountUsed(threads);
+            LogService.info("FolderCrypt", "开始加密多文件 " + batchName
+                    + " files=" + valid.size()
+                    + " size=" + LogService.humanSize(totalBytes)
+                    + " threads=" + threads);
+
+            // 预创建目标目录
+            for (String entryName : entryNames) {
+                Path destEnc = workDir.resolve(entryName + ENC_EXT);
+                Files.createDirectories(destEnc.getParent());
+                if (opts.split) {
+                    Files.createDirectories(destEnc.getParent()
+                            .resolve(stripExt(destEnc.getFileName().toString())));
+                }
+            }
+
+            ParallelProgressAggregator progress = (reporter != null && threads > 1)
+                    ? new ParallelProgressAggregator(reporter, total) : null;
+            AtomicInteger completed = new AtomicInteger(0);
+            List<BatchJob> jobs = new ArrayList<>(total);
+            for (int i = 0; i < total; i++) {
+                Path file = valid.get(i);
+                String entryName = entryNames.get(i);
+                jobs.add(new BatchJob(file.getFileName().toString(), taskReporter ->
+                        encryptNamedFile(file, entryName, workDir, opts, taskReporter)));
+            }
+
+            processJobs(jobs, threads, true, reporter, progress, completed, total, result);
+
+            if (result.succeededCount() == 0 && result.failedCount() > 0) {
+                BatchResult.Failure first = result.failures().get(0);
+                throw new CryptoException(ErrorKind.IO_ERROR,
+                        "全部文件加密失败：" + first.name() + " — " + first.message());
+            }
+
+            if (archiving && result.succeededCount() > 0) {
+                packStagedDirectory(workDir, outputDir, batchName, opts, reporter);
+            }
             if (reporter != null) {
-                reporter.setStatus(Messages.get("status.archiving"), ProgressPhase.ARCHIVE);
-                reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
+                reporter.setProgress(1f, "");
             }
-            ArchivePacker.Format fmt = ArchivePacker.parseFormat(opts.archiveFormat);
-            Path archivePath = outputDir.resolve(folderName + ArchivePacker.extOf(fmt));
-            List<Path> entries;
-            try (Stream<Path> walk = Files.walk(workDir)) {
-                entries = walk.filter(Files::isRegularFile).sorted().toList();
+            result.logSummary("FolderCrypt");
+            LogService.info("FolderCrypt", "多文件加密完成: " + batchName);
+        } finally {
+            if (archiving) {
+                deleteRecursivelyQuietly(workDir);
             }
-            if (!entries.isEmpty()) {
-                ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
-                        ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password, fmt),
-                        reporter);
-                deleteRecursively(workDir);
-            }
+        }
+    }
+
+    /**
+     * 「压缩后加密」的多文件路径：所有选中文件合并进同一个归档，再整体加密。
+     *
+     * @param files      已验证的文件列表
+     * @param entryNames 与 {@code files} 等长的归档内条目名
+     * @param outputDir  输出目录
+     * @param batchName  产物基名
+     * @param opts       加密选项
+     * @param result     批处理汇总
+     * @throws Exception 加密失败
+     */
+    private static void encryptFilesAsArchive(List<Path> files, List<String> entryNames,
+                                              Path outputDir, String batchName,
+                                              EncryptOptions opts, BatchResult result)
+            throws Exception {
+        ProgressReporter reporter = opts.reporter;
+        ArchivePacker.Format fmt = effectiveArchiveFormat(opts.preArchiveFormat);
+        Files.createDirectories(outputDir);
+        Path tempArchive = Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
+        Path destEnc = outputDir.resolve(batchName + ArchivePacker.extOf(fmt) + ENC_EXT);
+        try {
+            ArchivePacker.packEntries(tempArchive, null, files, entryNames, fmt,
+                    ArchivePacker.resolveArchivePassword(opts.preArchivePassword, null, fmt),
+                    reporter);
+            EncryptRequest req = buildRequest(tempArchive, destEnc, opts, reporter);
+            req.setSplit(opts.split);
+            req.setArchiveFormat(null);
+            Encryptor.encrypt(req);
+            result.addSuccess(destEnc.getFileName().toString());
+            result.setThreadCountUsed(1);
             if (reporter != null) {
-                reporter.setProgress(1f, "", ProgressPhase.ARCHIVE);
+                reporter.setProgress(1f, "");
+            }
+            LogService.info("FolderCrypt", "多文件压缩后加密完成: " + batchName
+                    + " entries=" + files.size());
+        } finally {
+            try {
+                Files.deleteIfExists(tempArchive);
+            } catch (IOException ignored) {
+                // 临时归档清理失败不影响已完成的加密结果
+            }
+        }
+    }
+
+    /**
+     * 解析批处理用的虚拟文件夹名。
+     *
+     * @param opts 加密选项
+     * @return 非空的批名
+     */
+    private static String resolveBatchName(EncryptOptions opts) {
+        String name = opts.batchName;
+        return name == null || name.isBlank() ? "files" : name;
+    }
+
+    /**
+     * 过滤出可加密的常规文件，其余条目记入失败列表。
+     *
+     * @param inputs 原始输入列表，可为 null
+     * @param result 批处理汇总
+     * @return 可加密的文件列表
+     */
+    private static List<Path> filterEncryptable(List<Path> inputs, BatchResult result) {
+        List<Path> valid = new ArrayList<>();
+        if (inputs == null) {
+            return valid;
+        }
+        for (Path p : inputs) {
+            if (p == null) {
+                continue;
+            }
+            String name = p.getFileName() == null ? p.toString() : p.getFileName().toString();
+            if (!Files.exists(p)) {
+                result.addFailure(name, Messages.get("batch.skip.notFound"));
+            } else if (Files.isDirectory(p)) {
+                result.addFailure(name, Messages.get("batch.skip.directory"));
+            } else if (!Files.isRegularFile(p) || !Files.isReadable(p)) {
+                result.addFailure(name, Messages.get("batch.skip.unreadable"));
+            } else {
+                valid.add(p);
+            }
+        }
+        return valid;
+    }
+
+    // ================================================================
+    // 解密：多文件
+    // ================================================================
+
+    /**
+     * 解密多个独立输入，逐个自动识别类型（加密卷 / 分卷碎片 / 压缩包 / 文件夹）。
+     *
+     * <p>多个分卷碎片通过 {@link Splitter#isSplitChunkPath} 与
+     * {@link Splitter#splitChunkBase} 归一：同属一个卷的碎片只处理一次，避免重复合并。
+     * 每个输入的产物落在输出目录下，互不嵌套。失败与跳过都记入
+     * {@link DecryptOptions#batchResult}，由调用方在结束弹窗中汇报。
+     *
+     * @param inputs    输入路径列表
+     * @param outputDir 输出目录
+     * @param opts      解密选项
+     * @throws Exception 用户取消
+     */
+    public static void decryptFiles(List<Path> inputs, Path outputDir, DecryptOptions opts)
+            throws Exception {
+        BatchResult aggregate = new BatchResult();
+        opts.batchResult = aggregate;
+        Map<String, Path> chunkGroups = new LinkedHashMap<>();
+        int total = 0;
+
+        for (Path input : inputs == null ? List.<Path>of() : inputs) {
+            if (input == null) {
+                continue;
+            }
+            String name = input.getFileName() == null ? input.toString() : input.getFileName().toString();
+            if (!Files.exists(input)) {
+                aggregate.addFailure(name, Messages.get("batch.skip.notFound"));
+                continue;
+            }
+            String chunkBase = Splitter.isSplitChunkPath(input.toString())
+                    ? Splitter.splitChunkBase(input.toString()) : null;
+            if (chunkBase != null) {
+                // 同一卷的多个碎片归为一组只处理一次；代表路径保留「碎片本身」而非基准名
+                // （基准文件在分卷后已被删除），交给 decryptAuto 按碎片路径去合并。
+                chunkGroups.putIfAbsent(chunkBase, input);
+            } else {
+                chunkGroups.put(input.toAbsolutePath().toString(), input);
+            }
+            total++;
+        }
+
+        if (chunkGroups.isEmpty()) {
+            throw new NoDecryptableFilesException(
+                    "没有可解密的输入；已跳过 " + aggregate.failedCount() + " 个不可用条目");
+        }
+
+        DecryptOptions base = cloneDecryptOptions(opts);
+        base.threadCount = 1;
+        base.batchResult = aggregate;
+        LogService.info("FolderCrypt", "开始多文件解密，输入=" + total
+                + " 实际处理=" + chunkGroups.size());
+
+        int index = 0;
+        for (Path input : chunkGroups.values()) {
+            if (base.reporter != null && base.reporter.isCancelled()) {
+                throw new CancelledException();
+            }
+            DecryptOptions one = cloneDecryptOptions(base);
+            one.threadCount = 1;
+            one.batchResult = aggregate;
+            String failure = null;
+            try {
+                decryptAuto(input, outputDir, one);
+            } catch (NoDecryptableFilesException e) {
+                failure = e.getMessage();
+            } finally {
+                // decryptAuto 会在内部新建汇总，返回后并入本批总账
+                aggregate.mergeFrom(one.batchResult);
+            }
+            if (failure != null) {
+                aggregate.addFailure(input.getFileName().toString(), failure);
+            }
+            index++;
+            if (base.reporter != null) {
+                base.reporter.setProgress(Math.min(1f, (float) index / chunkGroups.size()), "");
             }
         }
 
-        if (reporter != null) {
-            reporter.setProgress(1f, "");
+        aggregate.logSummary("FolderCrypt");
+        if (aggregate.succeededCount() == 0 && aggregate.failedCount() == 0) {
+            throw new NoDecryptableFilesException("未找到任何可解密的文件");
         }
-        result.logSummary("FolderCrypt");
-        LogService.info("FolderCrypt", "文件夹加密完成: " + folderName);
+        if (aggregate.succeededCount() == 0) {
+            throw new NoDecryptableFilesException(
+                    "全部输入都无法解密：" + aggregate.formatSummary());
+        }
     }
 
     // ================================================================
@@ -791,6 +1123,7 @@ public final class FolderCrypt {
             req.setKeyfileOrdered(opts.keyfileOrdered);
         }
         req.setReporter(reporter);
+        req.setKdfProgress(opts.kdfProgress);
         return req;
     }
 
@@ -863,6 +1196,120 @@ public final class FolderCrypt {
                 } catch (IOException ignored) {
                 }
             });
+        }
+    }
+
+    /**
+     * 删除目录树且不抛出异常，用于 {@code finally} 中的临时产物清理。
+     *
+     * @param dir 待删除目录，可为 null
+     */
+    private static void deleteRecursivelyQuietly(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try {
+            deleteRecursively(dir);
+        } catch (IOException ignored) {
+            // 临时目录残留不影响加密结果
+        }
+    }
+
+    // ================================================================
+    // 「加密后压缩」与「压缩后加密」公共辅助
+    // ================================================================
+
+    /**
+     * 判断是否为「压缩后加密」（先打包再加密）。
+     *
+     * @param opts 加密选项
+     * @return true 表示启用
+     */
+    private static boolean isPreArchive(EncryptOptions opts) {
+        return opts != null && hasArchiveFormat(opts.preArchiveFormat);
+    }
+
+    /**
+     * 判断归档格式字符串是否有效。
+     *
+     * @param format 格式字符串，可为 null
+     * @return true 表示需要打归档
+     */
+    private static boolean hasArchiveFormat(String format) {
+        return format != null && !format.isEmpty();
+    }
+
+    /**
+     * 把用户选择的归档格式转换为文件夹 / 多文件实际使用的格式。
+     *
+     * <p>GZ 是纯单文件流格式，不保存条目名：用它对文件夹打包时，密文会以「压缩包基名」
+     * 落盘而丢掉 {@code .ergou} 后缀，本工具随后就无法再识别这份产物。
+     * 因此文件夹与多文件归档一律把 GZ 提升为 TAR.GZ（保留条目名与目录结构），
+     * 与 {@link ArchivePacker#packEntries} 内部对多条目 GZ 的处理保持一致。
+     *
+     * @param format 用户选择的归档格式字符串
+     * @return 实际使用的归档格式
+     */
+    private static ArchivePacker.Format effectiveArchiveFormat(String format) {
+        ArchivePacker.Format fmt = ArchivePacker.parseFormat(format);
+        return fmt == ArchivePacker.Format.GZ ? ArchivePacker.Format.TAR_GZ : fmt;
+    }
+
+    /**
+     * 创建工作目录。
+     *
+     * <p>不需要归档时，工作目录即最终产物目录 {@code 输出目录/名字}，加密结果直接落盘；
+     * 需要归档时必须改用输出目录下的临时目录：否则默认输出目录（输入文件夹的父目录）
+     * 会让工作目录与输入文件夹重合，把原文件和密文一起打进归档，收尾清理还会删掉原文件夹。
+     *
+     * @param outputDir 输出目录
+     * @param name      产物基名
+     * @param archiving 是否勾选「加密后压缩」
+     * @return 工作目录路径
+     * @throws IOException 目录创建失败
+     */
+    private static Path createWorkDir(Path outputDir, String name, boolean archiving)
+            throws IOException {
+        Files.createDirectories(outputDir);
+        if (archiving) {
+            return Files.createTempDirectory(outputDir, ".ergou-stage-");
+        }
+        Path dir = outputDir.resolve(name);
+        Files.createDirectories(dir);
+        return dir;
+    }
+
+    /**
+     * 把工作目录中的密文打包成最终归档，随后删除该临时工作目录。
+     *
+     * @param workDir   已写入密文的工作目录
+     * @param outputDir 输出目录
+     * @param baseName  归档基名（不含扩展名）
+     * @param opts      加密选项
+     * @param reporter  进度回调，可为 null
+     * @throws IOException 打包失败
+     */
+    private static void packStagedDirectory(Path workDir, Path outputDir, String baseName,
+                                            EncryptOptions opts, ProgressReporter reporter)
+            throws IOException {
+        if (reporter != null) {
+            reporter.setStatus(Messages.get("status.archiving"), ProgressPhase.ARCHIVE);
+            reporter.setProgress(0f, "", ProgressPhase.ARCHIVE);
+        }
+        ArchivePacker.Format fmt = effectiveArchiveFormat(opts.archiveFormat);
+        Path archivePath = outputDir.resolve(baseName + ArchivePacker.extOf(fmt));
+        List<Path> entries;
+        try (Stream<Path> walk = Files.walk(workDir)) {
+            entries = walk.filter(Files::isRegularFile).sorted().toList();
+        }
+        if (!entries.isEmpty()) {
+            ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
+                    ArchivePacker.resolveArchivePassword(
+                            opts.archivePassword, opts.password, fmt), reporter);
+            deleteRecursively(workDir);
+        }
+        if (reporter != null) {
+            reporter.setProgress(1f, "", ProgressPhase.ARCHIVE);
         }
     }
 
@@ -1105,8 +1552,23 @@ public final class FolderCrypt {
     private static void encryptPlainFile(Path src, Path inputDir, Path workDir,
                                          EncryptOptions opts, ProgressReporter taskReporter)
             throws Exception {
-        Path rel = inputDir.relativize(src);
-        Path destEnc = workDir.resolve(rel.toString() + ENC_EXT);
+        encryptNamedFile(src, inputDir.relativize(src).toString(), workDir, opts, taskReporter);
+    }
+
+    /**
+     * 加密单个普通文件到工作目录下的指定相对路径（不含 {@code .ergou} 后缀）。
+     *
+     * @param src          源文件
+     * @param relativeName 工作目录内的相对路径（可含 {@code /} 分隔的层级）
+     * @param workDir      工作目录
+     * @param opts         选项
+     * @param taskReporter 该任务的进度回调
+     * @throws Exception 加密失败
+     */
+    private static void encryptNamedFile(Path src, String relativeName, Path workDir,
+                                         EncryptOptions opts, ProgressReporter taskReporter)
+            throws Exception {
+        Path destEnc = workDir.resolve(relativeName + ENC_EXT);
         if (opts.split) {
             Path chunkDir = destEnc.getParent().resolve(
                     stripExt(destEnc.getFileName().toString()));
@@ -1486,10 +1948,35 @@ public final class FolderCrypt {
         public int chunkSize;            // 每卷大小，单位 MiB
         public String archiveFormat;     // null/"" 表示不压缩
         public String archivePassword;
+        /**
+         * 压缩后加密：先把输入整体打成一个该格式的归档，再对归档整体加密为单个 .ergou。
+         *
+         * <p>与 {@link #archiveFormat}（加密后压缩）方向相反，二者语义互斥。若同时设置，
+         * 本字段优先，{@link #archiveFormat} 被忽略（「打包一次」总比「打包两次」合理）；
+         * UI 侧则直接互斥勾选，不会产生这种组合。null/"" 表示不启用。
+         */
+        public String preArchiveFormat;
+        /**
+         * 压缩后加密所用归档的密码；null/空表示该层归档不加密。
+         */
+        public String preArchivePassword;
+        /**
+         * 多文件批处理的虚拟文件夹名（仅 {@link FolderCrypt#encryptFiles} 使用）。
+         *
+         * <p>多个互不相关的文件按「同一个文件夹里的多个文件」处理：不打包时输出到
+         * {@code 输出目录/该名字/}，打包时输出为 {@code 输出目录/该名字.扩展名}。
+         * 为 null/空时回退为 {@code files}。
+         */
+        public String batchName;
         public List<String> keyfiles;
         public boolean keyfileOrdered;
         public RsCodecs rsCodecs;
         public ProgressReporter reporter;
+        /**
+         * Argon2 密钥派生的进度/取消回调（移动端用于回传进度与响应取消），
+         * null 表示无需回调。由 {@link FolderCrypt} 透传给每个文件的加密请求。
+         */
+        public hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress;
         /**
          * 同时加密的线程数，默认 1（串行）。
          * 仅当输入为文件夹时生效，单文件加密忽略此值。

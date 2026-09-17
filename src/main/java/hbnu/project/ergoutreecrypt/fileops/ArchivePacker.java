@@ -267,8 +267,34 @@ public final class ArchivePacker {
     public static void packEntries(Path output, Path baseDir, List<Path> entries,
                                    Format format, String password,
                                    ProgressReporter reporter) throws IOException {
+        packEntries(output, baseDir, entries, null, format, password, reporter);
+    }
+
+    /**
+     * 将多个文件打包为单个归档，并允许逐个指定归档内条目名。
+     *
+     * <p>用于「多个互不相关的文件视为一个文件夹」的批处理场景：这些文件可能来自不同目录，
+     * 以 {@code baseDir} 计算相对名会退化成裸文件名并可能重名，故由调用方先行去重后传入
+     * {@link #entryNames}。{@code entryNames} 为 null 时按 {@code baseDir} 相对路径命名。
+     *
+     * @param output     输出归档路径
+     * @param baseDir    计算条目相对名的基准目录，可为 null
+     * @param entries    要打入归档的文件路径列表
+     * @param entryNames 与 {@code entries} 等长的条目名列表，可为 null 表示按基准目录推导
+     * @param format     归档格式
+     * @param password   加密密码（可为 null/空）
+     * @param reporter   进度回调（可为 null）
+     * @throws IOException 打包或加密失败
+     */
+    public static void packEntries(Path output, Path baseDir, List<Path> entries,
+                                   List<String> entryNames, Format format, String password,
+                                   ProgressReporter reporter) throws IOException {
         if (entries == null || entries.isEmpty()) {
             throw new IOException("no entries to archive");
+        }
+        if (entryNames != null && entryNames.size() != entries.size()) {
+            throw new IOException("entry name count mismatch: "
+                    + entryNames.size() + " != " + entries.size());
         }
         LogService.info("ArchivePacker", "开始打包 " + format + ", 条目=" + entries.size());
 
@@ -279,7 +305,7 @@ public final class ArchivePacker {
 
         // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
         if (hasPwd && effective == Format.ZIP) {
-            packZipEntriesNative(output, baseDir, entries, password, reporter);
+            packZipEntriesNative(output, baseDir, entries, entryNames, password, reporter);
             return;
         }
         // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
@@ -288,10 +314,13 @@ public final class ArchivePacker {
         float plainEnd = hasPwd ? 0.7f : 1f;
         try {
             switch (effective) {
-                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries, reporter, 0f, plainEnd);
+                case ZIP -> packZipEntriesPlain(workOutput, baseDir, entries, entryNames,
+                        reporter, 0f, plainEnd);
                 case GZ -> packGz(workOutput, entries.getFirst(), reporter, 0f, plainEnd);
-                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, reporter, 0f, plainEnd);
-                case _7Z -> pack7zEntries(workOutput, baseDir, entries, reporter, 0f, plainEnd);
+                case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, entryNames,
+                        reporter, 0f, plainEnd);
+                case _7Z -> pack7zEntries(workOutput, baseDir, entries, entryNames,
+                        reporter, 0f, plainEnd);
                 default -> throw new IllegalArgumentException("Unsupported format: " + effective);
             }
             if (hasPwd) {
@@ -334,6 +363,69 @@ public final class ArchivePacker {
             return baseDir.relativize(file).toString().replace('\\', '/');
         }
         return file.getFileName().toString();
+    }
+
+    /**
+     * 取第 {@code index} 个条目的归档内名称：显式名称优先，否则按基准目录推导。
+     *
+     * @param entryNames 显式条目名列表，可为 null
+     * @param index      条目下标
+     * @param baseDir    相对路径基准
+     * @param file       条目文件
+     * @return 归档内条目名
+     */
+    private static String nameAt(List<String> entryNames, int index, Path baseDir, Path file) {
+        if (entryNames != null) {
+            String explicit = entryNames.get(index);
+            if (explicit != null && !explicit.isEmpty()) {
+                return explicit;
+            }
+        }
+        return entryName(baseDir, file);
+    }
+
+    /**
+     * 打包若干条目的默认名称集合：逐个按基准目录推导，并对重名追加 {@code (2)} 序号。
+     *
+     * <p>「把多个来自不同目录的选中文件视为同一个文件夹」时，裸文件名可能重名；
+     * 重名条目会被 ZIP 解压工具互相覆盖，故在此统一去重。
+     *
+     * @param baseDir 相对路径基准，可为 null
+     * @param entries 条目文件列表
+     * @return 与 {@code entries} 等长的唯一名称列表
+     */
+    public static List<String> uniqueEntryNames(Path baseDir, List<Path> entries) {
+        List<String> names = new java.util.ArrayList<>(entries.size());
+        java.util.Set<String> used = new java.util.HashSet<>();
+        for (Path file : entries) {
+            String base = entryName(baseDir, file);
+            String candidate = base;
+            int seq = 1;
+            while (!used.add(candidate.toLowerCase(java.util.Locale.ROOT))) {
+                seq++;
+                candidate = appendSeq(base, seq);
+            }
+            names.add(candidate);
+        }
+        return names;
+    }
+
+    /**
+     * 在扩展名之前插入序号，得到形如 {@code photo (2).jpg} 的备用条目名。
+     *
+     * @param name 原始条目名
+     * @param seq  序号（从 2 开始）
+     * @return 追加序号后的条目名
+     */
+    private static String appendSeq(String name, int seq) {
+        int slash = name.lastIndexOf('/');
+        String dir = slash >= 0 ? name.substring(0, slash + 1) : "";
+        String leaf = slash >= 0 ? name.substring(slash + 1) : name;
+        int dot = leaf.lastIndexOf('.');
+        if (dot <= 0) {
+            return dir + leaf + " (" + seq + ")";
+        }
+        return dir + leaf.substring(0, dot) + " (" + seq + ")" + leaf.substring(dot);
     }
 
     // ==================== 整体加密包裹（GZ / TAR.GZ） ====================
@@ -418,7 +510,8 @@ public final class ArchivePacker {
      * @throws IOException 打包失败
      */
     private static void packZipEntriesNative(Path output, Path baseDir, List<Path> entries,
-                                             String password, ProgressReporter reporter)
+                                             List<String> entryNames, String password,
+                                             ProgressReporter reporter)
             throws IOException {
         int total = entries.size();
         int done = 0;
@@ -426,10 +519,11 @@ public final class ArchivePacker {
         long doneBytes = 0;
         try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
             zipFile.setRunInThread(true);
-            for (Path file : entries) {
+            for (int i = 0; i < total; i++) {
+                Path file = entries.get(i);
                 long entrySize = safeSize(file);
                 ZipParameters params = newZipAesParameters();
-                params.setFileNameInZip(entryName(baseDir, file));
+                params.setFileNameInZip(nameAt(entryNames, i, baseDir, file));
                 ProgressMonitor monitor = zipFile.getProgressMonitor();
                 boolean isDir = Files.isDirectory(file);
                 if (isDir) {
@@ -533,7 +627,8 @@ public final class ArchivePacker {
      * @throws Exception 打包失败
      */
     private static void packZipEntriesPlain(Path output, Path baseDir, List<Path> entries,
-                                            ProgressReporter reporter, float from, float to)
+                                            List<String> entryNames, ProgressReporter reporter,
+                                            float from, float to)
             throws Exception {
         int total = entries.size();
         int done = 0;
@@ -543,9 +638,11 @@ public final class ArchivePacker {
         try (OutputStream fos = Files.newOutputStream(output);
              org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zos =
                      new org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream(fos)) {
-            for (Path file : entries) {
+            for (int i = 0; i < total; i++) {
+                Path file = entries.get(i);
                 org.apache.commons.compress.archivers.zip.ZipArchiveEntry entry =
-                        new org.apache.commons.compress.archivers.zip.ZipArchiveEntry(entryName(baseDir, file));
+                        new org.apache.commons.compress.archivers.zip.ZipArchiveEntry(
+                                nameAt(entryNames, i, baseDir, file));
                 entry.setMethod(org.apache.commons.compress.archivers.zip.ZipArchiveEntry.STORED);
                 long size = safeSize(file);
                 entry.setSize(size);
@@ -631,7 +728,8 @@ public final class ArchivePacker {
      * @throws Exception 打包失败
      */
     private static void packTarGzEntries(Path output, Path baseDir, List<Path> entries,
-                                         ProgressReporter reporter, float from, float to)
+                                         List<String> entryNames, ProgressReporter reporter,
+                                         float from, float to)
             throws Exception {
         int total = entries.size();
         int done = 0;
@@ -641,9 +739,11 @@ public final class ArchivePacker {
              GzipCompressorOutputStream gzos = new GzipCompressorOutputStream(fos);
              TarArchiveOutputStream tos = new TarArchiveOutputStream(gzos)) {
             tos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
-            for (Path file : entries) {
+            for (int i = 0; i < total; i++) {
+                Path file = entries.get(i);
                 long size = safeSize(file);
-                TarArchiveEntry entry = new TarArchiveEntry(file, entryName(baseDir, file));
+                TarArchiveEntry entry = new TarArchiveEntry(file,
+                        nameAt(entryNames, i, baseDir, file));
                 entry.setSize(size);
                 tos.putArchiveEntry(entry);
                 try (InputStream fin = Files.newInputStream(file)) {
@@ -706,7 +806,8 @@ public final class ArchivePacker {
      * @throws IOException 打包失败
      */
     private static void pack7zEntries(Path output, Path baseDir, List<Path> entries,
-                                      ProgressReporter reporter, float from, float to)
+                                      List<String> entryNames, ProgressReporter reporter,
+                                      float from, float to)
             throws IOException {
         int total = entries.size();
         int done = 0;
@@ -714,9 +815,10 @@ public final class ArchivePacker {
         long doneBytes = 0;
         try (SevenZOutputFile szos = new SevenZOutputFile(output.toFile())) {
             szos.setContentCompression(SevenZMethod.COPY);
-            for (Path file : entries) {
+            for (int i = 0; i < total; i++) {
+                Path file = entries.get(i);
                 SevenZArchiveEntry entry = new SevenZArchiveEntry();
-                entry.setName(entryName(baseDir, file));
+                entry.setName(nameAt(entryNames, i, baseDir, file));
                 long size = safeSize(file);
                 entry.setSize(size);
                 szos.putArchiveEntry(entry);

@@ -94,6 +94,28 @@
                                     </HBox>
                                 </VBox>
 
+                                <!-- 多文件选择卡片：列表可滚动，支持追加与逐个移除 -->
+                                <VBox fx:id="fileListCard" styleClass="card,file-card" spacing="8"
+                                      managed="false" visible="false">
+                                    <HBox alignment="CENTER_LEFT" spacing="10">
+                                        <Label styleClass="file-icon" text="☰"/>
+                                        <VBox spacing="2" HBox.hgrow="ALWAYS">
+                                            <Label fx:id="fileListTitleLabel" styleClass="file-name"/>
+                                            <Label fx:id="fileListMetaLabel" styleClass="file-meta"/>
+                                        </VBox>
+                                        <Button fx:id="addFilesBtn" styleClass="btn-ghost"
+                                                onAction="#onAddFiles"/>
+                                        <Button fx:id="clearFilesBtn" styleClass="btn-ghost"
+                                                onAction="#onClearFile"/>
+                                    </HBox>
+                                    <ScrollPane fx:id="fileListScroll" styleClass="file-list-scroll"
+                                                fitToWidth="true" hbarPolicy="NEVER"
+                                                prefViewportHeight="150" maxHeight="150"
+                                                VBox.vgrow="NEVER">
+                                        <VBox fx:id="fileListBox" styleClass="file-list" spacing="4"/>
+                                    </ScrollPane>
+                                </VBox>
+
                                 <!-- 输出路径卡片 -->
                                 <VBox fx:id="outputCard" styleClass="card" spacing="8" managed="false" visible="false">
                                     <Label fx:id="outputLabel" styleClass="card-title"/>
@@ -197,6 +219,10 @@
                                                         snapToTicks="true" prefWidth="220"/>
                                                 <Label fx:id="compressLevelValueLabel"
                                                        styleClass="field-hint" text="3"/>
+                                            </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="compressBeforeCheck" styleClass="check"/>
+                                                <Label fx:id="compressBeforeInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="compressAfterCheck" styleClass="check"/>

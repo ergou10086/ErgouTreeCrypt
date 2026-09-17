@@ -31,6 +31,14 @@ public final class OperationContext implements AutoCloseable {
     String tempFile;
 
     /**
+     * 附加临时文件路径（「压缩后加密」在加密前生成的中间归档）。
+     *
+     * <p>与 {@link #tempFile} 分开存放，使「压缩后加密 + Zstandard 压缩」这类
+     * 需要两级中间产物的组合也能各自清理干净。
+     */
+    String preArchiveTempFile;
+
+    /**
      * 已解码的卷头。
      */
     VolumeHeader header;

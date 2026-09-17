@@ -838,19 +838,23 @@ final class ImageCryptCodecTest {
     }
 
     /**
-     * 改写协议头中的一个字节、重算 headerCrc32 后重写成一张新 PNG。
+     * 按掩码异或改写协议头中的一个字节、重算 headerCrc32 后重写成一张新 PNG。
+     *
+     * <p>用异或而不是赋值：协议头里大量字段是每次加密都随机生成的（如 hkdfSalt），
+     * 赋值写法有一定概率「改」成与原来相同的值，篡改就成了空操作，用例会假失败。
+     * 异或只要掩码非零，就必定改变该字节。
      *
      * @param encrypted  原始产物
      * @param targetName 新文件名
      * @param offset     协议头内的偏移
-     * @param value      新字节值
+     * @param xorMask    异或掩码（非零）
      * @return 新产物路径
      * @throws Exception PNG 或协议解析失败
      */
     private static Path rewriteHeaderByte(final Path encrypted, final String targetName,
-                                          final int offset, final int value) throws Exception {
+                                          final int offset, final int xorMask) throws Exception {
         return rewriteLogical(encrypted, targetName, frame -> {
-            frame[offset] = (byte) value;
+            frame[offset] = (byte) (frame[offset] ^ xorMask);
             refreshCrc32(frame);
         });
     }

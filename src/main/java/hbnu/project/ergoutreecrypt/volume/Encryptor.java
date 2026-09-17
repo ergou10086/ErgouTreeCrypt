@@ -15,6 +15,7 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
 import hbnu.project.ergoutreecrypt.exception.CancelledException;
 import hbnu.project.ergoutreecrypt.exception.CryptoException;
 import hbnu.project.ergoutreecrypt.exception.ErrorKind;
@@ -112,6 +113,42 @@ public final class Encryptor {
     }
 
     /**
+     * 解析「压缩后加密」实际使用的归档格式。
+     *
+     * <p>GZ 是纯单文件流格式、不保存条目名：条目多于一个时若仍用 GZ，解压只能得到一个
+     * 以压缩包基名命名的无后缀文件，本工具后续无法再识别。故多条目时提升为 TAR.GZ。
+     * 单条目（单文件）时保持 GZ——此时压缩包基名本身就是 {@code <原输出名>}，
+     * 解压后正好还原成带 {@code .ergou} 后缀的名字，不会丢信息。
+     *
+     * @param raw        用户选择的归档格式字符串
+     * @param entryCount 归档内条目数
+     * @return 实际使用的归档格式
+     */
+    private static ArchivePacker.Format preArchiveFormat(String raw, int entryCount) {
+        ArchivePacker.Format fmt = ArchivePacker.parseFormat(raw);
+        if (fmt == ArchivePacker.Format.GZ && entryCount > 1) {
+            return ArchivePacker.Format.TAR_GZ;
+        }
+        return fmt;
+    }
+
+    /**
+     * 拼装「压缩后加密」的产物名：{@code <基名>.<归档扩展名>.ergou}。
+     *
+     * <p>与「加密后压缩」的 {@code <名>.ergou.<归档扩展名>} 顺序相反——压缩后加密是
+     * 先有归档再整体加密，因此卷后缀必须在最外层。调用方传入的若是常规的
+     * {@code <基名>.ergou}（桌面/移动端默认），这里先剥掉卷后缀再插入归档扩展名；
+     * 若传入的本来就没有卷后缀，则直接拼接。
+     *
+     * @param output 调用方给出的输出路径
+     * @param fmt    实际使用的归档格式
+     * @return 最终产物路径
+     */
+    private static String preArchiveOutputName(String output, ArchivePacker.Format fmt) {
+        return OutputNaming.preArchiveEncryptOutputName(output, fmt.name());
+    }
+
+    /**
      * 从请求中提取适合日志的输入标签（仅文件名，不含路径与密钥）。
      *
      * @param req 加密请求
@@ -131,14 +168,54 @@ public final class Encryptor {
     // ==================== Phase 1: Preprocess ====================
 
     /**
-     * 加密预处理：多文件合并为临时文件。
+     * 加密预处理：多文件合并、压缩后加密（先打包）、加密前压缩（Zstandard）。
+     *
+     * <p>三级处理的先后顺序固定为「先打包成归档 → 再做 Zstandard 压缩 → 最后加密」：
+     * 归档本身就是一种压缩，先打包再对归档做 Zstandard 不会破坏归档结构，
+     * 解密端按 header 中的压缩标志先解 Zstandard 再解归档即可还原。
+     *
+     * @param ctx 操作上下文
+     * @param req 加密请求
+     * @throws Exception 打包或压缩失败
      */
     private static void encryptPreprocess(OperationContext ctx, EncryptRequest req) throws Exception {
         List<String> files = req.getInputFiles();
         boolean hasMultipleFiles = files != null && files.size() > 1;
         String singleFile = (files != null && files.size() == 1) ? files.get(0) : req.getInputFile();
 
-        // 需要临时文件的情况：多文件合并，或启用加密前压缩（单文件也需压缩）
+        String preArchive = req.getPreArchiveFormat();
+        boolean packFirst = preArchive != null && !preArchive.isEmpty();
+        String working = singleFile;
+
+        // 第一级：压缩后加密 —— 先按所选格式把输入打成一个归档
+        if (packFirst) {
+            List<Path> inputs = files != null && !files.isEmpty()
+                    ? files.stream().map(Path::of).toList()
+                    : List.of(Path.of(singleFile));
+            ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
+            ArchivePacker.Format fmt = preArchiveFormat(preArchive, inputs.size());
+            // 产物名由核心统一拼装为 <基名>.<归档扩展名>.ergou：
+            // 调用方只给常规的 <基名>.ergou，两端的命名规则因此不会彼此漂移。
+            req.setOutputFile(preArchiveOutputName(req.getOutputFile(), fmt));
+            Path archive = Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
+            ctx.preArchiveTempFile = archive.toString();
+            try {
+                ArchivePacker.packEntries(archive, null, inputs,
+                        ArchivePacker.uniqueEntryNames(null, inputs), fmt,
+                        ArchivePacker.resolveArchivePassword(
+                                req.getPreArchivePassword(), null, ArchivePacker.Format.ZIP),
+                        req.getReporter());
+            } catch (Exception e) {
+                Files.deleteIfExists(archive);
+                ctx.preArchiveTempFile = null;
+                throw e;
+            }
+            working = archive.toString();
+            LogService.info("Encryptor", "压缩后加密：已打包 " + inputs.size()
+                    + " 个输入为 " + archive.getFileName());
+        }
+
+        // 第二级：加密前压缩（Zstandard），或多文件合并
         if (hasMultipleFiles || req.isCompress()) {
             ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
             Path tmp = Files.createTempFile("ergou", ".tmp");
@@ -147,7 +224,9 @@ public final class Encryptor {
                 if (req.isCompress()) {
                     // 加密前压缩：用 ZstdOutputStream 包裹临时输出流
                     try (ZstdOutputStream zos = new ZstdOutputStream(out, req.getCompressionLevel())) {
-                        if (hasMultipleFiles) {
+                        if (packFirst) {
+                            Files.copy(Path.of(working), zos);
+                        } else if (hasMultipleFiles) {
                             for (String f : files) {
                                 Files.copy(Path.of(f), zos);
                             }
@@ -161,11 +240,11 @@ public final class Encryptor {
                     }
                 }
             }
-            ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
             ctx.inputFile = ctx.tempFile;
+            ctx.updateProgress(1f, "", ProgressPhase.ARCHIVE);
             return;
         }
-        ctx.inputFile = singleFile;
+        ctx.inputFile = working;
     }
 
     // ==================== Phase 2: Generate values ====================
@@ -491,8 +570,21 @@ public final class Encryptor {
         }
 
         // 清理临时文件
+        deleteTempFiles(ctx);
+    }
+
+    /**
+     * 删除本次加密产生的全部中间临时文件（Zstandard 压缩产物与压缩后加密的中间归档）。
+     *
+     * @param ctx 操作上下文
+     * @throws IOException 删除失败
+     */
+    private static void deleteTempFiles(OperationContext ctx) throws IOException {
         if (ctx.tempFile != null) {
             Files.deleteIfExists(Path.of(ctx.tempFile));
+        }
+        if (ctx.preArchiveTempFile != null) {
+            Files.deleteIfExists(Path.of(ctx.preArchiveTempFile));
         }
     }
 
@@ -500,11 +592,10 @@ public final class Encryptor {
      * 加密失败时清理临时文件与不完整输出。
      */
     private static void cleanupEncrypt(OperationContext ctx, EncryptRequest req) {
-        if (ctx.tempFile != null) {
-            try {
-                Files.deleteIfExists(Path.of(ctx.tempFile));
-            } catch (IOException ignored) {
-            }
+        try {
+            deleteTempFiles(ctx);
+        } catch (IOException ignored) {
+            // 清理失败不影响向上抛出的原始异常
         }
         try {
             Files.deleteIfExists(Path.of(req.getOutputFile() + ".incomplete"));

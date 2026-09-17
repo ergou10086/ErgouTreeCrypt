@@ -255,7 +255,11 @@ class DecryptViewModel : ViewModel() {
      * <p>与桌面端 {@code MainController.startAutoDecrypt} 对齐，桥接共享核心
      * {@link FolderCrypt#decryptAuto}，避免把归档文件误当作单卷送入 {@link hbnu.project.ergoutreecrypt.volume.Decryptor}。
      *
-     * @param input                  输入路径（归档 / 目录 / 分卷碎片）
+     * <p>单个输入走 {@link FolderCrypt#decryptAuto}；多个输入走
+     * {@link FolderCrypt#decryptFiles}（把一批选中的文件视为互不相关的多个卷逐个处理，
+     * 产物平铺到输出目录，失败与跳过统一在结果弹窗中汇报）。
+     *
+     * @param inputs                 输入路径列表（归档 / 目录 / 分卷碎片 / 加密卷）
      * @param outputDir              输出目录
      * @param password               加密密码
      * @param archivePassword        归档密码（可为 null/空）
@@ -267,7 +271,7 @@ class DecryptViewModel : ViewModel() {
      * @param keyfiles               密钥文件路径列表
      */
     fun startAutoDecrypt(
-        input: String,
+        inputs: List<String>,
         outputDir: String,
         password: String,
         archivePassword: String?,
@@ -278,6 +282,10 @@ class DecryptViewModel : ViewModel() {
         decryptThenExtract: Boolean,
         keyfiles: List<String>
     ) {
+        if (inputs.isEmpty()) {
+            return
+        }
+        val input = inputs.first()
         // 全局操作权占用失败：已有其他 Tab 的操作在运行
         val token = OperationCoordinator.tryAcquire() ?: return
         opToken = token
@@ -307,7 +315,13 @@ class DecryptViewModel : ViewModel() {
             var cancelled = false
 
             try {
-                FolderCrypt.decryptAuto(Paths.get(input), Paths.get(outputDir), opts)
+                if (inputs.size == 1) {
+                    FolderCrypt.decryptAuto(Paths.get(input), Paths.get(outputDir), opts)
+                } else {
+                    FolderCrypt.decryptFiles(
+                        inputs.map { Paths.get(it) }, Paths.get(outputDir), opts
+                    )
+                }
                 val batch = opts.batchResult
                 val summary = batch?.formatSummary()
                 val detail = batch?.formatDetail()?.ifBlank { null }

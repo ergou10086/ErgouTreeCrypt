@@ -131,6 +131,34 @@ public final class OutputNaming {
     }
 
     /**
+     * 计算「压缩后加密」的输出文件名。
+     *
+     * <p>形如 {@code song.mp3.ergou → song.mp3.zip.ergou}：先剥掉输入自带
+     * {@code .ergou}/{@code .pcv} 卷后缀（调用方默认给的就是它），再插入归档扩展名并补回
+     * {@code .ergou}——卷后缀必须在最外层，因为加密对象是内层的归档。
+     *
+     * <p>与「加密后压缩」的 {@code 原名.ergou.归档扩展名} 顺序相反，两端都必须走本方法，
+     * 避免各自拼字符串而漂移。
+     *
+     * @param fileName      输入文件名（不含路径），可带或不带卷后缀
+     * @param archiveFormat 归档格式字符串（如 {@code ZIP} / {@code 7Z} / {@code TAR.GZ}）
+     * @return 形如 {@code 基名.归档扩展名.ergou} 的文件名
+     */
+    public static String preArchiveEncryptOutputName(final String fileName,
+                                                     final String archiveFormat) {
+        String base = fileName;
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(GENERIC_SUFFIX)) {
+            base = fileName.substring(0, fileName.length() - GENERIC_SUFFIX.length());
+        } else if (lower.endsWith(LEGACY_SUFFIX)) {
+            base = fileName.substring(0, fileName.length() - LEGACY_SUFFIX.length());
+        }
+        return base + hbnu.project.ergoutreecrypt.fileops.ArchivePacker.extOf(
+                hbnu.project.ergoutreecrypt.fileops.ArchivePacker.parseFormat(archiveFormat))
+                + GENERIC_SUFFIX;
+    }
+
+    /**
      * 计算通用解密的输出文件名。
      *
      * <p>剥离 {@code .ergou} 或 {@code .pcv} 后缀；两者皆无时追加

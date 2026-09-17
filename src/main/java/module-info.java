@@ -7,6 +7,7 @@ module hbnu.project.ergoutreecrypt {
     requires org.kordamp.bootstrapfx.core;
 
     requires org.bouncycastle.provider;
+    requires com.twelvemonkeys.imageio.webp;
 
     requires org.apache.commons.compress;
     // commons-compress 对 xz 仅声明 requires static（运行时可选），若本模块不强依赖，

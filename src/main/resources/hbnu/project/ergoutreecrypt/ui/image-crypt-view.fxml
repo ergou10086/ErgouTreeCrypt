@@ -51,6 +51,14 @@
                                 <Label fx:id="imageExtensionWarning" styleClass="warning-text"
                                        managed="false" visible="false" wrapText="true"/>
                             </VBox>
+                        </HBox>
+                        <ImageView fx:id="imageInputPreview" fitWidth="360" fitHeight="220"
+                                   preserveRatio="true" smooth="true"/>
+                        <Label fx:id="imageInputPreviewCaption" styleClass="field-hint"
+                               wrapText="true"/>
+                        <HBox alignment="CENTER_RIGHT" spacing="8">
+                            <Button fx:id="imageReselectFileBtn" styleClass="btn-secondary"
+                                    onAction="#onReselectFile"/>
                             <Button fx:id="imageClearFileBtn" styleClass="btn-ghost"
                                     onAction="#onClearFile"/>
                         </HBox>
@@ -83,7 +91,7 @@
                         </VBox>
                     </VBox>
 
-                    <VBox styleClass="image-warning-card" spacing="7">
+                    <VBox fx:id="imagePublicWarningCard" styleClass="image-warning-card" spacing="7">
                         <Label fx:id="imagePublicWarning" styleClass="image-warning-text"
                                wrapText="true"/>
                         <Separator/>

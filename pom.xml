@@ -14,6 +14,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <junit.version>5.12.1</junit.version>
         <bouncycastle.version>1.78.1</bouncycastle.version>
+        <twelvemonkeys.version>3.15.0</twelvemonkeys.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.18</logback.version>
     </properties>
@@ -48,6 +49,11 @@
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>${twelvemonkeys.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

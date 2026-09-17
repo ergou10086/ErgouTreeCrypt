@@ -220,7 +220,7 @@ fun ErgouNavGraph() {
 private fun createBottomNavItems(): List<BottomNavItem> = listOf(
     BottomNavItem(Routes.ENCRYPT, "加密", Icons.Filled.Lock, Icons.Outlined.Lock),
     BottomNavItem(Routes.DECRYPT, "解密", Icons.Filled.LockOpen, Icons.Outlined.LockOpen),
-    BottomNavItem(Routes.IMAGE_CRYPT, "图片加密", Icons.Filled.HideImage, Icons.Outlined.HideImage),
+    BottomNavItem(Routes.IMAGE_CRYPT, "图片加解密", Icons.Filled.HideImage, Icons.Outlined.HideImage),
     BottomNavItem(Routes.TEXT_CRYPTO, "字符串加密", Icons.Filled.Edit, Icons.Outlined.Edit),
     BottomNavItem(Routes.STEGO, "隐写", Icons.Filled.Visibility, Icons.Outlined.Visibility),
     BottomNavItem(Routes.STEGO_EXTRACT, "隐写提取", Icons.Filled.VisibilityOff, Icons.Outlined.VisibilityOff),

@@ -7,6 +7,9 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProgress;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.InputStream;
+import java.awt.image.BufferedImage;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -100,10 +103,18 @@ final class ImageCryptDesktopWorkflowTest {
                 "tab.imageCrypt",
                 "imageCrypt.tab.encrypt",
                 "imageCrypt.tab.decrypt",
+                "imageCrypt.file.reselect",
+                "imageCrypt.file.clearSelection",
                 "imageCrypt.public.warning",
                 "imageCrypt.sendAsFile.hint",
                 "imageCrypt.kdf.hint",
                 "imageCrypt.action.verify",
+                "imageCrypt.preview.inputCaption",
+                "imageCrypt.preview.resultTitle",
+                "imageCrypt.preview.encryptedCaption",
+                "imageCrypt.preview.decryptedCaption",
+                "imageCrypt.preview.loading",
+                "imageCrypt.preview.unavailable",
                 "imageCrypt.status.encryptSuccess",
                 "imageCrypt.status.decryptSuccess",
                 "imageCrypt.progress.info");
@@ -116,8 +127,48 @@ final class ImageCryptDesktopWorkflowTest {
                     assertTrue(!text.equals("!" + key + "!"), "缺少文案: " + key);
                 }
             }
+            Messages.setLocale(Locale.SIMPLIFIED_CHINESE);
+            assertEquals("解密还原图片", Messages.get("imageCrypt.tab.decrypt"));
         } finally {
             Messages.setLocale(previous);
+        }
+    }
+
+    /**
+     * 桌面 FXML 必须同时保留输入预览、重新选择、清空选择和结果预览节点。
+     *
+     * @throws Exception 读取 FXML 失败
+     */
+    @Test
+    void desktopFxmlKeepsBothPreviewSurfacesAndSelectionActions() throws Exception {
+        String resource = "/hbnu/project/ergoutreecrypt/ui/image-crypt-view.fxml";
+        try (InputStream input = getClass().getResourceAsStream(resource)) {
+            assertTrue(input != null, "缺少桌面图片页面 FXML");
+            String fxml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(fxml.contains("fx:id=\"imageInputPreview\""));
+            assertTrue(fxml.contains("fx:id=\"imageReselectFileBtn\""));
+            assertTrue(fxml.contains("onAction=\"#onReselectFile\""));
+            assertTrue(fxml.contains("fx:id=\"imageClearFileBtn\""));
+            assertTrue(fxml.contains("fx:id=\"imagePublicWarningCard\""));
+            assertTrue(fxml.contains("fx:id=\"imagePreviewCard\""));
+            assertTrue(fxml.contains("fx:id=\"imageResultCard\""));
+        }
+    }
+
+    /**
+     * 桌面有界预览器必须解码首期五种真实图片格式，包括 JavaFX 原生不支持的 WebP。
+     *
+     * @throws Exception 图片读取失败
+     */
+    @Test
+    void boundedPreviewDecodesFiveRealFormatsIncludingWebp() throws Exception {
+        for (String sampleName : SUPPORTED_SAMPLES) {
+            BufferedImage preview = BoundedImagePreviewLoader.readThumbnail(
+                    SAMPLE_DIRECTORY.resolve(sampleName), 360, 220);
+            assertTrue(preview != null, "无法预览 " + sampleName);
+            assertTrue(preview.getWidth() <= 360, "预览宽度越界: " + sampleName);
+            assertTrue(preview.getHeight() <= 220, "预览高度越界: " + sampleName);
+            preview.flush();
         }
     }
 }

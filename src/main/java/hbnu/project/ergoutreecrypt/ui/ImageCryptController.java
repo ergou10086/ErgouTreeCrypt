@@ -15,6 +15,7 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProgress;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageProbe;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
+import hbnu.project.ergoutreecrypt.ui.support.BoundedImagePreviewLoader;
 import hbnu.project.ergoutreecrypt.ui.support.ImageCryptDesktopWorkflow;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
@@ -45,6 +46,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.awt.Desktop;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -82,6 +84,9 @@ public final class ImageCryptController {
     /** 页面后台任务执行器。 */
     private final TaskRunner taskRunner = new TaskRunner();
 
+    /** 缩略图后台解码执行器，避免预览阻塞加解密队列。 */
+    private final TaskRunner previewTaskRunner = new TaskRunner();
+
     @FXML
     private StackPane imageRoot;
     @FXML
@@ -107,6 +112,12 @@ public final class ImageCryptController {
     @FXML
     private Label imageExtensionWarning;
     @FXML
+    private ImageView imageInputPreview;
+    @FXML
+    private Label imageInputPreviewCaption;
+    @FXML
+    private Button imageReselectFileBtn;
+    @FXML
     private Button imageClearFileBtn;
     @FXML
     private Label imageProtectionTitle;
@@ -130,6 +141,8 @@ public final class ImageCryptController {
     private Label imageMismatchLabel;
     @FXML
     private Label imageKdfHint;
+    @FXML
+    private VBox imagePublicWarningCard;
     @FXML
     private Label imagePublicWarning;
     @FXML
@@ -215,6 +228,12 @@ public final class ImageCryptController {
     /** 选择代次，用于丢弃过期探测结果。 */
     private long selectionGeneration;
 
+    /** 输入预览请求代次，用于丢弃过期异步解码。 */
+    private long inputPreviewGeneration;
+
+    /** 结果预览请求代次，用于丢弃过期异步解码。 */
+    private long resultPreviewGeneration;
+
     /**
      * 初始化页面控件、交互监听和默认状态。
      */
@@ -253,7 +272,9 @@ public final class ImageCryptController {
         imageDropHint.setText(Messages.get(operationMode == OperationMode.ENCRYPT
                 ? "imageCrypt.file.encryptHint" : "imageCrypt.file.decryptHint"));
         imageDropSub.setText(Messages.get("imageCrypt.file.dropSub"));
-        imageClearFileBtn.setText(Messages.get("file.clear"));
+        imageReselectFileBtn.setText(Messages.get("imageCrypt.file.reselect"));
+        imageClearFileBtn.setText(Messages.get("imageCrypt.file.clearSelection"));
+        imageInputPreviewCaption.setText(Messages.get("imageCrypt.preview.inputCaption"));
 
         imageProtectionTitle.setText(Messages.get("imageCrypt.protection.title"));
         imagePublicModeBtn.setText(Messages.get("imageCrypt.protection.public"));
@@ -272,7 +293,7 @@ public final class ImageCryptController {
         imageOutputBrowseBtn.setText(Messages.get("file.output.browse"));
         imageOutputNameTitle.setText(Messages.get("imageCrypt.output.name"));
         imagePreviewTitle.setText(Messages.get("imageCrypt.preview.title"));
-        imagePreviewCaption.setText(Messages.get("imageCrypt.preview.caption"));
+        updateResultPreviewTexts();
         imageResultTitle.setText(Messages.get("imageCrypt.result.title"));
         imageOpenDirectoryBtn.setText(Messages.get("imageCrypt.result.openDirectory"));
         imageCopyPathBtn.setText(Messages.get("imageCrypt.result.copyPath"));
@@ -285,6 +306,7 @@ public final class ImageCryptController {
         if (!running && !probing) {
             imageStatusLabel.setText(Messages.get("status.ready"));
         }
+        updatePublicWarningVisibility();
     }
 
     /**
@@ -312,6 +334,7 @@ public final class ImageCryptController {
             setVisible(imagePasswordBox, false);
         }
         setVisible(imageVerifyBtn, !encrypting && selectedInput != null);
+        updatePublicWarningVisibility();
         updateActionText();
         updateOutputName();
         applyTextsForOperation();
@@ -342,7 +365,21 @@ public final class ImageCryptController {
         imagePublicModeBtn.setSelected(mode == ImageCryptMode.PUBLIC_RECOVERY);
         imagePasswordModeBtn.setSelected(mode == ImageCryptMode.PASSWORD);
         setVisible(imagePasswordBox, mode == ImageCryptMode.PASSWORD);
+        updatePublicWarningVisibility();
         updatePasswordFeedback();
+    }
+
+    /**
+     * 仅在当前操作确实采用公开恢复模式时显示安全提示框。
+     */
+    private void updatePublicWarningVisibility() {
+        if (imagePublicWarningCard == null) {
+            return;
+        }
+        boolean publicRecovery = operationMode == OperationMode.ENCRYPT
+                ? protectionMode == ImageCryptMode.PUBLIC_RECOVERY
+                : encryptedMetadata != null && !encryptedMetadata.requiresPassword();
+        setVisible(imagePublicWarningCard, publicRecovery);
     }
 
     /**
@@ -354,6 +391,23 @@ public final class ImageCryptController {
         if (running || probing) {
             return;
         }
+        chooseFile();
+    }
+
+    /**
+     * 从已选文件卡重新打开文件选择器。
+     */
+    @FXML
+    private void onReselectFile() {
+        if (!running && !probing) {
+            chooseFile();
+        }
+    }
+
+    /**
+     * 打开与当前操作匹配的文件选择器并探测所选文件。
+     */
+    private void chooseFile() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(Messages.get("file.choose"));
         if (operationMode == OperationMode.ENCRYPT) {
@@ -427,6 +481,7 @@ public final class ImageCryptController {
      * @param input 待探测输入
      */
     private void inspectInput(final Path input) {
+        clearResult();
         long generation = ++selectionGeneration;
         selectedInput = input.toAbsolutePath().normalize();
         setProbing(true);
@@ -495,6 +550,8 @@ public final class ImageCryptController {
             applyMetadataProtection(encryptedMetadata);
         }
         refreshSelectedFileInfo();
+        showPreview(imageInputPreview, imageInputPreviewCaption, selectedInput,
+                "imageCrypt.preview.inputCaption");
         updateOutputName();
     }
 
@@ -512,6 +569,7 @@ public final class ImageCryptController {
         setVisible(imagePasswordBox, password);
         setVisible(imageConfirmField, false);
         setVisible(imageMismatchLabel, false);
+        updatePublicWarningVisibility();
     }
 
     /**
@@ -581,6 +639,9 @@ public final class ImageCryptController {
         imageProbe = null;
         encryptedMetadata = null;
         selectedInputBytes = 0L;
+        inputPreviewGeneration++;
+        imageInputPreview.setImage(null);
+        imageInputPreviewCaption.setText(Messages.get("imageCrypt.preview.inputCaption"));
         setVisible(imageFileCard, false);
         setVisible(imageOutputCard, false);
         setVisible(imageVerifyBtn, false);
@@ -592,6 +653,8 @@ public final class ImageCryptController {
         }
         imageOutputDirectoryField.clear();
         imageOutputName.setText("");
+        clearResult();
+        updatePublicWarningVisibility();
     }
 
     /**
@@ -757,7 +820,7 @@ public final class ImageCryptController {
         }, () -> {
             Path output = restored.get();
             finishSuccess(Messages.format("imageCrypt.status.decryptSuccess",
-                    output.getFileName()), output, false);
+                    output.getFileName()), output, true);
         }, error -> {
             setRunning(false);
             if (!overwriteExisting && SettingsManager.isConfirmOverwrite()
@@ -796,7 +859,7 @@ public final class ImageCryptController {
      *
      * @param message     成功文案
      * @param output      结果路径
-     * @param showPreview 是否显示 PNG 缩略图
+     * @param showPreview 是否显示结果缩略图
      */
     private void finishSuccess(final String message, final Path output,
                                final boolean showPreview) {
@@ -854,15 +917,80 @@ public final class ImageCryptController {
     }
 
     /**
-     * 用请求尺寸构造后台加载的 PNG 缩略图。
+     * 用请求尺寸构造后台加载的结果缩略图。
      *
-     * @param output 输出 PNG
+     * @param output 输出图片
      */
     private void showOutputPreview(final Path output) {
-        Image preview = new Image(output.toUri().toString(), PREVIEW_WIDTH, PREVIEW_HEIGHT,
-                true, true, true);
-        imagePreview.setImage(preview);
+        updateResultPreviewTexts();
+        showPreview(imagePreview, imagePreviewCaption, output,
+                operationMode == OperationMode.ENCRYPT
+                        ? "imageCrypt.preview.encryptedCaption"
+                        : "imageCrypt.preview.decryptedCaption");
         setVisible(imagePreviewCard, true);
+    }
+
+    /**
+     * 以固定请求尺寸异步加载输入或结果缩略图。
+     *
+     * @param view 图片控件
+     * @param caption 预览说明控件
+     * @param path 图片路径
+     * @param captionKey 成功加载时的说明资源键
+     */
+    private void showPreview(final ImageView view, final Label caption, final Path path,
+                             final String captionKey) {
+        boolean inputPreview = view == imageInputPreview;
+        long generation = inputPreview ? ++inputPreviewGeneration : ++resultPreviewGeneration;
+        AtomicReference<BufferedImage> decoded = new AtomicReference<>();
+        view.setImage(null);
+        caption.setText(Messages.get("imageCrypt.preview.loading"));
+        previewTaskRunner.submit(() -> decoded.set(BoundedImagePreviewLoader.readThumbnail(
+                        path, (int) PREVIEW_WIDTH, (int) PREVIEW_HEIGHT)), () -> {
+            long current = inputPreview ? inputPreviewGeneration : resultPreviewGeneration;
+            if (generation != current) {
+                BufferedImage stale = decoded.get();
+                if (stale != null) {
+                    stale.flush();
+                }
+                return;
+            }
+            Image preview = BoundedImagePreviewLoader.toFxImage(decoded.get());
+            view.setImage(preview);
+            caption.setText(Messages.get(preview == null
+                    ? "imageCrypt.preview.unavailable" : captionKey));
+        }, error -> {
+            long current = inputPreview ? inputPreviewGeneration : resultPreviewGeneration;
+            if (generation == current) {
+                view.setImage(null);
+                caption.setText(Messages.get("imageCrypt.preview.unavailable"));
+            }
+        });
+    }
+
+    /**
+     * 刷新与当前操作方向匹配的结果预览标题和说明。
+     */
+    private void updateResultPreviewTexts() {
+        if (imagePreviewTitle == null || imagePreviewCaption == null) {
+            return;
+        }
+        imagePreviewTitle.setText(Messages.get("imageCrypt.preview.resultTitle"));
+        imagePreviewCaption.setText(Messages.get(operationMode == OperationMode.ENCRYPT
+                ? "imageCrypt.preview.encryptedCaption"
+                : "imageCrypt.preview.decryptedCaption"));
+    }
+
+    /**
+     * 清除上一项任务的结果动作和结果预览。
+     */
+    private void clearResult() {
+        resultPath = null;
+        resultPreviewGeneration++;
+        imageResultPath.setText("");
+        imagePreview.setImage(null);
+        setVisible(imagePreviewCard, false);
+        setVisible(imageResultCard, false);
     }
 
     /**
@@ -977,6 +1105,8 @@ public final class ImageCryptController {
         imageActionBtn.setDisable(value || running);
         imageEncryptTab.setDisable(value || running);
         imageDecryptTab.setDisable(value || running);
+        imageReselectFileBtn.setDisable(value || running);
+        imageClearFileBtn.setDisable(value || running);
         imageStatusLabel.setText(value
                 ? Messages.get("imageCrypt.status.probing") : Messages.get("status.ready"));
         setVisible(imageProgressBox, value || running);
@@ -998,6 +1128,7 @@ public final class ImageCryptController {
         imageDecryptTab.setDisable(value || probing);
         imagePublicModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
         imagePasswordModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
+        imageReselectFileBtn.setDisable(value);
         imageClearFileBtn.setDisable(value);
         imageOutputBrowseBtn.setDisable(value);
         imageOutputDirectoryField.setDisable(value);
@@ -1034,6 +1165,7 @@ public final class ImageCryptController {
     public void shutdown() {
         cancelRequested = true;
         taskRunner.shutdown();
+        previewTaskRunner.shutdown();
     }
 
     /** 图片页面操作方向。 */

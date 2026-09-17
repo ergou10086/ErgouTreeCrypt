@@ -2,6 +2,7 @@ package hbnu.project.ergoutreecrypt.android
 
 import android.app.Application
 import android.content.ContentUris
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
@@ -18,6 +19,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,7 +43,7 @@ class ImageCryptViewModelDeviceTest {
     private val appContext get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     /**
-     * 公开与密码模式都应经 ViewModel 加密、提交到 MediaStore，再经同一页面还原为原始字节。
+     * 公开与密码模式都应经 ViewModel 加密、提交到相册，再经同一页面还原为原始字节。
      */
     @Test
     fun publicAndPasswordWorkflow_roundTripThroughMediaStore() = runBlocking {
@@ -61,7 +63,10 @@ class ImageCryptViewModelDeviceTest {
             try {
                 viewModel.setMode(mode)
                 viewModel.selectInput(sourceUri)
-                awaitState(viewModel) { !it.selecting && it.inputName == source.name }
+                val inputSelected = awaitState(viewModel) {
+                    !it.selecting && it.inputName == source.name
+                }
+                assertPreviewDecodes(inputSelected.inputPreviewPath)
                 if (mode == ImageCryptMode.PASSWORD) {
                     viewModel.setPassword(TEST_PASSWORD)
                     viewModel.setConfirmPassword(TEST_PASSWORD)
@@ -69,6 +74,7 @@ class ImageCryptViewModelDeviceTest {
                 viewModel.start()
                 val encrypted = awaitTerminal(viewModel)
                 assertEquals(ProgressState.State.DONE, encrypted.progress.state)
+                assertPreviewDecodes(encrypted.resultPreviewPath)
                 val encryptedName = requireNotNull(encrypted.result).outputName
                 val encryptedUri = requireNotNull(findOutput(encryptedName))
 
@@ -82,10 +88,20 @@ class ImageCryptViewModelDeviceTest {
                 viewModel.start()
                 val restored = awaitTerminal(viewModel)
                 assertEquals(ProgressState.State.DONE, restored.progress.state)
+                assertPreviewDecodes(restored.resultPreviewPath)
                 val restoredName = requireNotNull(restored.result).outputName
                 val restoredUri = requireNotNull(findOutput(restoredName))
                 val restoredBytes = readUri(restoredUri)
                 assertArrayEquals(sourceBytes, restoredBytes)
+
+                viewModel.dismissResult()
+                val dismissed = awaitState(viewModel) { it.result == null }
+                assertPreviewDecodes(dismissed.resultPreviewPath)
+                viewModel.clearInput()
+                val cleared = awaitState(viewModel) {
+                    it.inputName == null && it.resultPreviewPath == null
+                }
+                assertNull(cleared.inputPreviewPath)
 
                 deleteOutput(encryptedUri)
                 deleteOutput(restoredUri)
@@ -192,16 +208,20 @@ class ImageCryptViewModelDeviceTest {
         }
 
     /**
-     * 按显示名查找应用提交到公共下载目录的最新条目。
+     * 按显示名查找应用提交到公共相册的最新条目。
      *
      * @param displayName 文件显示名
      * @return MediaStore URI；未找到返回 {@code null}
      */
-    private fun findDownload(displayName: String): Uri? {
-        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    private fun findGalleryImage(displayName: String): Uri? {
+        val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.MediaColumns._ID)
-        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-        val args = arrayOf(displayName)
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+        val args = arrayOf(
+            displayName,
+            "${OutputDirResolver.IMAGE_MEDIA_RELATIVE_PATH}/"
+        )
         return appContext.contentResolver.query(
             collection,
             projection,
@@ -218,17 +238,17 @@ class ImageCryptViewModelDeviceTest {
     }
 
     /**
-     * 查找 MediaStore 或已获全盘权限时的直接输出。
+     * 查找相册 MediaStore 或旧系统直接写入的 Pictures 输出。
      *
      * @param displayName 文件显示名
      * @return 输出 URI；未找到返回 {@code null}
      */
     private fun findOutput(displayName: String): Uri? {
-        val mediaUri = findDownload(displayName)
+        val mediaUri = findGalleryImage(displayName)
         if (mediaUri != null) {
             return mediaUri
         }
-        val direct = File(OutputDirResolver.publicDownloadPath(), displayName)
+        val direct = File(OutputDirResolver.publicPicturesPath(), displayName)
         return if (direct.isFile) Uri.fromFile(direct) else null
     }
 
@@ -240,29 +260,43 @@ class ImageCryptViewModelDeviceTest {
      */
     private fun outputFingerprints(displayName: String): Set<String> {
         val fingerprints = linkedSetOf<String>()
-        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DATE_MODIFIED
         )
-        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
         appContext.contentResolver.query(
             collection,
             projection,
             selection,
-            arrayOf(displayName),
+            arrayOf(displayName, "${OutputDirResolver.IMAGE_MEDIA_RELATIVE_PATH}/"),
             null
         )?.use { cursor ->
             while (cursor.moveToNext()) {
                 fingerprints += "media:${cursor.getLong(0)}:${cursor.getLong(1)}:${cursor.getLong(2)}"
             }
         }
-        val direct = File(OutputDirResolver.publicDownloadPath(), displayName)
+        val direct = File(OutputDirResolver.publicPicturesPath(), displayName)
         if (direct.isFile) {
             fingerprints += "file:${direct.length()}:${direct.lastModified()}"
         }
         return fingerprints
+    }
+
+    /**
+     * 断言预览路径存在且 Android 平台能够解码其有界首帧。
+     *
+     * @param path 私有输入或结果预览路径
+     */
+    private fun assertPreviewDecodes(path: String?) {
+        val file = File(requireNotNull(path))
+        assertEquals(true, file.isFile)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        assertNotNull(bounds.outMimeType)
     }
 
     /**

@@ -10,6 +10,7 @@ import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.platform.ImageKdfAssessment
 import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
 import hbnu.project.ergoutreecrypt.android.platform.MaterializedImageInput
+import hbnu.project.ergoutreecrypt.android.platform.MediaStoreCollection
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.platform.errorKind
@@ -81,6 +82,7 @@ data class ImageCryptResultInfo(
  * @property inputName 输入显示名
  * @property inputBytes 输入字节数
  * @property inputDescription 格式、尺寸或协议元数据描述
+ * @property inputPreviewPath 私有输入副本的有界预览路径
  * @property metadata 还原输入的有界协议元数据
  * @property selecting 是否正在从 URI 流式物化输入
  * @property outputTreeUri 用户选择的 SAF 输出目录 URI 字符串
@@ -88,6 +90,8 @@ data class ImageCryptResultInfo(
  * @property kdfAssessment 固定 64 MiB KDF 的设备资源快照
  * @property progress 任务进度
  * @property result 成功结果
+ * @property resultPreviewPath 最近一次当前方向处理结果的预览路径
+ * @property resultPreviewTitle 结果预览标题
  * @property formError 表单或选择错误
  */
 data class ImageCryptUiState(
@@ -98,6 +102,7 @@ data class ImageCryptUiState(
     val inputName: String? = null,
     val inputBytes: Long = 0L,
     val inputDescription: String = "",
+    val inputPreviewPath: String? = null,
     val metadata: ImageCryptMetadata? = null,
     val selecting: Boolean = false,
     val outputTreeUri: String? = null,
@@ -105,6 +110,8 @@ data class ImageCryptUiState(
     val kdfAssessment: ImageKdfAssessment? = null,
     val progress: ProgressState = ProgressState(),
     val result: ImageCryptResultInfo? = null,
+    val resultPreviewPath: String? = null,
+    val resultPreviewTitle: String? = null,
     val formError: String? = null
 )
 
@@ -147,8 +154,8 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
     /** 当前全局操作协调器令牌。 */
     private var operationToken: Long? = null
 
-    /** 为分享保留的成功加密临时目录；下次操作或关闭结果时清理。 */
-    private var retainedShareDir: File? = null
+    /** 为结果预览或分享保留的成功任务临时目录；下次输入或任务时清理。 */
+    private var retainedResultDir: File? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -181,17 +188,21 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         cleanupSelectedInput()
+        cleanupRetainedResult()
         _uiState.update {
             it.copy(
                 direction = direction,
                 inputName = null,
                 inputBytes = 0L,
                 inputDescription = "",
+                inputPreviewPath = null,
                 metadata = null,
                 password = "",
                 confirmPassword = "",
                 formError = null,
-                result = null
+                result = null,
+                resultPreviewPath = null,
+                resultPreviewTitle = null
             )
         }
     }
@@ -245,7 +256,16 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         if (isRunning()) {
             return
         }
-        _uiState.update { it.copy(selecting = true, formError = null, result = null) }
+        cleanupRetainedResult()
+        _uiState.update {
+            it.copy(
+                selecting = true,
+                formError = null,
+                result = null,
+                resultPreviewPath = null,
+                resultPreviewTitle = null
+            )
+        }
         viewModelScope.launch(Dispatchers.IO) {
             var candidate: MaterializedImageInput? = null
             try {
@@ -301,6 +321,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                         inputName = selectedInput?.displayName,
                         inputBytes = size,
                         inputDescription = description,
+                        inputPreviewPath = selectedInput?.file?.absolutePath,
                         metadata = metadata,
                         password = "",
                         confirmPassword = "",
@@ -313,6 +334,32 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                     it.copy(selecting = false, formError = friendlySelectionError(e))
                 }
             }
+        }
+    }
+
+    /**
+     * 清空当前输入、结果弹窗和两类预览。
+     */
+    fun clearInput() {
+        if (isRunning()) {
+            return
+        }
+        cleanupSelectedInput()
+        cleanupRetainedResult()
+        _uiState.update {
+            it.copy(
+                inputName = null,
+                inputBytes = 0L,
+                inputDescription = "",
+                inputPreviewPath = null,
+                metadata = null,
+                password = "",
+                confirmPassword = "",
+                result = null,
+                resultPreviewPath = null,
+                resultPreviewTitle = null,
+                formError = null
+            )
         }
     }
 
@@ -366,7 +413,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         }
         operationToken = token
         cancelRequested.set(false)
-        cleanupRetainedShare()
+        cleanupRetainedResult()
         _uiState.update {
             it.copy(
                 progress = ProgressState(
@@ -375,6 +422,8 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                     canCancel = true
                 ),
                 result = null,
+                resultPreviewPath = null,
+                resultPreviewTitle = null,
                 formError = null
             )
         }
@@ -412,11 +461,10 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * 消费结果弹窗，并清理仅为分享保留的私有副本。
+     * 关闭结果弹窗，并保留下方结果预览直到输入、方向或任务发生变化。
      */
     fun dismissResult() {
         _uiState.update { it.copy(result = null) }
-        cleanupRetainedShare()
     }
 
     /**
@@ -471,6 +519,9 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
             if (plan.pending != null && !fileOps.commitOutput(plan.pending)) {
                 throw IllegalStateException("处理已完成，但提交到目标目录失败，请检查目录权限")
             }
+            if (plan.scanAfterCommit) {
+                fileOps.scanImageFile(resultPath.toFile())
+            }
 
             val outputName = resultPath.fileName.toString()
             val publicPath = if (plan.pending == null) {
@@ -485,16 +536,13 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
             }
             HistoryService.record(type, outputName, publicPath, plan.outputTreeUri)
 
+            if (plan.pending != null) {
+                retainedResultDir = plan.pending.tempDir
+            }
             val sharePath = if (snapshot.direction == ImageCryptDirection.ENCRYPT) {
-                if (plan.pending != null) {
-                    retainedShareDir = plan.pending.tempDir
-                }
                 resultPath.toString()
             } else {
                 null
-            }
-            if (snapshot.direction == ImageCryptDirection.RESTORE) {
-                plan.pending?.tempDir?.deleteRecursively()
             }
             success = true
             _uiState.update {
@@ -516,7 +564,13 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                         message = "已保存到 ${plan.historyDirectory}\n输出文件：$outputName",
                         outputName = outputName,
                         sharePath = sharePath
-                    )
+                    ),
+                    resultPreviewPath = resultPath.toString(),
+                    resultPreviewTitle = if (snapshot.direction == ImageCryptDirection.ENCRYPT) {
+                        "加密结果预览"
+                    } else {
+                        "解密还原结果预览"
+                    }
                 )
             }
         } catch (e: CancelledException) {
@@ -656,29 +710,37 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                 directory = temp.toPath(),
                 pending = PendingOutput.Saf(uri, temp),
                 historyDirectory = historyDir,
-                outputTreeUri = outputTreeUri
+                outputTreeUri = outputTreeUri,
+                scanAfterCommit = false
             )
         }
-        return when (val resolved = OutputDirResolver.resolve(getApplication())) {
+        return when (val resolved = OutputDirResolver.resolveImage(getApplication())) {
             is OutputDirResolver.Resolved.Direct -> OutputPlan(
                 File(resolved.path).toPath(),
                 null,
                 resolved.path,
-                null
+                null,
+                true
             )
             is OutputDirResolver.Resolved.AppExternal -> OutputPlan(
                 File(resolved.path).toPath(),
                 null,
                 resolved.path,
-                null
+                null,
+                false
             )
             is OutputDirResolver.Resolved.MediaStore -> {
                 val temp = fileOps.createOutputTempDir()
                 OutputPlan(
                     temp.toPath(),
-                    PendingOutput.MediaStore(resolved.relativePath, temp),
-                    OutputDirResolver.publicDownloadPath(),
-                    null
+                    PendingOutput.MediaStore(
+                        resolved.relativePath,
+                        temp,
+                        MediaStoreCollection.IMAGES
+                    ),
+                    OutputDirResolver.publicPicturesPath(),
+                    null,
+                    false
                 )
             }
         }
@@ -738,10 +800,11 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
      * @return 输出位置
      */
     private fun describeDefaultTarget(): String {
-        return when (val target = OutputDirResolver.resolve(getApplication())) {
+        return when (val target = OutputDirResolver.resolveImage(getApplication())) {
             is OutputDirResolver.Resolved.Direct -> target.path
             is OutputDirResolver.Resolved.AppExternal -> target.path
-            is OutputDirResolver.Resolved.MediaStore -> "下载/${OutputDirResolver.FOLDER_NAME}"
+            is OutputDirResolver.Resolved.MediaStore ->
+                "相册/Pictures/${OutputDirResolver.FOLDER_NAME}"
         }
     }
 
@@ -761,10 +824,10 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         fileOps.cleanupImageInput(input)
     }
 
-    /** 清理仅为系统分享保留的私有输出目录。 */
-    private fun cleanupRetainedShare() {
-        retainedShareDir?.deleteRecursively()
-        retainedShareDir = null
+    /** 清理为结果预览或系统分享保留的私有输出目录。 */
+    private fun cleanupRetainedResult() {
+        retainedResultDir?.deleteRecursively()
+        retainedResultDir = null
     }
 
     /**
@@ -804,7 +867,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         cancelRequested.set(true)
         currentJob?.cancel()
         cleanupSelectedInput()
-        cleanupRetainedShare()
+        cleanupRetainedResult()
         OperationCoordinator.release(operationToken)
         super.onCleared()
     }
@@ -816,11 +879,13 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
      * @property pending SAF/MediaStore 提交描述；直接输出时为 {@code null}
      * @property historyDirectory 历史和结果展示使用的目标目录
      * @property outputTreeUri SAF 目录 URI 字符串
+     * @property scanAfterCommit 是否在直接写入后请求系统相册扫描
      */
     private data class OutputPlan(
         val directory: Path,
         val pending: PendingOutput?,
         val historyDirectory: String,
-        val outputTreeUri: String?
+        val outputTreeUri: String?,
+        val scanAfterCommit: Boolean
     )
 }

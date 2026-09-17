@@ -1,10 +1,14 @@
 package hbnu.project.ergoutreecrypt.android.ui.screen
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,10 +47,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,6 +70,9 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Android 独立图片加密页面。
@@ -149,7 +159,8 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
             InputCard(
                 state = state,
                 enabled = !running && !state.selecting,
-                onPick = { filePicker.launch(arrayOf("image/*")) }
+                onPick = { filePicker.launch(arrayOf("image/*")) },
+                onClear = viewModel::clearInput
             )
 
             if (state.direction == ImageCryptDirection.ENCRYPT) {
@@ -187,19 +198,6 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
                 onReset = { viewModel.setOutputTree(null) }
             )
 
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            ) {
-                Text(
-                    text = "请作为文件发送产物，不要使用会压缩、裁剪或转码的“照片”发送方式，否则将无法还原。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(12.dp)
-                )
-            }
-
             state.formError?.let { error ->
                 Text(
                     text = error,
@@ -209,6 +207,13 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
             }
 
             ProgressCard(progressState = state.progress, onCancel = viewModel::cancel)
+
+            state.resultPreviewPath?.let { path ->
+                ResultPreviewCard(
+                    title = state.resultPreviewTitle ?: "处理结果预览",
+                    path = path
+                )
+            }
 
             Button(
                 onClick = viewModel::start,
@@ -272,10 +277,16 @@ private fun DirectionSelector(
  *
  * @param state 页面状态
  * @param enabled 是否允许选择
- * @param onPick 选择回调
+ * @param onPick 选择或重新选择回调
+ * @param onClear 清空选择回调
  */
 @Composable
-private fun InputCard(state: ImageCryptUiState, enabled: Boolean, onPick: () -> Unit) {
+private fun InputCard(
+    state: ImageCryptUiState,
+    enabled: Boolean,
+    onPick: () -> Unit,
+    onClear: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -300,12 +311,129 @@ private fun InputCard(state: ImageCryptUiState, enabled: Boolean, onPick: () -> 
                     )
                 }
             }
+            state.inputPreviewPath?.let { path ->
+                Spacer(modifier = Modifier.height(10.dp))
+                BoundedImagePreview(
+                    path = path,
+                    contentDescription = "当前选择图片预览",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(onClick = onPick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-                Text(if (state.inputName == null) "选择图片" else "重新选择")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onPick,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (state.inputName == null) "选择图片" else "重新选择")
+                }
+                if (state.inputName != null) {
+                    TextButton(onClick = onClear, enabled = enabled) {
+                        Text("清空选择")
+                    }
+                }
             }
         }
     }
+}
+
+/**
+ * 页面下方的处理结果缩略预览。
+ *
+ * @param title 结果预览标题
+ * @param path 私有暂存或直接输出路径
+ */
+@Composable
+private fun ResultPreviewCard(title: String, path: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            BoundedImagePreview(
+                path = path,
+                contentDescription = title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 从本地路径异步解码有界缩略图。
+ *
+ * @param path 图片路径
+ * @param contentDescription 无障碍说明
+ * @param modifier 修饰符
+ */
+@Composable
+private fun BoundedImagePreview(
+    path: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    val preview by produceState<Pair<Boolean, Bitmap?>>(false to null, path) {
+        value = withContext(Dispatchers.IO) {
+            true to decodeBoundedBitmap(File(path), 1024, 1024)
+        }
+    }
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        when {
+            !preview.first -> Text("正在生成预览…", style = MaterialTheme.typography.bodySmall)
+            preview.second == null -> Text(
+                "当前图片无法生成预览",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            else -> Image(
+                bitmap = requireNotNull(preview.second).asImageBitmap(),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+/**
+ * 使用二次采样把图片解码到指定边界内。
+ *
+ * @param file 图片文件
+ * @param maxWidth 最大解码宽度
+ * @param maxHeight 最大解码高度
+ * @return 缩略位图；平台不支持该编码时返回 {@code null}
+ */
+private fun decodeBoundedBitmap(file: File, maxWidth: Int, maxHeight: Int): Bitmap? {
+    if (!file.isFile) {
+        return null
+    }
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.absolutePath, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        return null
+    }
+    var sample = 1
+    while (bounds.outWidth / sample > maxWidth * 2 ||
+        bounds.outHeight / sample > maxHeight * 2
+    ) {
+        sample *= 2
+    }
+    return BitmapFactory.decodeFile(
+        file.absolutePath,
+        BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+    )
 }
 
 /**

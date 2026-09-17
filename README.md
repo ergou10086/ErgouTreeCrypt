@@ -60,7 +60,9 @@
 - Phase 6 的桌面页已接入后台预检、公开/密码模式、固定 64 MiB 跨端 KDF、进度取消、历史日志、
   双语主题、结果路径动作和有界缩略预览，并以五种真实格式 × 两种保护模式完成逐字节往返。
 - Phase 7 的 Android 页已接入 `image/*` 选择后二次魔数验证、固定跨端 KDF 预检、前台通知、
-  取消、SAF/MediaStore 认证后提交与 `image/png` 文件分享；7 个一级目的地由 Pager 单一真值同步。
+  取消、SAF/MediaStore 认证后提交与 `image/png` 文件分享；默认结果进入
+  `Pictures/ErgouTreeCrypt` 相册，输入与加解密结果均提供有界缩略预览，7 个一级目的地由
+  Pager 单一真值同步。
 
 首次在真机上运行该闸门时立刻发现并修复了一个在宿主 JVM 上完全不可见的崩溃
 （`Files.getFileStore` 在 Android 上抛 `SecurityException`），详见更新日志。

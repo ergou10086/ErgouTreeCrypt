@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -25,6 +26,17 @@ private const val EXTERNAL_STORAGE_PROVIDER_AUTHORITY = "com.android.externalsto
 private const val COPY_BUFFER_SIZE = 64 * 1024
 
 /**
+ * 暂存文件提交到的 MediaStore 公共集合。
+ */
+enum class MediaStoreCollection {
+    /** 普通文件使用的公共下载集合。 */
+    DOWNLOADS,
+
+    /** 图片加解密使用的公共相册集合。 */
+    IMAGES
+}
+
+/**
  * 待提交的输出暂存信息（后端先写入内部临时目录，完成后经对应渠道提交）。
  */
 sealed class PendingOutput {
@@ -40,12 +52,16 @@ sealed class PendingOutput {
     data class Saf(val treeUri: Uri, override val tempDir: File) : PendingOutput()
 
     /**
-     * MediaStore 输出（API 29+ 无全盘权限的默认路径）：
-     * 提交时插入公共 下载/ErgouTreeCrypt。
+     * MediaStore 输出（API 29+ 的默认公共路径）。
      *
      * @property relativePath MediaStore 相对路径（不带尾部斜杠）
+     * @property collection 目标公共集合
      */
-    data class MediaStore(val relativePath: String, override val tempDir: File) : PendingOutput()
+    data class MediaStore(
+        val relativePath: String,
+        override val tempDir: File,
+        val collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS
+    ) : PendingOutput()
 }
 
 /**
@@ -337,23 +353,32 @@ class AndroidFileOps(private val context: Context) {
     fun commitOutput(pending: PendingOutput): Boolean {
         return when (pending) {
             is PendingOutput.Saf -> copyDirectoryToTree(pending.treeUri, pending.tempDir)
-            is PendingOutput.MediaStore -> copyDirToMediaStore(pending.tempDir, pending.relativePath)
+            is PendingOutput.MediaStore -> copyDirToMediaStore(
+                pending.tempDir,
+                pending.relativePath,
+                pending.collection
+            )
         }
     }
 
     /**
-     * 将临时目录内容（保留子目录结构）复制到 MediaStore 公共下载目录。
+     * 将临时目录内容（保留子目录结构）复制到指定 MediaStore 公共集合。
      *
-     * <p>供 API 29+ 无"所有文件访问权限"时使用：分区存储禁止直写公共目录，
-     * 经 MediaStore 插入即可合法落盘到 下载/ErgouTreeCrypt。同名文件会先
+     * <p>供 API 29+ 分区存储使用：经 MediaStore 插入即可合法落盘到 Download 或 Pictures
+     * 下的 ErgouTreeCrypt 子目录。同名文件会先
      * best-effort 删除应用自有条目；删除失败（文件归其他应用所有）时由
      * MediaProvider 自动改名（如 "name (1)"）。
      *
      * @param tempDir      包含待提交内容的临时目录
      * @param relativePath 目标 MediaStore 相对路径（如 Download/ErgouTreeCrypt）
+     * @param collection   目标公共集合
      * @return 是否全部提交成功
      */
-    fun copyDirToMediaStore(tempDir: File, relativePath: String): Boolean {
+    fun copyDirToMediaStore(
+        tempDir: File,
+        relativePath: String,
+        collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS
+    ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return false
         }
@@ -363,7 +388,7 @@ class AndroidFileOps(private val context: Context) {
         }
         var success = true
         for (f in files) {
-            if (!copyFileToMediaStore(f, relativePath, "")) {
+            if (!copyFileToMediaStore(f, relativePath, "", collection)) {
                 success = false
             }
         }
@@ -376,15 +401,21 @@ class AndroidFileOps(private val context: Context) {
      * @param file       待复制的文件或目录
      * @param baseRel    基础相对路径（如 Download/ErgouTreeCrypt）
      * @param sub        子目录后缀（目录嵌套时逐层追加），根层为空串
+     * @param collection 目标公共集合
      * @return 是否复制成功
      */
-    private fun copyFileToMediaStore(file: File, baseRel: String, sub: String): Boolean {
+    private fun copyFileToMediaStore(
+        file: File,
+        baseRel: String,
+        sub: String,
+        collection: MediaStoreCollection
+    ): Boolean {
         if (file.isDirectory) {
             val children = file.listFiles() ?: return false
             var success = true
             for (child in children) {
                 val childSub = if (sub.isEmpty()) file.name else "$sub/${file.name}"
-                if (!copyFileToMediaStore(child, baseRel, childSub)) {
+                if (!copyFileToMediaStore(child, baseRel, childSub, collection)) {
                     success = false
                 }
             }
@@ -403,9 +434,9 @@ class AndroidFileOps(private val context: Context) {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             // 覆盖同名旧文件：仅能删除应用自有条目，失败时交由 MediaProvider 自动改名
-            deleteAppOwnedMediaEntries(rel, file.name)
-            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            val uri = context.contentResolver.insert(collection, values) ?: return false
+            val collectionUri = mediaCollectionUri(collection)
+            deleteAppOwnedMediaEntries(collectionUri, rel, file.name)
+            val uri = context.contentResolver.insert(collectionUri, values) ?: return false
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 file.inputStream().use { it.copyTo(out) }
             } ?: return false
@@ -421,17 +452,23 @@ class AndroidFileOps(private val context: Context) {
     /**
      * best-effort 删除 MediaStore 中应用自有的同名旧条目（用于覆盖输出）。
      *
-     * @param rel  条目所在相对路径（不带尾部斜杠）
+     * @param collectionUri MediaStore 公共集合 URI
+     * @param rel 条目所在相对路径（不带尾部斜杠）
      * @param name 条目显示名
      */
-    private fun deleteAppOwnedMediaEntries(rel: String, name: String) {
+    private fun deleteAppOwnedMediaEntries(collectionUri: Uri, rel: String, name: String) {
         try {
-            val uri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
             val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
                     "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
             val args = arrayOf(name, "$rel/")
             val resolver = context.contentResolver
-            resolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), selection, args, null)
+            resolver.query(
+                collectionUri,
+                arrayOf(MediaStore.MediaColumns._ID),
+                selection,
+                args,
+                null
+            )
                 ?.use { cursor ->
                     val idCol = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
                     if (idCol >= 0) {
@@ -442,7 +479,9 @@ class AndroidFileOps(private val context: Context) {
                         for (id in ids) {
                             // 逐条删除，个别条目失败（他人所有）不影响其余
                             resolver.delete(
-                                android.content.ContentUris.withAppendedId(uri, id), null, null
+                                android.content.ContentUris.withAppendedId(collectionUri, id),
+                                null,
+                                null
                             )
                         }
                     }
@@ -450,6 +489,39 @@ class AndroidFileOps(private val context: Context) {
         } catch (_: Exception) {
             // 删除失败忽略，交由插入阶段处理
         }
+    }
+
+    /**
+     * 返回目标 MediaStore 集合 URI。
+     *
+     * @param collection 集合类型
+     * @return 公共集合 URI
+     */
+    private fun mediaCollectionUri(collection: MediaStoreCollection): Uri =
+        when (collection) {
+            MediaStoreCollection.DOWNLOADS -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            MediaStoreCollection.IMAGES -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+
+    /**
+     * 请求系统媒体库扫描一个直接写入的图片文件。
+     *
+     * <p>主要用于 Android 8–9 的公共 Pictures 直写路径；MediaStore 提交无需额外扫描。
+     *
+     * @param file 已成功写入的图片文件
+     */
+    fun scanImageFile(file: File) {
+        if (!file.isFile) {
+            return
+        }
+        val mime = MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(file.extension.lowercase())
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(file.absolutePath),
+            arrayOf(mime),
+            null
+        )
     }
 
     /**

@@ -31,6 +31,9 @@ object OutputDirResolver {
     /** MediaStore 相对路径（相对外部存储主卷，不带尾部斜杠）。 */
     val MEDIA_RELATIVE_PATH = "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER_NAME"
 
+    /** 图片加解密相册的 MediaStore 相对路径（不带尾部斜杠）。 */
+    val IMAGE_MEDIA_RELATIVE_PATH = "${Environment.DIRECTORY_PICTURES}/$FOLDER_NAME"
+
     /**
      * 输出目录解析结果。
      */
@@ -73,6 +76,29 @@ object OutputDirResolver {
     }
 
     /**
+     * 解析图片加解密的默认相册输出策略。
+     *
+     * <p>Android 10 及以上始终交给 {@code MediaStore.Images} 提交到
+     * {@code Pictures/ErgouTreeCrypt}，确保相册应用能立即索引。Android 8–9 在具备旧版
+     * 写权限时直写公共 Pictures；无权限时只能退回应用专属 Pictures 目录。
+     *
+     * @param context 应用上下文
+     * @return 图片输出策略
+     */
+    fun resolveImage(context: Context): Resolved {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return Resolved.MediaStore(IMAGE_MEDIA_RELATIVE_PATH)
+        }
+        return if (PermissionManager.hasLegacyWriteAccess(context)) {
+            Resolved.Direct(publicPicturesPath())
+        } else {
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), FOLDER_NAME)
+            dir.mkdirs()
+            Resolved.AppExternal(dir.absolutePath)
+        }
+    }
+
+    /**
      * 公共下载目录下的应用子目录绝对路径（并确保其存在）。
      *
      * @return 如 {@code /storage/emulated/0/Download/ErgouTreeCrypt}
@@ -80,6 +106,20 @@ object OutputDirResolver {
     fun publicDownloadPath(): String {
         val dir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            FOLDER_NAME
+        )
+        dir.mkdirs()
+        return dir.absolutePath
+    }
+
+    /**
+     * 公共 Pictures 目录下的应用相册绝对路径，并确保目录存在。
+     *
+     * @return 如 {@code /storage/emulated/0/Pictures/ErgouTreeCrypt}
+     */
+    fun publicPicturesPath(): String {
+        val dir = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
             FOLDER_NAME
         )
         dir.mkdirs()

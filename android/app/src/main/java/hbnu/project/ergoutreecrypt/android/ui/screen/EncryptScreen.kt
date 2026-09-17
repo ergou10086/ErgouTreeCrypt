@@ -88,6 +88,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
 import hbnu.project.ergoutreecrypt.android.ui.component.LogHistoryActions
 import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.MultiFilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.OperationLogPanel
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordStrengthMeter
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
@@ -108,6 +109,8 @@ import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.history.OperationType
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat
+import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
+import hbnu.project.ergoutreecrypt.volume.BatchResult
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
 import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
 import hbnu.project.ergoutreecrypt.filetypes.OutputNaming
@@ -136,6 +139,54 @@ private val ARCHIVE_FORMATS = listOf(
     Fmt("", "不归档"), Fmt("ZIP", "ZIP"), Fmt("7Z", "7Z")
 )
 
+/**
+ * 一个已选输入项（文件或文件夹）。
+ *
+ * @property uri      SAF 文档 URI，可为 null（例如按路径直接选定）
+ * @property path     解析后的本地路径
+ * @property name     展示用的文件名
+ * @property size     字节大小；目录或大小未知时为 null
+ * @property isFolder 是否为目录
+ */
+private data class SelectedInput(
+    val uri: Uri?,
+    val path: String,
+    val name: String,
+    val size: Long?,
+    val isFolder: Boolean
+)
+
+/**
+ * 计算「压缩后加密」的最终产物名，规则与共享核心
+ * {@code Encryptor.preArchiveOutputName} 保持一致。
+ *
+ * <p>先剥掉调用方给的 {@code .ergou} / {@code .pcv} 卷后缀，再插入归档扩展名并补回
+ * {@code .ergou}，得到 {@code <基名>.<归档扩展名>.ergou}。
+ *
+ * @param output 调用方给出的输出文件名
+ * @param format 归档格式（如 {@code ZIP}）
+ * @return 最终产物文件名
+ */
+private fun preArchiveOutputName(output: String, format: String): String =
+    OutputNaming.preArchiveEncryptOutputName(output, format)
+
+/**
+ * 计算多文件批处理的虚拟文件夹名。
+ *
+ * <p>与桌面端一致：取全部选中文件所在目录的公共父级目录名；目录不一致时退化为
+ * 首个文件所在目录名；都取不到时回退为 {@code files}。
+ *
+ * @param inputs 已选输入项
+ * @return 非空的批名
+ */
+private fun batchNameFor(inputs: List<SelectedInput>): String {
+    if (inputs.isEmpty()) return "files"
+    val dirs = inputs.map { File(it.path).parentFile }
+    val common = dirs.firstOrNull()?.takeIf { first -> dirs.all { it == first } }
+    val name = (common ?: dirs.getOrNull(0))?.name
+    return name?.takeIf { it.isNotBlank() } ?: "files"
+}
+
 /** 检测文件是否为支持的媒体格式 */
 private fun detectMediaFormat(fileName: String?): MediaFormat? {
     if (fileName == null) return null
@@ -153,6 +204,7 @@ private fun detectMediaFormat(fileName: String?): MediaFormat? {
 private val TIP_RS = "使用 Reed-Solomon 纠错码，可在文件部分损坏时恢复数据。启用后文件体积增加约 6%。"
 private val TIP_DENIABILITY = "创建包含两份内容的加密容器：真密码解密真实文件，伪密码（钓鱼密码）解密无害的伪装文件。即使被胁迫，也可安全交出伪密码。"
 private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护；7Z 不支持密码保护。"
+private val TIP_COMPRESS_BEFORE = "加密前把所选内容按下方格式打成「一个」压缩包，再对压缩包整体加密；归档内保留原有目录结构，ZIP 可设置 AES-256 密码。与「加密后压缩」互斥。"
 private val TIP_SPLIT = "将加密输出切分为多个指定大小的分卷文件，便于传输和存储。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
@@ -214,16 +266,25 @@ fun EncryptScreen(
         )
     }
 
-    // ---- 文件（仅单文件或单文件夹） ----
-    var inUri by remember { mutableStateOf<Uri?>(null) }
-    var inPath by remember { mutableStateOf<String?>(null) }
-    var inName by remember { mutableStateOf<String?>(null) }
-    var inSize by remember { mutableStateOf<Long?>(null) }
-    var isFolder by remember { mutableStateOf(false) }
+    // ---- 文件（单文件 / 单文件夹 / 一批文件） ----
+    // 选中集合是唯一事实来源：只有一项且为目录时按「文件夹模式」处理，
+    // 两项及以上一律按「一批文件」批处理（视为同一个文件夹里的多个文件）。
+    var selectedInputs by remember { mutableStateOf(listOf<SelectedInput>()) }
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
     var outDirUri by remember { mutableStateOf<Uri?>(null) }
     var pendingOut by remember { mutableStateOf<PendingOutput?>(null) }
+
+    val primaryInput = selectedInputs.singleOrNull()
+    val inPath = primaryInput?.path
+    val inName = primaryInput?.name
+    val inSize = primaryInput?.size
+    val isFolder = primaryInput?.isFolder == true
+    val isBatch = selectedInputs.size > 1
+
+    // 文件夹 / 多文件批处理的汇总（含被跳过与失败的文件），结束时用于弹窗汇报
+    var pendingBatchResult by remember { mutableStateOf<BatchResult?>(null) }
+    var pendingBatchName by remember { mutableStateOf<String?>(null) }
 
     // 默认输出目录显示路径（IO 线程解析，避免主线程 mkdirs）
     var defaultOutPath by remember { mutableStateOf<String?>(null) }
@@ -256,6 +317,7 @@ fun EncryptScreen(
     // ---- 加密选项（初始值从 DataStore 设置中加载） ----
     var reedSolomon by remember { mutableStateOf(false) }
     var deniability by remember { mutableStateOf(false) }
+    var compressBefore by remember { mutableStateOf(false) }
     var compressAfter by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(false) }
     var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
@@ -319,16 +381,13 @@ fun EncryptScreen(
                         val sz = if (f.exists()) f.length() else null
                         sz to f.isDirectory
                     }
-                    inUri = u
-                    inName = name
-                    inPath = path
-                    inSize = size
-                    isFolder = isDir
+                    selectedInputs = listOf(SelectedInput(u, path, name, size, isDir))
                 } else {
                     // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
                 }
-                outName = inName?.let { OutputNaming.encryptOutputName(FileNameSanitizer.sanitize(it)) }
+                outName = selectedInputs.singleOrNull()?.name
+                    ?.let { OutputNaming.encryptOutputName(FileNameSanitizer.sanitize(it)) }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (filePickJob === myJob) {
@@ -337,6 +396,48 @@ fun EncryptScreen(
             }
         }
     }
+
+    // ---- 多文件选择器：追加到已选集合（同一 URI 不重复添加） ----
+    val multiFilePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) {
+                return@rememberLauncherForActivityResult
+            }
+            // 取消上一次仍在进行的处理，允许用户换选新文件
+            filePickJob?.cancel()
+            // 同步置位加载状态，确保当帧即显示旋转圆圈
+            fileLoading = true
+            filePickJob = scope.launch {
+                val myJob = coroutineContext[Job]
+                try {
+                    val existing = selectedInputs.toMutableList()
+                    val existingPaths = existing.map { it.path }.toMutableSet()
+                    for (u in uris) {
+                        // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
+                        val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                        val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) } ?: continue
+                        if (!existingPaths.add(path)) {
+                            continue
+                        }
+                        val size = withContext(Dispatchers.IO) {
+                            val f = File(path)
+                            if (f.isFile && f.exists()) f.length() else null
+                        }
+                        existing.add(SelectedInput(u, path, name, size, false))
+                    }
+                    if (existing.isEmpty()) {
+                        Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
+                    } else {
+                        selectedInputs = existing
+                    }
+                } finally {
+                    // 仅当自身仍是最新一次选择时才复位加载状态
+                    if (filePickJob === myJob) {
+                        fileLoading = false
+                    }
+                }
+            }
+        }
 
     // ---- 文件夹选择器 ----
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
@@ -353,17 +454,14 @@ fun EncryptScreen(
                 // 名称查询与目录解析全部移入 IO 线程
                 val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
                 val path = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
-                inUri = u
-                inName = if (name == "未知文件") "选择的文件夹" else name
-                inPath = path
+                val displayName = if (name == "未知文件") "选择的文件夹" else name
                 if (path != null) {
-                    inSize = null
-                    isFolder = true
+                    selectedInputs = listOf(SelectedInput(u, path, displayName, null, true))
                 } else {
                     // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
-                outName = "${FileNameSanitizer.sanitize(inName ?: "folder")}.ergou"
+                outName = "${FileNameSanitizer.sanitize(displayName)}.ergou"
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (folderPickJob === myJob) {
@@ -467,7 +565,8 @@ fun EncryptScreen(
         }
     }
 
-    val hasFile = inPath != null
+    // 单文件语义与多文件批处理共用「是否已选输入」这一门槛
+    val hasFile = selectedInputs.isNotEmpty()
 
     /**
      * 对所选输入执行启动前预检；不合规则以 Toast 给出「该去哪个功能 / 勾选哪个选项」的引导。
@@ -536,10 +635,51 @@ fun EncryptScreen(
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
             }
             val tier = argon2Mode.resolve()
+            // 归档密码：ZIP 且用户确实填写时才传入，「不填就是空」——压缩包无密码
+            val archPwd = if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) archivePassword else null
+
+            // 多文件批处理：视为「同一个文件夹里的多个文件」，产物平铺进 批名/ 或打成 批名.扩展名
+            if (isBatch) {
+                val batch = vm.startEncryptBatch(
+                    inputFiles = selectedInputs.map { it.path },
+                    outputDir = writeDir,
+                    batchName = batchNameFor(selectedInputs),
+                    password = password,
+                    reedSolomon = reedSolomon,
+                    deniability = deniability,
+                    split = split,
+                    chunkSize = splitSize,
+                    comments = comments,
+                    preArchiveFormat = if (compressBefore) archiveFmt.ifEmpty { null } else null,
+                    preArchivePassword = if (compressBefore) archPwd else null,
+                    archiveFormat = if (compressAfter) archiveFmt.ifEmpty { null } else null,
+                    archivePassword = if (compressAfter) archPwd else null,
+                    keyfiles = kfPaths.toList(),
+                    keyfileOrdered = kfOrdered,
+                    argon2MemoryKib = tier.memoryKiB,
+                    argon2Passes = tier.passes,
+                    argon2Threads = tier.threads,
+                    compress = false,
+                    compressionLevel = 3
+                )
+                pendingBatchResult = batch
+                pendingBatchName = batchNameFor(selectedInputs)
+                return@launch
+            }
 
             // 文件夹加密：在输出目录创建「文件夹名_result」，串行逐文件处理，避免内存峰值
             if (isFolder && inPath != null) {
-                vm.startEncryptFolder(
+                val folderBase = FileNameSanitizer.sanitize(inName ?: "folder")
+                val preFmtForFolder = if (compressBefore) archiveFmt.ifEmpty { null } else null
+                val postFmtForFolder = if (compressAfter) archiveFmt.ifEmpty { null } else null
+                pendingBatchName = when {
+                    preFmtForFolder != null ->
+                        "$folderBase${ArchivePacker.extOf(ArchivePacker.parseFormat(preFmtForFolder))}.ergou"
+                    postFmtForFolder != null ->
+                        "${folderBase}_result${ArchivePacker.extOf(ArchivePacker.parseFormat(postFmtForFolder))}"
+                    else -> "${folderBase}_result"
+                }
+                pendingBatchResult = vm.startEncryptFolder(
                     inputDir = inPath!!,
                     outputDir = writeDir,
                     password = password,
@@ -548,20 +688,29 @@ fun EncryptScreen(
                     split = split,
                     chunkSize = splitSize,
                     comments = comments,
-                    archiveFormat = archiveFmt.ifEmpty { null },
-                    archivePassword = if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) archivePassword else null,
+                    archiveFormat = if (compressAfter) archiveFmt.ifEmpty { null } else null,
+                    archivePassword = if (compressAfter) archPwd else null,
                     keyfiles = kfPaths.toList(),
                     keyfileOrdered = kfOrdered,
                     argon2MemoryKib = tier.memoryKiB,
                     argon2Passes = tier.passes,
-                    argon2Threads = tier.threads
+                    argon2Threads = tier.threads,
+                    preArchiveFormat = if (compressBefore) archiveFmt.ifEmpty { null } else null,
+                    preArchivePassword = if (compressBefore) archPwd else null
                 )
                 return@launch
             }
 
             val req = EncryptRequest()
             req.inputFile = inPath
-            val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "encrypted.ergou")}"
+            // 压缩后加密时核心会把产物拼成 <基名>.<归档扩展名>.ergou，此处只给常规的
+            // <基名>.ergou；界面展示与历史记录同步采用核心的最终名字。
+            val baseOutName = FileNameSanitizer.sanitize(outName ?: "encrypted.ergou")
+            val preFmt = if (compressBefore && archiveFmt.isNotEmpty()) archiveFmt else null
+            val outFile = "$writeDir/$baseOutName"
+            if (preFmt != null) {
+                outName = preArchiveOutputName(baseOutName, preFmt)
+            }
             req.outputFile = outFile
             req.password = password
             req.setReedSolomon(reedSolomon)
@@ -571,11 +720,13 @@ fun EncryptScreen(
             req.argon2MemoryKib = tier.memoryKiB
             req.argon2Passes = tier.passes
             req.argon2Threads = tier.threads
-            if (archiveFmt.isNotEmpty()) {
+            if (preFmt != null) {
+                req.preArchiveFormat = preFmt
+                req.preArchivePassword = archPwd
+            }
+            if (archiveFmt.isNotEmpty() && compressAfter) {
                 req.archiveFormat = archiveFmt
-                if (archiveFmt == "ZIP" && archivePassword.isNotEmpty()) {
-                    req.archivePassword = archivePassword
-                }
+                req.archivePassword = archPwd
             }
             if (kfPaths.isNotEmpty()) { req.keyfiles = kfPaths.toList(); req.setKeyfileOrdered(kfOrdered) }
             if (deniability) {
@@ -640,9 +791,14 @@ fun EncryptScreen(
         ctx = ctx,
         isRunning = isRunning,
         progressState = if (mediaProgress.state == ProgressState.State.RUNNING) mediaProgress else progress,
-        fileSize = inSize,
+        // 多文件批处理下没有「单个文件」的大小/名字，改用总量与条目数，保住通知栏的可读性
+        fileSize = if (isBatch) {
+            selectedInputs.mapNotNull { it.size }.sum().takeIf { it > 0 }
+        } else {
+            inSize
+        },
         title = if (mediaMode) "正在格式保持加密" else "正在加密",
-        fileName = inName
+        fileName = if (isBatch) "${selectedInputs.size} 个文件" else inName
     )
 
     // 加密完成后清理安全密钥文件
@@ -696,7 +852,15 @@ fun EncryptScreen(
     LaunchedEffect(progress.state) {
         when (progress.state) {
             ProgressState.State.DONE -> {
-                val outNameNow = outName ?: "encrypted.ergou"
+                // 批处理（文件夹 / 多文件）：用核心汇总替换通用成功文案，
+                // 让「跳过/失败」的条目在弹窗里被明确列出
+                val batch = pendingBatchResult
+                pendingBatchResult = null
+                val outNameNow = pendingBatchName ?: outName ?: "encrypted.ergou"
+                pendingBatchName = null
+                val batchSummary = batch?.formatSummary()
+                val batchDetail = batch?.formatDetail()?.ifBlank { null }
+                val partial = batch != null && batch.hasFailures() && batch.hasSuccesses()
                 val resolvedOutDir = OutputDirResolver.historyDir(
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
@@ -706,10 +870,14 @@ fun EncryptScreen(
                     val committed = commitOutput()
                     when (committed) {
                         null, true -> {
-                            resultTitle = "加密完成"
-                            resultMessage = buildSuccessMessage("加密", outNameNow)
-                            resultDetail = null
-                            resultType = ResultType.SUCCESS
+                            resultTitle = if (partial) "加密部分完成" else "加密完成"
+                            resultMessage = if (batchSummary != null && (partial || batchDetail != null)) {
+                                batchSummary
+                            } else {
+                                buildSuccessMessage("加密", outNameNow)
+                            }
+                            resultDetail = batchDetail
+                            resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
                             // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
                             withContext(Dispatchers.IO) {
                                 HistoryService.record(
@@ -907,8 +1075,18 @@ fun EncryptScreen(
                             }
                         }
                     }
-                    // 格式保持加密仅支持单文件，隐藏文件夹选择
+                    // 格式保持加密仅支持单文件，隐藏多文件与文件夹选择
                     if (!mediaMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                            onClick = { multiFilePicker.launch(arrayOf("*/*")) }
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("或选择多个文件（列表管理，可随时增删）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            }
+                        }
                         Spacer(Modifier.height(8.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -928,6 +1106,20 @@ fun EncryptScreen(
                         }
                     }
                 }
+            } else if (isBatch) {
+                // 多文件列表卡片：可滚动、可追加、可逐个移除
+                MultiFilePickerCard(
+                    names = selectedInputs.map { it.name },
+                    sizes = selectedInputs.map { it.size },
+                    onRemove = { index ->
+                        selectedInputs = selectedInputs.toMutableList().also { it.removeAt(index) }
+                    },
+                    onAdd = { multiFilePicker.launch(arrayOf("*/*")) },
+                    onClear = {
+                        selectedInputs = emptyList()
+                        outName = null
+                    }
+                )
             } else {
                 // 已选文件卡片
                 FilePickerCard(
@@ -945,8 +1137,8 @@ fun EncryptScreen(
                     onPickFile = { filePicker.launch(arrayOf("*/*")) },
                     onPickFolder = if (mediaMode) null else { { folderPicker.launch(null) } },
                     onRemove = {
-                        inUri = null; inPath = null; inName = null; inSize = null
-                        isFolder = false; outName = null
+                        selectedInputs = emptyList()
+                        outName = null
                     }
                 )
 
@@ -1113,9 +1305,24 @@ fun EncryptScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-                // ---- 加密后压缩（格式保持加密下仍可用，对齐桌面端 avCompressAfterCheck） ----
-                OptionRow("加密后压缩", compressAfter, { compressAfter = it }, TIP_COMPRESS_AFTER)
-                if (compressAfter) {
+                // ---- 压缩后加密 / 加密后压缩（共用同一组归档格式与归档密码控件，对齐桌面端） ----
+                // 两者都是「压缩策略」，语义互斥：勾选一个自动取消另一个
+                OptionRow("压缩后加密", compressBefore, {
+                    compressBefore = it
+                    if (it) {
+                        compressAfter = false
+                        // 勾选却仍停留在「不归档」会静默什么都不做，这里补一个默认格式
+                        if (archiveFmt.isEmpty()) archiveFmt = "ZIP"
+                    }
+                }, TIP_COMPRESS_BEFORE, enabled = !mediaMode)
+                OptionRow("加密后压缩", compressAfter, {
+                    compressAfter = it
+                    if (it) {
+                        compressBefore = false
+                        if (archiveFmt.isEmpty()) archiveFmt = "ZIP"
+                    }
+                }, TIP_COMPRESS_AFTER)
+                if (compressAfter || compressBefore) {
                     Spacer(Modifier.height(4.dp))
                     Row(modifier = Modifier.padding(start = 36.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("归档格式：", style = MaterialTheme.typography.bodyMedium)
@@ -1129,7 +1336,7 @@ fun EncryptScreen(
                             value = archivePassword,
                             onValueChange = { archivePassword = it },
                             label = { Text("ZIP 压缩包密码") },
-                            placeholder = { Text("为 ZIP 设置 AES-256 密码保护") },
+                            placeholder = { Text("留空则压缩包无密码") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().padding(start = 36.dp),
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -1197,7 +1404,10 @@ fun EncryptScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = mediaMode, onCheckedChange = {
                         mediaMode = it
-                        if (it) { isFolder = false } // 格式保持加密仅支持单文件
+                        // 格式保持加密仅支持单文件：切进来时把文件夹/多文件选择收起
+                        if (it && (selectedInputs.size > 1 || selectedInputs.any { s -> s.isFolder })) {
+                            selectedInputs = emptyList()
+                        }
                         if (!it) { mediaIntegrity = true }
                     })
                     Text("格式保持加密", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))

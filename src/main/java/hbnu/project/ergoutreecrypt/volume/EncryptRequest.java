@@ -108,6 +108,22 @@ public final class EncryptRequest {
     private String archivePassword;
 
     /**
+     * 压缩后加密的归档格式，null 表示不压缩。
+     *
+     * <p>与 {@link #archiveFormat}（加密后压缩）方向相反：先按该格式把输入打包成一个归档，
+     * 再对归档整体加密。多文件输入会合并进同一个归档，归档内条目名按文件名去重。
+     */
+    private String preArchiveFormat;
+
+    /**
+     * 压缩后加密所用的归档密码，可为 null/空表示不加密该归档。
+     *
+     * <p>该密码仅保护先于加密生成的那一层归档（ZIP 原生 AES / 非 ZIP 的整体包裹），
+     * 与文件加密密码相互独立。
+     */
+    private String preArchivePassword;
+
+    /**
      * 进度与取消回调。
      */
     private ProgressReporter reporter;
@@ -298,6 +314,42 @@ public final class EncryptRequest {
 
     public void setArchivePassword(String p) {
         this.archivePassword = p;
+    }
+
+    /**
+     * 获取压缩后加密的归档格式。
+     *
+     * @return 归档格式（如 {@code ZIP}）；null/空表示不先打包
+     */
+    public String getPreArchiveFormat() {
+        return preArchiveFormat;
+    }
+
+    /**
+     * 设置压缩后加密的归档格式。
+     *
+     * @param f 归档格式（如 {@code ZIP}）；null/空表示不先打包
+     */
+    public void setPreArchiveFormat(String f) {
+        this.preArchiveFormat = f;
+    }
+
+    /**
+     * 获取压缩后加密所用的归档密码。
+     *
+     * @return 归档密码；null/空表示该层归档不加密
+     */
+    public String getPreArchivePassword() {
+        return preArchivePassword;
+    }
+
+    /**
+     * 设置压缩后加密所用的归档密码。
+     *
+     * @param p 归档密码；null/空表示该层归档不加密
+     */
+    public void setPreArchivePassword(String p) {
+        this.preArchivePassword = p;
     }
 
     public ProgressReporter getReporter() {

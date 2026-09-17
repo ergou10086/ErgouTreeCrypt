@@ -112,6 +112,26 @@ public final class BatchResult {
     }
 
     /**
+     * 把另一个汇总并入本汇总，用于「多个输入各自独立执行」的批处理场景。
+     *
+     * <p>成功列表、失败列表与跳过计数逐项累加；线程策略沿用本汇总已记录的成因，
+     * 仅在自身尚无策略且对方有更明确策略时吸收，避免子任务的单线程策略污染整体结论。
+     *
+     * @param other 待并入的汇总，可为 null
+     */
+    public void mergeFrom(BatchResult other) {
+        if (other == null || other == this) {
+            return;
+        }
+        succeeded.addAll(other.succeeded());
+        failures.addAll(other.failures());
+        addSkipped(other.skippedCount());
+        totalBytes += other.totalBytes();
+        setThreadCountUsed(Math.max(threadCountUsed, other.threadCountUsed()));
+        setSerialReason(other.serialReason());
+    }
+
+    /**
      * @return 成功文件名列表的快照
      */
     public List<String> succeeded() {

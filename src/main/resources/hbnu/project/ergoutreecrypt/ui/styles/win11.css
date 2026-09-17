@@ -1660,6 +1660,49 @@
     -fx-spacing: 4;
 }
 
+/* ==========================================================================
+ * SECTION 22b — 通用加解密的多文件列表 (Multi-file List)
+ *    对应 FXML 中的 .file-list-scroll, .file-list, .file-list-row
+ *    文件多时由 ScrollPane 提供竖向滚动条，行高固定以便列表整齐
+ * ========================================================================== */
+
+.file-list-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.file-list-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.file-list-scroll .scroll-bar:vertical {
+    -fx-pref-width: 10;
+}
+
+.file-list {
+    -fx-padding: 2 6 2 0;
+    -fx-spacing: 4;
+}
+
+.file-list-row {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 6;
+    -fx-padding: 5 10 5 10;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.file-list-row .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+.file-list-row .file-list-size {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 11px;
+}
+
 .keyfile-row {
     -fx-background-color: -bg-subtle;
     -fx-background-radius: 6;

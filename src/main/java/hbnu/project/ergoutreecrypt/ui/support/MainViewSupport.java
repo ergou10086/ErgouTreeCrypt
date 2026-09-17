@@ -28,8 +28,7 @@ import java.util.List;
 public final class MainViewSupport {
 
     /** 默认钓鱼文件在资源目录中的路径。 */
-    private static final String DEFAULT_DECOY_RESOURCE =
-            "/other/2025年高考全国一卷语文高考真题文档版（含答案）.zip";
+    private static final String DEFAULT_DECOY_RESOURCE = "/other/2025年高考全国一卷语文高考真题文档版（含答案）.zip";
 
     private MainViewSupport() {
     }
@@ -69,6 +68,49 @@ public final class MainViewSupport {
             paths.add(f.getAbsolutePath());
         }
         return paths;
+    }
+
+    /**
+     * 计算多文件批处理的输出目录：取全部选中项所在目录的公共父级；
+     * 目录不一致时退化到首个条目所在目录；仍取不到时返回首个条目自身的绝对路径。
+     *
+     * @param files 选中项列表
+     * @return 输出目录路径；列表为空时返回空串
+     */
+    public static String batchOutputDir(final List<File> files) {
+        if (files == null || files.isEmpty()) {
+            return "";
+        }
+        File common = files.getFirst().getParentFile();
+        for (File f : files) {
+            File parent = f.getParentFile();
+            if (common == null || parent == null || !parent.equals(common)) {
+                common = null;
+                break;
+            }
+        }
+        if (common == null) {
+            common = files.getFirst().getParentFile();
+        }
+        return common != null ? common.getAbsolutePath() : files.getFirst().getAbsolutePath();
+    }
+
+    /**
+     * 计算多文件批处理的虚拟文件夹名。
+     *
+     * <p>优先取 {@link #batchOutputDir} 的目录名——「同一目录下的多个文件」看起来就属于
+     * 那个目录；目录名不可用时回退为 {@code files}，保证产物名恒非空。
+     *
+     * @param files 选中项列表
+     * @return 非空的批名（作为输出文件夹名或归档基名）
+     */
+    public static String batchName(final List<File> files) {
+        String dir = batchOutputDir(files);
+        if (dir.isEmpty()) {
+            return "files";
+        }
+        String name = new File(dir).getName();
+        return name == null || name.isEmpty() ? "files" : name;
     }
 
     /**

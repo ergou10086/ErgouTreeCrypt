@@ -134,6 +134,20 @@ public class MainController {
     private Label fileMetaLabel;
     @FXML
     private Button clearFileBtn;
+    @FXML
+    private VBox fileListCard;
+    @FXML
+    private Label fileListTitleLabel;
+    @FXML
+    private Label fileListMetaLabel;
+    @FXML
+    private ScrollPane fileListScroll;
+    @FXML
+    private VBox fileListBox;
+    @FXML
+    private Button addFilesBtn;
+    @FXML
+    private Button clearFilesBtn;
 
     // ---- 输出路径 ----
     @FXML
@@ -230,6 +244,10 @@ public class MainController {
     @FXML
     private Label compressLevelValueLabel;
     @FXML
+    private CheckBox compressBeforeCheck;
+    @FXML
+    private Label compressBeforeInfo;
+    @FXML
     private CheckBox compressAfterCheck;
     @FXML
     private Label compressAfterInfo;
@@ -314,6 +332,13 @@ public class MainController {
 
     private Mode mode = Mode.ENCRYPT;
     private File selectedFile;
+    /**
+     * 通用加解密的全部选中项：可能是单个文件、单个文件夹，或一批文件。
+     *
+     * <p>只选一个文件夹时按「文件夹模式」处理；多选时一律按「一批文件」处理
+     * （其中夹带的文件夹会被跳过并记入批处理失败列表）。
+     */
+    private final List<File> selectedFiles = new ArrayList<>();
     private boolean optionsExpanded = false;
     private boolean running = false;
     private FxProgressReporter activeReporter;
@@ -365,12 +390,27 @@ public class MainController {
             }
         });
 
-        // 加密后压缩：格式下拉绑定
+        // 压缩后加密 / 加密后压缩：共用同一组归档格式与归档密码控件
         compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
-        compressFormatCombo.managedProperty().bind(compressAfterCheck.selectedProperty());
-        compressFormatCombo.visibleProperty().bind(compressAfterCheck.selectedProperty());
+        // 两者都是「压缩策略」，语义互斥：勾选一个自动取消另一个，避免出现
+        // 「先打包再加密、加密完再打包」这类无意义组合
+        compressBeforeCheck.selectedProperty().addListener((o, wasOn, isOn) -> {
+            if (isOn && compressAfterCheck.isSelected()) {
+                compressAfterCheck.setSelected(false);
+            }
+            updateArchivePasswordVisibility();
+        });
+        compressAfterCheck.selectedProperty().addListener((o, wasOn, isOn) -> {
+            if (isOn && compressBeforeCheck.isSelected()) {
+                compressBeforeCheck.setSelected(false);
+            }
+            updateArchivePasswordVisibility();
+        });
+        javafx.beans.binding.BooleanBinding archiving = compressAfterCheck.selectedProperty()
+                .or(compressBeforeCheck.selectedProperty());
+        compressFormatCombo.managedProperty().bind(archiving);
+        compressFormatCombo.visibleProperty().bind(archiving);
         // 归档密码框：ZIP 始终可填；GZ/TAR.GZ/7Z 仅在开启「工具特有加密」时才显示
-        compressAfterCheck.selectedProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         compressFormatCombo.valueProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         updateArchivePasswordVisibility();
 
@@ -559,7 +599,7 @@ public class MainController {
      * <p>ZIP 始终可填密码；GZ / TAR.GZ / 7Z 仅在开启工具特有加密时才显示密码框。
      */
     private void updateArchivePasswordVisibility() {
-        boolean compressOn = compressAfterCheck.isSelected();
+        boolean compressOn = compressAfterCheck.isSelected() || compressBeforeCheck.isSelected();
         String fmt = compressFormatCombo.getValue();
         boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt);
         boolean customEnc = SettingsManager.isArchiveCustomEncryption();
@@ -701,6 +741,7 @@ public class MainController {
         fakeConfirmField.setPromptText(Messages.get("options.deniability.fakePassword.confirm.placeholder"));
         compressCheck.setText(Messages.get("options.compress"));
         compressLevelLabel.setText(Messages.get("options.compress.level"));
+        compressBeforeCheck.setText(Messages.get("options.compressBefore"));
         compressAfterCheck.setText(Messages.get("options.compressAfter"));
         compressFormatCombo.setValue(SettingsManager.getDefaultCompressFormat());
         updateArchivePasswordVisibility();
@@ -725,6 +766,8 @@ public class MainController {
         addKeyfileBtn.setText(Messages.get("options.keyfiles.add"));
         keyfileEmptyLabel.setText(Messages.get("options.keyfiles.none"));
         clearFileBtn.setText(Messages.get("file.clear"));
+        clearFilesBtn.setText(Messages.get("file.clear"));
+        addFilesBtn.setText(Messages.get("file.choose.multiple"));
         cancelBtn.setText(Messages.get("action.cancel"));
         verifyBtn.setText(Messages.get("action.verify"));
 
@@ -737,7 +780,7 @@ public class MainController {
         updateActionButtonText();
         updatePasswordFeedback();
         refreshKeyfileList();
-        if (selectedFile != null) {
+        if (!selectedFiles.isEmpty()) {
             showFileInfo();
         }
     }
@@ -750,6 +793,8 @@ public class MainController {
         MainViewSupport.installTooltip(reedSolomonInfo, Messages.get("options.reedSolomon.tip"));
         MainViewSupport.installTooltip(deniabilityInfo, Messages.get("options.deniability.tip"));
         MainViewSupport.installTooltip(compressInfo, Messages.get("options.compress.tip"));
+        MainViewSupport.installTooltip(compressBeforeInfo,
+                Messages.get("options.compressBefore.tip"));
         MainViewSupport.installTooltip(compressAfterInfo, Messages.get(
                 SettingsManager.isArchiveCustomEncryption()
                         ? "options.compressAfter.tip"
@@ -1016,7 +1061,7 @@ public class MainController {
         setVisible(encryptOptions, encrypting);
         setVisible(decryptOptions, !encrypting);
         setVisible(confirmBox, encrypting);
-        setVisible(verifyBtn, !encrypting && selectedFile != null);
+        setVisible(verifyBtn, !encrypting && !selectedFiles.isEmpty() && !isBatchMode());
 
         // 切换模式时，若用户未手动编辑输出路径，则根据当前模式重新计算默认输出路径。
         // 例如从 DECRYPT 切回 ENCRYPT 时，输出应从“父目录”更新为“文件名.ergou”。
@@ -1058,9 +1103,9 @@ public class MainController {
     private void chooseFile() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(Messages.get("file.choose"));
-        File f = chooser.showOpenDialog(stage());
-        if (f != null) {
-            setSelectedFile(f);
+        List<File> files = chooser.showOpenMultipleDialog(stage());
+        if (files != null && !files.isEmpty()) {
+            setSelectedFiles(files);
         }
     }
 
@@ -1094,7 +1139,13 @@ public class MainController {
         Dragboard db = e.getDragboard();
         boolean ok = false;
         if (db.hasFiles() && !db.getFiles().isEmpty()) {
-            setSelectedFile(db.getFiles().getFirst());
+            List<File> dropped = db.getFiles();
+            // 已经处于多文件列表时，再拖入视为追加，便于分几次凑齐要处理的一批文件
+            if (isBatchMode()) {
+                addSelectedFiles(dropped);
+            } else {
+                setSelectedFiles(dropped);
+            }
             ok = true;
         }
         dropZone.getStyleClass().remove("drag-over");
@@ -1103,16 +1154,149 @@ public class MainController {
     }
 
     private void setSelectedFile(File f) {
-        this.selectedFile = f;
+        setSelectedFiles(f == null ? List.of() : List.of(f));
+    }
+
+    /**
+     * 替换当前的整个选中集合（文件或文件夹均可）。
+     *
+     * <p>单选一个普通文件或一个文件夹时保持原有单文件/文件夹语义；选中两个及以上条目时
+     * 进入批处理模式，把这些文件视作「同一个文件夹里的多个文件」。
+     *
+     * @param files 新的选中集合，可为 null
+     */
+    private void setSelectedFiles(List<File> files) {
+        selectedFiles.clear();
+        if (files != null) {
+            for (File f : files) {
+                if (f != null && !selectedFiles.contains(f)) {
+                    selectedFiles.add(f);
+                }
+            }
+        }
+        selectedFile = selectedFiles.size() == 1 ? selectedFiles.getFirst() : null;
         this.outputPathUserEdited = false;
-        // 依据扩展名智能切换模式：仅 .ergou/.pcv 加密卷和分卷碎片自动切到解密模式。
-        // 普通压缩包（.zip/.7z/.rar 等）不再自动切换，因为用户可能想加密压缩包本身。
-        String name = f.getName().toLowerCase();
-        if (name.endsWith(".pcv") || name.endsWith(".ergou")
-                || Splitter.isSplitChunkPath(f.getAbsolutePath())) {
+        if (selectedFiles.isEmpty()) {
+            // 清空选择时回到初始拖拽界面，避免界面停留在过期的文件信息上
+            onClearFile();
+            return;
+        }
+        autoSwitchModeIfNeeded();
+        showFileInfo();
+    }
+
+    /**
+     * 在已有选中项后追加文件（不替换），用于列表中的「添加文件」与多次拖拽。
+     *
+     * @param files 追加的文件列表，可为 null
+     */
+    private void addSelectedFiles(List<File> files) {
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+        boolean changed = false;
+        for (File f : files) {
+            if (f != null && !selectedFiles.contains(f)) {
+                selectedFiles.add(f);
+                changed = true;
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        selectedFile = selectedFiles.size() == 1 ? selectedFiles.getFirst() : null;
+        this.outputPathUserEdited = false;
+        autoSwitchModeIfNeeded();
+        showFileInfo();
+    }
+
+    /**
+     * 从选中集合中移除一项；移空时回到初始拖拽界面。
+     *
+     * @param f 待移除的文件
+     */
+    private void removeSelectedFile(File f) {
+        if (!selectedFiles.remove(f)) {
+            return;
+        }
+        if (selectedFiles.isEmpty()) {
+            selectedFile = null;
+            onClearFile();
+            return;
+        }
+        if (selectedFiles.size() == 1) {
+            setSelectedFiles(List.of(selectedFiles.getFirst()));
+            return;
+        }
+        selectedFile = null;
+        this.outputPathUserEdited = false;
+        showFileInfo();
+    }
+
+    /**
+     * 依据当前选中项自动切换加密/解密模式。
+     *
+     * <p>仅当全部选中项都是 {@code .ergou}/{@code .pcv} 加密卷或分卷碎片时才切到解密；
+     * 普通压缩包（.zip/.7z/.rar 等）不自动切换，因为用户可能想加密压缩包本身。
+     */
+    private void autoSwitchModeIfNeeded() {
+        if (selectedFiles.isEmpty()) {
+            return;
+        }
+        boolean allEncrypted = true;
+        for (File f : selectedFiles) {
+            String name = f.getName().toLowerCase();
+            boolean encrypted = name.endsWith(".pcv") || name.endsWith(".ergou")
+                    || Splitter.isSplitChunkPath(f.getAbsolutePath());
+            if (!encrypted) {
+                allEncrypted = false;
+                break;
+            }
+        }
+        if (allEncrypted) {
             switchMode(Mode.DECRYPT);
         }
-        showFileInfo();
+    }
+
+    /**
+     * 当前是否为「多文件」批处理模式。
+     *
+     * @return true 表示选中了两个及以上条目
+     */
+    private boolean isBatchMode() {
+        return selectedFiles.size() > 1;
+    }
+
+    /**
+     * 把选中的文件列表转换为路径列表，供核心批处理 API 使用。
+     *
+     * @param files 文件列表
+     * @return 对应的路径列表
+     */
+    private static List<Path> toPaths(List<File> files) {
+        List<Path> paths = new ArrayList<>(files.size());
+        for (File f : files) {
+            paths.add(f.toPath());
+        }
+        return paths;
+    }
+
+    /**
+     * 计算多文件批处理的输出目录（纯函数，规则见 {@link MainViewSupport#batchOutputDir}）。
+     *
+     * @return 输出目录路径
+     */
+    private String batchOutputDir() {
+        return MainViewSupport.batchOutputDir(selectedFiles);
+    }
+
+    /**
+     * 计算多文件批处理的虚拟文件夹名（纯函数，规则见 {@link MainViewSupport#batchName}）。
+     *
+     * @return 非空的批名
+     */
+    private String batchName() {
+        return MainViewSupport.batchName(selectedFiles);
     }
 
     /** 用于直接打开目标解压文件, 而非先打开本软件再去找文件路径时的处理 */
@@ -1131,24 +1315,97 @@ public class MainController {
     }
 
     private void showFileInfo() {
-        fileNameLabel.setText(selectedFile.getName());
-        if (selectedFile.isDirectory()) {
-            fileMetaLabel.setText(Messages.get("file.folder"));
-        } else {
-            fileMetaLabel.setText(Messages.format("file.size", FileSizes.human(selectedFile.length())));
+        if (selectedFiles.isEmpty()) {
+            return;
         }
-        setVisible(fileCard, true);
+        if (isBatchMode()) {
+            showBatchFileInfo();
+        } else {
+            fileNameLabel.setText(selectedFile.getName());
+            if (selectedFile.isDirectory()) {
+                fileMetaLabel.setText(Messages.get("file.folder"));
+            } else {
+                fileMetaLabel.setText(Messages.format("file.size", FileSizes.human(selectedFile.length())));
+            }
+            setVisible(fileCard, true);
+            setVisible(fileListCard, false);
+        }
         setVisible(dropZone, false);
         setVisible(outputCard, true);
-        setVisible(verifyBtn, mode == Mode.DECRYPT);
+        setVisible(verifyBtn, mode == Mode.DECRYPT && !isBatchMode());
         if (!outputPathUserEdited) {
             outputFileField.setText(computeDefaultOutput());
         }
     }
 
+    /**
+     * 刷新多文件列表卡片：标题、总大小、可滚动列表行。
+     */
+    private void showBatchFileInfo() {
+        long total = 0L;
+        for (File f : selectedFiles) {
+            if (!f.isDirectory()) {
+                total += f.length();
+            }
+        }
+        fileListTitleLabel.setText(
+                Messages.format("file.list.title", selectedFiles.size()));
+        fileListMetaLabel.setText(Messages.format("file.list.size", FileSizes.human(total)));
+        refreshFileList();
+        setVisible(fileCard, false);
+        setVisible(fileListCard, true);
+    }
+
+    /**
+     * 重建多文件列表的每一行（文件名、大小、移除按钮）。
+     */
+    private void refreshFileList() {
+        fileListBox.getChildren().clear();
+        for (File f : List.copyOf(selectedFiles)) {
+            HBox row = new HBox(8);
+            row.getStyleClass().add("file-list-row");
+
+            Label name = new Label(f.getName());
+            name.setTooltip(new Tooltip(f.getAbsolutePath()));
+            name.setMinWidth(0);
+            HBox.setHgrow(name, javafx.scene.layout.Priority.ALWAYS);
+
+            Label size = new Label(f.isDirectory()
+                    ? Messages.get("file.folder")
+                    : FileSizes.human(f.length()));
+            size.getStyleClass().add("file-list-size");
+
+            Button remove = new Button("✕");
+            remove.getStyleClass().add("btn-ghost");
+            remove.setTooltip(new Tooltip(Messages.get("file.list.remove")));
+            remove.setOnAction(e -> removeSelectedFile(f));
+
+            row.getChildren().addAll(name, size, remove);
+            fileListBox.getChildren().add(row);
+        }
+        fileListScroll.setVvalue(0);
+    }
+
+    /**
+     * 列表中「添加文件」按钮：追加选择文件（不替换已有选择）。
+     */
+    @FXML
+    private void onAddFiles() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle(Messages.get("file.choose"));
+        List<File> files = chooser.showOpenMultipleDialog(stage());
+        if (files != null && !files.isEmpty()) {
+            addSelectedFiles(files);
+        }
+    }
+
     private String computeDefaultOutput() {
-        if (selectedFile == null) {
+        if (selectedFiles.isEmpty()) {
             return "";
+        }
+        // 多文件：输出目录取公共父级，产物是「批名」文件夹或「批名.扩展名」压缩包
+        if (isBatchMode()) {
+            return batchOutputDir();
         }
         String path = selectedFile.getAbsolutePath();
         if (mode == Mode.ENCRYPT) {
@@ -1171,9 +1428,11 @@ public class MainController {
 
     @FXML
     private void onClearFile() {
+        selectedFiles.clear();
         selectedFile = null;
         outputPathUserEdited = false;
         setVisible(fileCard, false);
+        setVisible(fileListCard, false);
         setVisible(outputCard, false);
         setVisible(verifyBtn, false);
         setVisible(dropZone, true);
@@ -1181,6 +1440,22 @@ public class MainController {
 
     @FXML
     private void onBrowseOutput() {
+        // 文件夹与多文件批处理的输出是「目录」，用目录选择器；单文件才用保存对话框
+        boolean dirOutput = isBatchMode() || (selectedFile != null && selectedFile.isDirectory());
+        if (dirOutput) {
+            javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
+            chooser.setTitle(Messages.get("file.output.choose"));
+            File cur = new File(outputFileField.getText());
+            if (cur.isDirectory()) {
+                chooser.setInitialDirectory(cur);
+            }
+            File f = chooser.showDialog(stage());
+            if (f != null) {
+                outputFileField.setText(f.getAbsolutePath());
+                outputPathUserEdited = true;
+            }
+            return;
+        }
         FileChooser chooser = new FileChooser();
         chooser.setTitle(Messages.get("file.output.choose"));
         File cur = new File(outputFileField.getText());
@@ -1300,7 +1575,7 @@ public class MainController {
         if (running) {
             return;
         }
-        if (selectedFile == null) {
+        if (selectedFiles.isEmpty()) {
             toast.error(Messages.get("toast.no.file"));
             return;
         }
@@ -1360,6 +1635,11 @@ public class MainController {
      */
     private boolean guardAllows(final FileInputGuard.Feature feature,
                                 final FileInputGuard.Options options) {
+        if (isBatchMode()) {
+            // 多文件批处理不做整体拦截：不可处理的条目由核心跳过并计入批处理失败列表，
+            // 在结束弹窗中统一汇报，避免一个坏文件让整批无法启动。
+            return true;
+        }
         if (selectedFile == null) {
             return true;
         }
@@ -1377,8 +1657,8 @@ public class MainController {
         if (running) {
             return;
         }
-        if (selectedFile == null) {
-            toast.error(Messages.get("toast.no.file"));
+        if (selectedFiles.isEmpty() || isBatchMode()) {
+            toast.error(Messages.get("toast.verify.singleOnly"));
             return;
         }
         if (!guardAllows(FileInputGuard.Feature.VERIFY_INTEGRITY, FileInputGuard.Options.none())) {
@@ -1417,12 +1697,37 @@ public class MainController {
     private void startEncrypt(String pwd) {
         String out = outputFileField.getText();
 
+        // 「压缩后加密」与「加密后压缩」共用同一个归档格式与归档密码控件
         String archiveFormat = null;
         String archivePwd = null;
-        if (compressAfterCheck.isSelected() && compressFormatCombo.getValue() != null) {
+        if ((compressBeforeCheck.isSelected() || compressAfterCheck.isSelected())
+                && compressFormatCombo.getValue() != null) {
             archiveFormat = compressFormatCombo.getValue().replace(".", "_");
             String ap = archivePasswordField.getText();
             archivePwd = (ap == null || ap.isEmpty()) ? null : ap;
+        }
+        boolean compressBefore = compressBeforeCheck.isSelected();
+        final String preArchiveFormat = compressBefore ? archiveFormat : null;
+        final String preArchivePwd = compressBefore ? archivePwd : null;
+        final String postArchiveFormat = compressAfterCheck.isSelected() ? archiveFormat : null;
+        final String postArchivePwd = compressAfterCheck.isSelected() ? archivePwd : null;
+
+        // 多文件批处理：视为「同一个文件夹里的多个文件」
+        if (isBatchMode()) {
+            String outDir = (out == null || out.isEmpty()) ? batchOutputDir() : out;
+            FolderCrypt.EncryptOptions opts =
+                    buildFolderEncryptOptions(pwd, preArchiveFormat, preArchivePwd,
+                            postArchiveFormat, postArchivePwd);
+            opts.batchName = batchName();
+            final String outputDir = outDir;
+            final String name = opts.batchName;
+            runTask("GENERIC_ENCRYPT", () -> {
+                FolderCrypt.encryptFiles(toPaths(selectedFiles),
+                        Path.of(outputDir), opts);
+                HistoryService.record(OperationType.GENERIC_ENCRYPT, name, outputDir, null);
+            }, () -> showBatchOutcome(opts.batchResult, Messages.get("status.success.encrypt")),
+                err -> showBatchError(opts.batchResult, err));
+            return;
         }
 
         // 文件夹加密：走 FolderCrypt 编排
@@ -1432,30 +1737,9 @@ public class MainController {
                 out = parent != null ? parent.getAbsolutePath() : selectedFile.getAbsolutePath();
             }
             final String outputDir = out;
-            FolderCrypt.EncryptOptions opts = new FolderCrypt.EncryptOptions();
-            opts.password = pwd == null ? "" : pwd;
-            opts.comments = commentsArea.getText() == null ? "" : commentsArea.getText();
-            opts.paranoid = paranoidCheck.isSelected();
-            // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
-            Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
-            opts.argon2MemoryKib = kdfMode.getMemoryKib();
-            opts.argon2Passes = kdfMode.getPasses();
-            opts.argon2Threads = kdfMode.getThreads();
-            opts.reedSolomon = reedSolomonCheck.isSelected();
-            opts.deniability = deniabilityCheck.isSelected();
-            opts.compress = compressCheck.isSelected();
-            opts.compressionLevel = currentCompressLevel();
-            opts.split = splitCheck.isSelected();
-            opts.chunkSize = splitSizeSpinner.getValue();
-            opts.archiveFormat = archiveFormat;
-            opts.archivePassword = archivePwd;
-            opts.rsCodecs = new RsCodecs();
-            if (!keyfiles.isEmpty()) {
-                opts.keyfiles = MainViewSupport.toPaths(keyfiles);
-                opts.keyfileOrdered = keyfileOrderedCheck.isSelected();
-            }
-            opts.threadCount = SettingsManager.getThreadCount();
-            opts.encryptDepth = encryptDepthSpinner.getValue();
+            FolderCrypt.EncryptOptions opts =
+                    buildFolderEncryptOptions(pwd, preArchiveFormat, preArchivePwd,
+                            postArchiveFormat, postArchivePwd);
             ProgressReporter reporter = newReporter();
             opts.reporter = reporter;
         runTask("GENERIC_ENCRYPT", () -> {
@@ -1471,6 +1755,7 @@ public class MainController {
         if (out == null || out.isEmpty()) {
             out = selectedFile.getAbsolutePath() + ".ergou";
         }
+        // 压缩后加密时核心会在输出名后补「.归档扩展名」，此处只给基础名
         EncryptRequest req = new EncryptRequest();
         req.setInputFile(selectedFile.getAbsolutePath());
         req.setOutputFile(out);
@@ -1496,8 +1781,10 @@ public class MainController {
         }
         req.setCompress(compressCheck.isSelected());
         req.setCompressionLevel(currentCompressLevel());
-        req.setArchiveFormat(archiveFormat);
-        req.setArchivePassword(archivePwd);
+        req.setArchiveFormat(postArchiveFormat);
+        req.setArchivePassword(postArchivePwd);
+        req.setPreArchiveFormat(preArchiveFormat);
+        req.setPreArchivePassword(preArchivePwd);
         req.setSplit(splitCheck.isSelected());
         req.setChunkSize(splitSizeSpinner.getValue());
         req.setRsCodecs(new RsCodecs());
@@ -1517,7 +1804,55 @@ public class MainController {
         }, Messages.get("status.success.encrypt"));
     }
 
+    /**
+     * 收集「文件夹 / 多文件」批处理共用的加密选项。
+     *
+     * @param pwd               文件加密密码
+     * @param preArchiveFormat  压缩后加密的归档格式，可为 null
+     * @param preArchivePwd     压缩后加密的归档密码，可为 null
+     * @param postArchiveFormat 加密后压缩的归档格式，可为 null
+     * @param postArchivePwd    加密后压缩的归档密码，可为 null
+     * @return 填充完毕的选项对象
+     */
+    private FolderCrypt.EncryptOptions buildFolderEncryptOptions(String pwd, String preArchiveFormat,
+                                                                 String preArchivePwd,
+                                                                 String postArchiveFormat,
+                                                                 String postArchivePwd) {
+        FolderCrypt.EncryptOptions opts = new FolderCrypt.EncryptOptions();
+        opts.password = pwd == null ? "" : pwd;
+        opts.comments = commentsArea.getText() == null ? "" : commentsArea.getText();
+        opts.paranoid = paranoidCheck.isSelected();
+        // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
+        Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
+        opts.argon2MemoryKib = kdfMode.getMemoryKib();
+        opts.argon2Passes = kdfMode.getPasses();
+        opts.argon2Threads = kdfMode.getThreads();
+        opts.reedSolomon = reedSolomonCheck.isSelected();
+        opts.deniability = deniabilityCheck.isSelected();
+        opts.compress = compressCheck.isSelected();
+        opts.compressionLevel = currentCompressLevel();
+        opts.split = splitCheck.isSelected();
+        opts.chunkSize = splitSizeSpinner.getValue();
+        opts.archiveFormat = postArchiveFormat;
+        opts.archivePassword = postArchivePwd;
+        opts.preArchiveFormat = preArchiveFormat;
+        opts.preArchivePassword = preArchivePwd;
+        opts.rsCodecs = new RsCodecs();
+        if (!keyfiles.isEmpty()) {
+            opts.keyfiles = MainViewSupport.toPaths(keyfiles);
+            opts.keyfileOrdered = keyfileOrderedCheck.isSelected();
+        }
+        opts.threadCount = SettingsManager.getThreadCount();
+        opts.encryptDepth = encryptDepthSpinner.getValue();
+        return opts;
+    }
+
     private void startDecrypt(String pwd) {
+        // 多文件批处理：逐个自动识别类型并解密，产物平铺到输出目录
+        if (isBatchMode()) {
+            startBatchDecrypt(pwd);
+            return;
+        }
         String in = selectedFile.getAbsolutePath();
 
         // 文件夹 / 压缩包 / 分卷碎片：自动识别并整体解密（含分卷碎片合并、递归解密）
@@ -1574,19 +1909,7 @@ public class MainController {
             outDir = input.getParent() != null ? input.getParent() : Path.of(".");
         }
 
-        FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
-        opts.password = pwd == null ? "" : pwd;
-        opts.archivePassword = readDecryptArchivePassword();
-        opts.archivePasswordProvider = createArchivePasswordProvider();
-        opts.forceDecrypt = forceDecryptCheck.isSelected();
-        opts.recursiveExtract = recursiveExtractCheck.isSelected();
-        opts.extractThenDecrypt = autoUnzipCheck.isSelected();
-        opts.decryptThenExtract = decryptThenExtractCheck.isSelected();
-        opts.rsCodecs = new RsCodecs();
-        if (!keyfiles.isEmpty()) {
-            opts.keyfiles = MainViewSupport.toPaths(keyfiles);
-        }
-        opts.threadCount = SettingsManager.getThreadCount();
+        FolderCrypt.DecryptOptions opts = buildAutoDecryptOptions(pwd);
 
         // 快速预检：若归档受密码保护，优先用解密密码作为归档密码（加密后压缩回退场景）；
         // 二者皆空时再弹窗询问。
@@ -1630,6 +1953,54 @@ public class MainController {
                     input.getFileName().toString(), finalOutDir.toString(), null);
             showBatchOutcome(opts.batchResult, Messages.get("status.success.decrypt"));
         }, err -> showBatchError(opts.batchResult, err));
+    }
+
+    /**
+     * 启动多文件批处理解密：逐个自动识别类型，产物平铺到输出目录。
+     *
+     * <p>不可解密的条目由核心记入批处理失败列表，不会中断整批；
+     * 结束后统一在弹窗中汇报成功 / 失败 / 跳过数量。
+     *
+     * @param pwd 密码（可为空字符串）
+     */
+    private void startBatchDecrypt(String pwd) {
+        String outText = outputFileField.getText();
+        String outDir = (outText == null || outText.isEmpty()) ? batchOutputDir() : outText;
+        FolderCrypt.DecryptOptions opts = buildAutoDecryptOptions(pwd);
+        ProgressReporter reporter = newReporter();
+        opts.reporter = reporter;
+
+        final String finalOutDir = outDir;
+        final String name = batchName();
+        runTask("GENERIC_DECRYPT", () -> {
+            FolderCrypt.decryptFiles(toPaths(selectedFiles),
+                    Path.of(finalOutDir), opts);
+            HistoryService.record(OperationType.GENERIC_DECRYPT, name, finalOutDir, null);
+        }, () -> showBatchOutcome(opts.batchResult, Messages.get("status.success.decrypt")),
+            err -> showBatchError(opts.batchResult, err));
+    }
+
+    /**
+     * 收集「文件夹 / 多文件」批处理共用的解密选项。
+     *
+     * @param pwd 文件解密密码
+     * @return 填充完毕的选项对象
+     */
+    private FolderCrypt.DecryptOptions buildAutoDecryptOptions(String pwd) {
+        FolderCrypt.DecryptOptions opts = new FolderCrypt.DecryptOptions();
+        opts.password = pwd == null ? "" : pwd;
+        opts.archivePassword = readDecryptArchivePassword();
+        opts.archivePasswordProvider = createArchivePasswordProvider();
+        opts.forceDecrypt = forceDecryptCheck.isSelected();
+        opts.recursiveExtract = recursiveExtractCheck.isSelected();
+        opts.extractThenDecrypt = autoUnzipCheck.isSelected();
+        opts.decryptThenExtract = decryptThenExtractCheck.isSelected();
+        opts.rsCodecs = new RsCodecs();
+        if (!keyfiles.isEmpty()) {
+            opts.keyfiles = MainViewSupport.toPaths(keyfiles);
+        }
+        opts.threadCount = SettingsManager.getThreadCount();
+        return opts;
     }
 
     /**
@@ -1719,7 +2090,8 @@ public class MainController {
         archiveProgressBar.setProgress(0);
         setVisible(archiveProgressBox, false);
         statusLabel.setText(Messages.get("action.processing"));
-        String fileName = selectedFile == null ? null : selectedFile.getName();
+        String fileName = isBatchMode() ? batchName()
+                : (selectedFile == null ? null : selectedFile.getName());
         taskRunner.submit(opName, fileName, work, onSuccess, onError);
     }
 

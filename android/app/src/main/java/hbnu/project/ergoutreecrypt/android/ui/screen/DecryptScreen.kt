@@ -85,6 +85,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.InfoTooltip
 import hbnu.project.ergoutreecrypt.android.ui.component.LogHistoryActions
 import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.MultiFilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.OperationLogPanel
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
@@ -152,6 +153,23 @@ private fun fmtSize(bytes: Long): String {
     while (s >= 1024 && i < u.size - 1) { s /= 1024; i++ }
     return if (i == 0) "${bytes} B" else "%.1f %s".format(s, u[i])
 }
+
+/**
+ * 多文件批处理的一个已选输入项。
+ *
+ * @property uri      SAF 文档 URI，可为 null
+ * @property path     解析后的本地路径
+ * @property name     展示用的文件名
+ * @property size     字节大小；目录或大小未知时为 null
+ * @property isFolder 是否为目录
+ */
+private data class BatchInput(
+    val uri: Uri?,
+    val path: String,
+    val name: String,
+    val size: Long?,
+    val isFolder: Boolean = false
+)
 
 /** 检测文件是否为支持的媒体格式 */
 private fun detectMediaFormat(fileName: String?): hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat? {
@@ -223,10 +241,12 @@ fun DecryptScreen(
 
     // ---- 文件 ----
     var inUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedInputs by remember { mutableStateOf(listOf<BatchInput>()) }
     var inPath by remember { mutableStateOf<String?>(null) }
     var inName by remember { mutableStateOf<String?>(null) }
     var inSize by remember { mutableStateOf<Long?>(null) }
     var isFolder by remember { mutableStateOf(false) }
+    val isBatch = selectedInputs.size > 1
     var outDir by remember { mutableStateOf<String?>(null) }
     var outName by remember { mutableStateOf<String?>(null) }
     var outDirUri by remember { mutableStateOf<Uri?>(null) }
@@ -401,6 +421,9 @@ fun DecryptScreen(
                 name.let { n ->
                     outName = FileNameSanitizer.sanitize(OutputNaming.decryptOutputName(n))
                 }
+                if (path != null) {
+                    selectedInputs = listOf(BatchInput(u, path, name, inSize))
+                }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (filePickJob === myJob) {
@@ -409,6 +432,56 @@ fun DecryptScreen(
             }
         }
     }
+
+    // ---- 多文件选择器：追加到已选集合（同一路径不重复添加） ----
+    val multiFilePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) {
+                return@rememberLauncherForActivityResult
+            }
+            // 取消上一次仍在进行的处理，允许用户换选新文件
+            filePickJob?.cancel()
+            // 同步置位加载状态，确保当帧即显示旋转圆圈
+            fileLoading = true
+            filePickJob = scope.launch {
+                val myJob = coroutineContext[Job]
+                try {
+                    // 多选即进入批处理模式：单文件语义（inPath/inName 等）让位给列表
+                    val existing = selectedInputs.toMutableList()
+                    val existingPaths = existing.map { it.path }.toMutableSet()
+                    for (u in uris) {
+                        // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
+                        val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
+                        val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) } ?: continue
+                        if (!existingPaths.add(path)) {
+                            continue
+                        }
+                        val size = withContext(Dispatchers.IO) {
+                            val f = File(path)
+                            if (f.isFile && f.exists()) f.length() else null
+                        }
+                        existing.add(BatchInput(u, path, name, size))
+                    }
+                    if (existing.isEmpty()) {
+                        Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
+                    } else {
+                        selectedInputs = existing
+                        inUri = null
+                        inPath = null
+                        inName = null
+                        inSize = null
+                        isFolder = false
+                        // 校验模式只支持单文件，批处理下强制关闭
+                        verifyOnly = false
+                    }
+                } finally {
+                    // 仅当自身仍是最新一次选择时才复位加载状态
+                    if (filePickJob === myJob) {
+                        fileLoading = false
+                    }
+                }
+            }
+        }
 
     // ---- 文件夹选择器（支持选择包含加密文件的文件夹） ----
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u ->
@@ -427,15 +500,19 @@ fun DecryptScreen(
                 val path = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
                 isFolder = true
                 inUri = u
-                inName = if (name == "未知文件") "选择的文件夹" else name
+                val displayName = if (name == "未知文件") "选择的文件夹" else name
+                inName = displayName
                 inPath = path
                 if (path != null) {
                     inSize = null
+                    selectedInputs = listOf(
+                        BatchInput(u, path, displayName, null, isFolder = true)
+                    )
                 } else {
                     // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
                     Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
                 }
-                outName = "${FileNameSanitizer.sanitize(inName ?: "folder")}_decrypted"
+                outName = "${FileNameSanitizer.sanitize(displayName)}_decrypted"
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (folderPickJob === myJob) {
@@ -514,12 +591,48 @@ fun DecryptScreen(
         }
     }
 
-    val hasFile = inPath != null
+    // 单文件语义与多文件批处理共用「是否已选输入」这一门槛
+    val hasFile = inPath != null || selectedInputs.isNotEmpty()
 
     // ---- 开始解密 ----
     fun doDecrypt() {
         scope.launch {
             val input = inPath
+
+            // 多文件批处理：逐个自动识别类型，不可解密的条目由核心跳过并在结束弹窗汇报
+            if (isBatch) {
+                val safUri0 = outDirUri
+                val resolved0 = withContext(Dispatchers.IO) { OutputDirResolver.resolve(ctx) }
+                val batchWriteDir = when {
+                    safUri0 != null -> {
+                        val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                        pendingOut = PendingOutput.Saf(safUri0, tmp)
+                        tmp.absolutePath
+                    }
+                    outDir != null -> outDir!!
+                    resolved0 is OutputDirResolver.Resolved.Direct -> resolved0.path
+                    resolved0 is OutputDirResolver.Resolved.MediaStore -> {
+                        val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
+                        pendingOut = PendingOutput.MediaStore(resolved0.relativePath, tmp)
+                        tmp.absolutePath
+                    }
+                    else -> (resolved0 as OutputDirResolver.Resolved.AppExternal).path
+                }
+                outName = "${selectedInputs.size} 个文件"
+                vm.startAutoDecrypt(
+                    inputs = selectedInputs.map { it.path },
+                    outputDir = batchWriteDir,
+                    password = password,
+                    archivePassword = archivePassword.ifEmpty { null },
+                    archivePasswordProvider = archivePasswordProvider,
+                    forceDecrypt = force,
+                    recursiveExtract = false,
+                    extractThenDecrypt = autoUnzip,
+                    decryptThenExtract = decryptThenExtract,
+                    keyfiles = kfPaths.toList()
+                )
+                return@launch
+            }
 
             // 启动前拦截：按「当前功能 + 当前选项」校验输入文件，不合规则立即给出引导
             val (guardMessage, imageRedirect) = withContext(Dispatchers.IO) {
@@ -592,7 +705,7 @@ fun DecryptScreen(
                     || ArchiveExtractor.isArchive(File(input).toPath())
                     || Splitter.isSplitChunkPath(input))) {
                 vm.startAutoDecrypt(
-                    input = input,
+                    inputs = listOf(input),
                     outputDir = writeDir,
                     password = password,
                     archivePassword = archivePassword.ifEmpty { null },
@@ -677,9 +790,14 @@ fun DecryptScreen(
         ctx = ctx,
         isRunning = isRunning,
         progressState = if (mediaProgress.state == ProgressState.State.RUNNING) mediaProgress else progress,
-        fileSize = inSize,
+        // 多文件批处理下没有「单个文件」的大小/名字，改用总量与条目数，保住通知栏的可读性
+        fileSize = if (isBatch) {
+            selectedInputs.mapNotNull { it.size }.sum().takeIf { it > 0 }
+        } else {
+            inSize
+        },
         title = if (mediaDecryptMode) "正在格式保持解密" else "正在解密",
-        fileName = inName
+        fileName = if (isBatch) "${selectedInputs.size} 个文件" else inName
     )
 
     // 解密完成后清理安全密钥文件
@@ -1010,8 +1128,18 @@ fun DecryptScreen(
                             }
                         }
                     }
-                    // 格式保持解密仅支持单文件，隐藏文件夹选择
+                    // 格式保持解密仅支持单文件，隐藏多文件与文件夹选择
                     if (!mediaDecryptMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                            onClick = { multiFilePicker.launch(arrayOf("*/*")) }
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("或选择多个待解密文件（列表管理，可随时增删）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            }
+                        }
                         Spacer(Modifier.height(8.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -1031,6 +1159,20 @@ fun DecryptScreen(
                         }
                     }
                 }
+            } else if (isBatch) {
+                // 多文件列表卡片：可滚动、可追加、可逐个移除
+                MultiFilePickerCard(
+                    names = selectedInputs.map { it.name },
+                    sizes = selectedInputs.map { it.size },
+                    onRemove = { index ->
+                        selectedInputs = selectedInputs.toMutableList().also { it.removeAt(index) }
+                    },
+                    onAdd = { multiFilePicker.launch(arrayOf("*/*")) },
+                    onClear = {
+                        selectedInputs = emptyList()
+                        outName = null
+                    }
+                )
             } else {
                 // 已选文件卡片
                 FilePickerCard(
@@ -1047,7 +1189,10 @@ fun DecryptScreen(
                 FileActionRow(
                     onPickFile = { filePicker.launch(arrayOf("*/*")) },
                     onPickFolder = if (mediaDecryptMode) null else { { folderPicker.launch(null) } },
-                    onRemove = { inUri = null; inPath = null; inName = null; inSize = null; outName = null }
+                    onRemove = {
+                        inUri = null; inPath = null; inName = null; inSize = null; outName = null
+                        selectedInputs = emptyList()
+                    }
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -1218,7 +1363,9 @@ fun DecryptScreen(
                 Spacer(Modifier.height(6.dp))
 
                 // ---- 校验完整性（仅校验，不解密） ----
-                OptionRow("校验完整性（仅校验，不解密）", verifyOnly, { verifyOnly = it }, TIP_VERIFY, enabled = !mediaDecryptMode)
+                // 多文件批处理一次解密多个卷，校验模式只支持单文件，故批处理下禁用
+                OptionRow("校验完整性（仅校验，不解密）", verifyOnly, { verifyOnly = it }, TIP_VERIFY,
+                    enabled = !mediaDecryptMode && !isBatch)
                 Spacer(Modifier.height(6.dp))
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
@@ -1237,7 +1384,12 @@ fun DecryptScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = mediaDecryptMode, onCheckedChange = {
                         mediaDecryptMode = it
-                        if (it) { isFolder = false } // 格式保持解密仅支持单文件
+                        // 格式保持解密仅支持单文件：切进来时把文件夹/多文件选择收起
+                        if (it && (isFolder || selectedInputs.size > 1)) {
+                            isFolder = false
+                            selectedInputs = emptyList()
+                            inUri = null; inPath = null; inName = null; inSize = null
+                        }
                     })
                     Text("格式保持解密", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 4.dp))
                     if (mediaFmt != null) {

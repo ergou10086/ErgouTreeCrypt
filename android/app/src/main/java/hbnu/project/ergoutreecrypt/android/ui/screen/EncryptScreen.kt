@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,6 +54,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -158,9 +160,18 @@ private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件
 // EncryptScreen — Android 移动端 UX 优化版
 // ============================================================
 
+/**
+ * 通用文件与格式保持加密页面。
+ *
+ * @param onOpenHistory 打开操作历史回调
+ * @param onNavigateToImageCrypt 检测到图片输入后前往独立图片加密页的回调
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
+fun EncryptScreen(
+    onOpenHistory: () -> Unit = {},
+    onNavigateToImageCrypt: () -> Unit = {}
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
@@ -176,11 +187,31 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
             || mediaProgress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
     var logVisible by remember { mutableStateOf(false) }
+    var showImageRouteHint by remember { mutableStateOf(false) }
     LaunchedEffect(logVisible) {
         if (logVisible) {
             delay(80)
             scroll.animateScrollTo(scroll.maxValue)
         }
+    }
+
+    if (showImageRouteHint) {
+        AlertDialog(
+            onDismissRequest = { showImageRouteHint = false },
+            title = { Text("使用图片加密？") },
+            text = {
+                Text("检测到受支持的图片。独立图片加密页可生成能正常打开的噪声 PNG，并可逐字节还原原文件。")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showImageRouteHint = false
+                    onNavigateToImageCrypt()
+                }) { Text("前往图片加密") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImageRouteHint = false }) { Text("留在当前页") }
+            }
+        )
     }
 
     // ---- 文件（仅单文件或单文件夹） ----
@@ -450,9 +481,25 @@ fun EncryptScreen(onOpenHistory: () -> Unit = {}) {
         options: FileInputGuard.Options
     ): Boolean {
         val p = inPath ?: return true
-        val message = withContext(Dispatchers.IO) {
+        val (message, imageCandidate) = withContext(Dispatchers.IO) {
+            val imageResult = if (feature == FileInputGuard.Feature.GENERIC_ENCRYPT) {
+                FileInputGuard.check(
+                    FileInputGuard.Feature.IMAGE_CRYPT_ENCRYPT,
+                    FileInputGuard.Options.none(),
+                    File(p).toPath()
+                )
+            } else {
+                null
+            }
             val result = FileInputGuard.check(feature, options, File(p).toPath())
-            if (result.rejected()) result.message() else null
+            Pair(
+                if (result.rejected()) result.message() else null,
+                imageResult?.accepted() == true
+            )
+        }
+        if (imageCandidate) {
+            showImageRouteHint = true
+            return false
         }
         if (message != null) {
             Toast.makeText(ctx, message, Toast.LENGTH_LONG).show()

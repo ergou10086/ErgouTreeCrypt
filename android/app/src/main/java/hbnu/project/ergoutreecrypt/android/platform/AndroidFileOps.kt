@@ -49,6 +49,22 @@ sealed class PendingOutput {
 }
 
 /**
+ * 为 EGTC-IMG 工作流物化到应用私有目录的输入文件。
+ *
+ * <p>文件名保留经清洗的原始显示名，确保共享核心写入 InnerManifest 的恢复名正确；
+ * {@code rootDir} 是本次选择独占的随机目录，可在操作结束后整体删除。
+ *
+ * @property file 可交给共享核心 {@code Path} API 的私有文件
+ * @property displayName 用户选择器提供的原始显示名
+ * @property rootDir 本次物化输入的独占根目录
+ */
+data class MaterializedImageInput(
+    val file: File,
+    val displayName: String,
+    val rootDir: File
+)
+
+/**
  * Android 文件系统适配器。
  *
  * <p>负责将 SAF (Storage Access Framework) 返回的 Content URI 转换为传统文件路径，供共享核心的 {@code java.nio.file.Path} API 使用。
@@ -100,6 +116,52 @@ class AndroidFileOps(private val context: Context) {
 
         // 3. 拷贝到内部存储
         return copyToInternal(uri)?.also { resolvedCache[uri] = it }
+    }
+
+    /**
+     * 把图片 URI 流式物化到应用私有目录，并保留安全的原始显示名。
+     *
+     * <p>此路径不会通过 {@code Bitmap} 解码图片，也不会依赖存储提供者暴露真实磁盘路径。
+     * 为每次选择创建独占目录可避免同名冲突，并让调用方能够精确清理自己拥有的副本。
+     *
+     * @param uri {@code OpenDocument} 返回的图片 URI
+     * @return 私有输入副本；URI 不可读或复制失败时返回 {@code null}
+     */
+    fun materializeImageInput(uri: Uri): MaterializedImageInput? {
+        val displayName = queryDisplayName(uri)
+            ?: uri.lastPathSegment?.substringAfterLast('/')
+            ?: "image"
+        val safeName = FileNameSanitizer.sanitize(displayName).ifBlank {
+            "image${queryExtension(uri)}"
+        }
+        val root = File(context.filesDir, "imagecrypt_input/${UUID.randomUUID()}")
+        if (!root.mkdirs()) {
+            return null
+        }
+        val target = File(root, safeName)
+        return try {
+            val input = openInputStream(uri)
+            if (input == null) {
+                root.deleteRecursively()
+                return null
+            }
+            input.use { source ->
+                target.outputStream().use { output -> copyStream(source, output) }
+            }
+            MaterializedImageInput(target, displayName, root)
+        } catch (_: Exception) {
+            root.deleteRecursively()
+            null
+        }
+    }
+
+    /**
+     * 删除一次图片输入物化产生的私有副本。
+     *
+     * @param input 待清理输入；为 {@code null} 时不执行操作
+     */
+    fun cleanupImageInput(input: MaterializedImageInput?) {
+        input?.rootDir?.deleteRecursively()
     }
 
     /**
@@ -750,6 +812,40 @@ class AndroidFileOps(private val context: Context) {
             }
         }
         return false
+    }
+
+    /**
+     * 以 PNG 文件而非“照片”分享 EGTC-IMG 加密产物。
+     *
+     * <p>MIME 固定为 {@code image/png}，并通过 FileProvider 只授予临时读取权限。
+     * 调用方应在界面上同时提示接收方“作为文件发送”，避免社交应用重编码像素后破坏密文。
+     *
+     * @param file 已完整生成的 EGTC-IMG PNG 文件
+     * @return 是否成功拉起系统分享面板
+     */
+    fun shareEncryptedPng(file: File): Boolean {
+        if (!file.isFile) {
+            return false
+        }
+        return try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(sendIntent, "作为文件发送图片密文").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

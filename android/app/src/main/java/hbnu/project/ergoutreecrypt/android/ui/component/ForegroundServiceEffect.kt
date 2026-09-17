@@ -57,4 +57,38 @@ fun ForegroundServiceEffect(
             ctx.startService(stopIntent)
         }
     }
+
+    // 运行中按进度状态刷新通知；Service 已由上方 effect 启动，更新失败时不影响核心任务。
+    LaunchedEffect(
+        isRunning,
+        progressState.progress,
+        progressState.info,
+        progressState.statusText,
+        fileName,
+        fileSize
+    ) {
+        if (!isRunning) {
+            return@LaunchedEffect
+        }
+        try {
+            val sizeInfo = fileSize?.let { "${it / (1024 * 1024)} MiB" }.orEmpty()
+            val info = listOfNotNull(
+                fileName?.takeIf { it.isNotBlank() },
+                progressState.info.takeIf { it.isNotBlank() },
+                sizeInfo.takeIf { it.isNotBlank() }
+            ).joinToString(" · ")
+            val updateIntent = Intent(ctx, CryptoForegroundService::class.java).apply {
+                action = CryptoForegroundService.ACTION_UPDATE
+                putExtra(CryptoForegroundService.EXTRA_TITLE, title)
+                putExtra(
+                    CryptoForegroundService.EXTRA_PROGRESS,
+                    (progressState.progress * 100f).toInt().coerceIn(0, 100)
+                )
+                putExtra(CryptoForegroundService.EXTRA_INFO, info)
+            }
+            ctx.startService(updateIntent)
+        } catch (_: Exception) {
+            // OEM 通知限制仅影响可见进度，不影响实际加解密。
+        }
+    }
 }

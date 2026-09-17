@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import hbnu.project.ergoutreecrypt.android.BuildConfig
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
@@ -85,6 +86,9 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
     val languageCode by settings.languageCode.collectAsState(initial = "zh_CN")
     val threadCount by settings.threadCount.collectAsState(initial = 2)
     val defaultReedSolomon by settings.isDefaultReedSolomon.collectAsState(initial = false)
+    val imageCryptDefaultMode by settings.imageCryptDefaultMode.collectAsState(
+        initial = "PUBLIC_RECOVERY"
+    )
 
     // 背景图片设置
     val bgUri by settings.backgroundImageUri.collectAsState(initial = null)
@@ -278,6 +282,40 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // === 默认加密选项 ===
+            Text(
+                text = "图片加密默认保护模式",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = "只保存新任务的默认选项，不保存密码。EGTC-IMG v1 始终固定使用 64 MiB / 3 / 4，不受上方全局档位影响。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                FilterChip(
+                    selected = imageCryptDefaultMode == "PUBLIC_RECOVERY",
+                    onClick = {
+                        scope.launch { settings.setImageCryptDefaultMode("PUBLIC_RECOVERY") }
+                    },
+                    label = { Text("公开恢复") }
+                )
+                Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+                FilterChip(
+                    selected = imageCryptDefaultMode == "PASSWORD",
+                    onClick = {
+                        scope.launch { settings.setImageCryptDefaultMode("PASSWORD") }
+                    },
+                    label = { Text("密码保护") }
+                )
+            }
+            Text(
+                text = "公开恢复仅阻止直接预览，任何拿到文件和本工具的人都能还原。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+
             SettingSwitch(
                 title = "默认纠错码",
                 description = "新建加密任务时默认开启 Reed-Solomon 纠错，体积增加约 6%",
@@ -542,7 +580,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "ErgouTreeCrypt Android v2.5.0\n核心版本：v2.15（对应桌面版 v2.5.0）\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
+                text = "ErgouTreeCrypt Android v${BuildConfig.APP_VERSION_NAME}\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

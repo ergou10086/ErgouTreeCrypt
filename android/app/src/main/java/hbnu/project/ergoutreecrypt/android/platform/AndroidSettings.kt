@@ -123,6 +123,11 @@ class AndroidSettings(context: Context) {
         it[KEY_MEMORY_INDICATOR] ?: true
     }
 
+    /** EGTC-IMG 新任务的默认保护模式，不包含也不存储密码。 */
+    val imageCryptDefaultMode: Flow<String> = dataStore.data.map {
+        it[KEY_IMAGE_CRYPT_DEFAULT_MODE] ?: DEF_IMAGE_CRYPT_MODE
+    }
+
     // ==================== 初始化：将 DataStore 值同步到 SettingsManager ====================
 
     /**
@@ -236,6 +241,18 @@ class AndroidSettings(context: Context) {
         dataStore.edit { it[KEY_MEMORY_INDICATOR] = v }
     }
 
+    /**
+     * 保存 EGTC-IMG 新任务的默认保护模式。
+     *
+     * <p>只接受 {@code PUBLIC_RECOVERY} 或 {@code PASSWORD}，且从不保存用户密码。
+     *
+     * @param mode 协议保护模式名称
+     */
+    suspend fun setImageCryptDefaultMode(mode: String) {
+        val normalized = if (mode == "PASSWORD") "PASSWORD" else DEF_IMAGE_CRYPT_MODE
+        dataStore.edit { it[KEY_IMAGE_CRYPT_DEFAULT_MODE] = normalized }
+    }
+
     suspend fun setDefaultSplitSize(v: Int) {
         dataStore.edit { it[KEY_DEFAULT_SPLIT_SIZE] = v.coerceIn(1, 4096) }
         SettingsManager.setDefaultSplitSize(v)
@@ -327,6 +344,9 @@ class AndroidSettings(context: Context) {
         // --- 内存指示器键 ---
         private val KEY_MEMORY_INDICATOR = booleanPreferencesKey("ui.memory.indicator")
 
+        /** EGTC-IMG 新任务默认保护模式。 */
+        private val KEY_IMAGE_CRYPT_DEFAULT_MODE = stringPreferencesKey("imageCrypt.default.mode")
+
         // --- 默认值 ---
         private const val DEF_AUTO_DECOMPRESS = true
         private const val DEF_CONFIRM_OVERWRITE = true
@@ -341,6 +361,9 @@ class AndroidSettings(context: Context) {
         private const val DEF_LOG_LEVEL = "INFO"
         private const val DEF_LOG_CLEAR_ON_NEW_OP = true
         private const val DEF_LOG_JVM_DIAGNOSTICS = false
+
+        /** EGTC-IMG 默认采用公开恢复；界面必须持续展示其无保密性。 */
+        private const val DEF_IMAGE_CRYPT_MODE = "PUBLIC_RECOVERY"
         private const val MIN_THREAD_COUNT = 1
         private const val MAX_THREAD_COUNT = 4
     }

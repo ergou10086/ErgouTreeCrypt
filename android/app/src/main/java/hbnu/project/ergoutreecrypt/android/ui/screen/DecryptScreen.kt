@@ -169,9 +169,18 @@ private fun detectMediaFormat(fileName: String?): hbnu.project.ergoutreecrypt.me
 // DecryptScreen — Android 移动端 UX 优化版
 // ============================================================
 
+/**
+ * 通用文件与格式保持解密页面。
+ *
+ * @param onOpenHistory 打开操作历史回调
+ * @param onNavigateToImageCrypt 检测到 EGTC-IMG 后前往独立还原页的回调
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
+fun DecryptScreen(
+    onOpenHistory: () -> Unit = {},
+    onNavigateToImageCrypt: () -> Unit = {}
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
@@ -187,11 +196,29 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             || mediaProgress.state == ProgressState.State.RUNNING
     val showMemoryIndicator by settings.showMemoryIndicator.collectAsState(initial = true)
     var logVisible by remember { mutableStateOf(false) }
+    var showImageRouteHint by remember { mutableStateOf(false) }
     LaunchedEffect(logVisible) {
         if (logVisible) {
             delay(80)
             scroll.animateScrollTo(scroll.maxValue)
         }
+    }
+
+    if (showImageRouteHint) {
+        AlertDialog(
+            onDismissRequest = { showImageRouteHint = false },
+            title = { Text("检测到图片密文") },
+            text = { Text("这是 EGTC-IMG 图片密文，请使用独立图片加密页进行认证和还原。") },
+            confirmButton = {
+                Button(onClick = {
+                    showImageRouteHint = false
+                    onNavigateToImageCrypt()
+                }) { Text("前往还原图片") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImageRouteHint = false }) { Text("取消") }
+            }
+        )
     }
 
     // ---- 文件 ----
@@ -495,9 +522,9 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
             val input = inPath
 
             // 启动前拦截：按「当前功能 + 当前选项」校验输入文件，不合规则立即给出引导
-            val guardMessage = withContext(Dispatchers.IO) {
+            val (guardMessage, imageRedirect) = withContext(Dispatchers.IO) {
                 if (input == null) {
-                    null
+                    Pair(null, false)
                 } else {
                     val path = File(input).toPath()
                     val result = if (verifyOnly && !isFolder) {
@@ -511,8 +538,16 @@ fun DecryptScreen(onOpenHistory: () -> Unit = {}) {
                                 .build(),
                             path)
                     }
-                    if (result.rejected()) result.message() else null
+                    Pair(
+                        if (result.rejected()) result.message() else null,
+                        result.guardKey() == FileInputGuard.GUARD_IMAGE_CRYPT_DECRYPT ||
+                            result.guardKey() == FileInputGuard.GUARD_IMAGE_CRYPT_VERIFY
+                    )
                 }
+            }
+            if (imageRedirect) {
+                showImageRouteHint = true
+                return@launch
             }
             if (guardMessage != null) {
                 Toast.makeText(ctx, guardMessage, Toast.LENGTH_LONG).show()

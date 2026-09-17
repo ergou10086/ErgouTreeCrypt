@@ -38,6 +38,21 @@ class CryptoForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        if (intent?.action == ACTION_UPDATE) {
+            val title = intent.getStringExtra(EXTRA_TITLE) ?: "处理中"
+            val progress = intent.getIntExtra(EXTRA_PROGRESS, 0).coerceIn(0, 100)
+            val info = intent.getStringExtra(EXTRA_INFO).orEmpty()
+            val notification = NotificationHelper.buildProgressNotification(
+                this,
+                title,
+                progress,
+                info
+            )
+            val manager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+            manager.notify(NotificationHelper.FOREGROUND_NOTIFICATION_ID, notification)
+            return START_NOT_STICKY
+        }
+
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "处理中"
         val notification = NotificationHelper.buildProgressNotification(
             this, title, 0, ""
@@ -83,9 +98,18 @@ class CryptoForegroundService : Service() {
     }
 
     companion object {
+        /** 启动前台通知宿主。 */
         const val ACTION_START = "hbnu.project.ergoutreecrypt.android.action.START_CRYPTO"
+        /** 停止前台通知宿主。 */
         const val ACTION_STOP = "hbnu.project.ergoutreecrypt.android.action.STOP_CRYPTO"
+        /** 更新当前进度通知。 */
+        const val ACTION_UPDATE = "hbnu.project.ergoutreecrypt.android.action.UPDATE_CRYPTO"
+        /** 通知标题额外字段。 */
         const val EXTRA_TITLE = "hbnu.project.ergoutreecrypt.android.extra.TITLE"
+        /** 进度百分比额外字段。 */
+        const val EXTRA_PROGRESS = "hbnu.project.ergoutreecrypt.android.extra.PROGRESS"
+        /** 文件名或处理信息额外字段。 */
+        const val EXTRA_INFO = "hbnu.project.ergoutreecrypt.android.extra.INFO"
 
         private const val TAG = "CryptoForegroundSvc"
     }

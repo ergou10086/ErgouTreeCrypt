@@ -34,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -171,6 +172,15 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
                 )
             }
 
+            TransportProtectionCard(
+                direction = state.direction,
+                errorCorrection = state.errorCorrection,
+                bestEffort = state.bestEffort,
+                enabled = !running,
+                onErrorCorrection = viewModel::setErrorCorrection,
+                onBestEffort = viewModel::setBestEffort
+            )
+
             val requiresPassword = if (state.direction == ImageCryptDirection.ENCRYPT) {
                 state.mode == ImageCryptMode.PASSWORD
             } else {
@@ -234,6 +244,55 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+/**
+ * 图片传输纠错与尽力恢复选项。
+ *
+ * @param direction 当前操作方向
+ * @param errorCorrection 是否启用抗重编码载体
+ * @param bestEffort 是否允许有损尽力恢复
+ * @param enabled 是否允许修改
+ * @param onErrorCorrection 纠错选项回调
+ * @param onBestEffort 尽力恢复选项回调
+ */
+@Composable
+private fun TransportProtectionCard(
+    direction: ImageCryptDirection,
+    errorCorrection: Boolean,
+    bestEffort: Boolean,
+    enabled: Boolean,
+    onErrorCorrection: (Boolean) -> Unit,
+    onBestEffort: (Boolean) -> Unit
+) {
+    val encrypting = direction == ImageCryptDirection.ENCRYPT
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("传输保护", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = if (encrypting) errorCorrection else bestEffort,
+                    onCheckedChange = if (encrypting) onErrorCorrection else onBestEffort,
+                    enabled = enabled
+                )
+                Text(if (encrypting) "启用抗重编码纠错码" else "尽力解密损坏图片")
+            }
+            Text(
+                text = if (encrypting) {
+                    "使用灰度调制、交织与 Reed-Solomon 抵抗聊天软件重编码；大图可能转为有损 JPEG 副本。"
+                } else {
+                    "仅在纠错后仍失败时使用；输出可能局部损坏，密码校验不会被绕过。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

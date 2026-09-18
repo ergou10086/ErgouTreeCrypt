@@ -61,11 +61,33 @@ public final class ImageCryptDesktopWorkflow {
                         final ImageCryptProgress progress)
             throws ImageCryptException,
             hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
+        encrypt(input, output, mode, password, overwriteExisting, false, progress);
+    }
+
+    /**
+     * 加密图片并可选择抗图片重编码的纠错载体。
+     *
+     * @param input 输入图片
+     * @param output 输出 PNG
+     * @param mode 保护模式
+     * @param password 用户输入密码
+     * @param overwriteExisting 是否覆盖已有输出
+     * @param errorCorrection 是否启用纠错载体
+     * @param progress 进度回调
+     * @throws ImageCryptException 图片格式、密码、容量或协议处理失败
+     * @throws hbnu.project.ergoutreecrypt.exception.CancelledException 用户取消
+     * @throws IOException 文件读写失败
+     */
+    public void encrypt(final Path input, final Path output, final ImageCryptMode mode,
+                        final String password, final boolean overwriteExisting,
+                        final boolean errorCorrection, final ImageCryptProgress progress)
+            throws ImageCryptException,
+            hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
         Objects.requireNonNull(mode, "mode");
         byte[] passwordBytes = encodePassword(mode, password);
         try {
             codec.encrypt(input, output, passwordBytes,
-                    new ImageCryptOptions(mode, overwriteExisting), progress);
+                    new ImageCryptOptions(mode, overwriteExisting, errorCorrection), progress);
         } finally {
             erase(passwordBytes);
         }
@@ -88,11 +110,33 @@ public final class ImageCryptDesktopWorkflow {
                         final boolean overwriteExisting, final ImageCryptProgress progress)
             throws ImageCryptException,
             hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
+        return decrypt(input, outputDirectory, password, overwriteExisting, false, progress);
+    }
+
+    /**
+     * 还原图片，并可显式允许认证失败后的有损尽力恢复。
+     *
+     * @param input EGTC-IMG 图片
+     * @param outputDirectory 恢复目录
+     * @param password 用户输入密码
+     * @param overwriteExisting 是否覆盖已有恢复文件
+     * @param bestEffort 是否允许提交未通过最终认证的恢复结果
+     * @param progress 进度回调
+     * @return 实际恢复路径
+     * @throws ImageCryptException 协议、密码、认证或输出处理失败
+     * @throws hbnu.project.ergoutreecrypt.exception.CancelledException 用户取消
+     * @throws IOException 文件读写失败
+     */
+    public Path decrypt(final Path input, final Path outputDirectory, final String password,
+                        final boolean overwriteExisting, final boolean bestEffort,
+                        final ImageCryptProgress progress)
+            throws ImageCryptException,
+            hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
         ImageCryptMetadata metadata = codec.peekMetadata(input);
         byte[] passwordBytes = encodePassword(metadata.mode(), password);
         try {
             return codec.decrypt(input, outputDirectory, passwordBytes, overwriteExisting,
-                    progress);
+                    bestEffort, progress);
         } finally {
             erase(passwordBytes);
         }

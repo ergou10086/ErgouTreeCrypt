@@ -108,10 +108,7 @@ public final class ReedSolomon {
             return new DecodeResult(res, false);
         } catch (RuntimeException e) {
             // 无法纠正：返回尽力恢复的数据并标记 corrupted
-            if (total == 136) {
-                return new DecodeResult(slice(data, 128), true);
-            }
-            return new DecodeResult(slice(data, total / 3), true);
+            return new DecodeResult(slice(data, fec.required()), true);
         }
     }
 

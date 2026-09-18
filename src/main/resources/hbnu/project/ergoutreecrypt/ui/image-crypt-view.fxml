@@ -91,6 +91,17 @@
                         </VBox>
                     </VBox>
 
+                    <VBox styleClass="card" spacing="8">
+                        <Label fx:id="imageTransportTitle" styleClass="card-title"/>
+                        <CheckBox fx:id="imageErrorCorrectionCheck" styleClass="check"/>
+                        <Label fx:id="imageErrorCorrectionHint" styleClass="field-hint"
+                               wrapText="true"/>
+                        <CheckBox fx:id="imageBestEffortCheck" styleClass="check"
+                                  managed="false" visible="false"/>
+                        <Label fx:id="imageBestEffortHint" styleClass="warning-text"
+                               managed="false" visible="false" wrapText="true"/>
+                    </VBox>
+
                     <VBox fx:id="imagePublicWarningCard" styleClass="image-warning-card" spacing="7">
                         <Label fx:id="imagePublicWarning" styleClass="image-warning-text"
                                wrapText="true"/>

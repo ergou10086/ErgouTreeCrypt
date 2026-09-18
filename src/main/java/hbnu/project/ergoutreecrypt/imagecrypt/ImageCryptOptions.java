@@ -14,11 +14,13 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  *
  * @param mode             保护模式，不可为 {@code null}
  * @param overwriteExisting true 表示允许覆盖已存在的输出文件
+ * @param errorCorrection   true 表示使用抗图片重编码的纠错载体
  *
  * @author ErgouTree
  * @since 2026/9/16
  */
-public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting) {
+public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
+                                boolean errorCorrection) {
 
     /**
      * 默认的公开恢复选项：不覆盖已有输出。
@@ -27,7 +29,17 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting) 
      * 避免调用方忘记传参时误以为产物受到密码保护。
      */
     public static final ImageCryptOptions DEFAULT =
-            new ImageCryptOptions(ImageCryptMode.PUBLIC_RECOVERY, false);
+            new ImageCryptOptions(ImageCryptMode.PUBLIC_RECOVERY, false, false);
+
+    /**
+     * 兼容既有调用方的双参数构造器，默认不启用纠错载体。
+     *
+     * @param mode              保护模式
+     * @param overwriteExisting true 表示允许覆盖已存在的输出文件
+     */
+    public ImageCryptOptions(final ImageCryptMode mode, final boolean overwriteExisting) {
+        this(mode, overwriteExisting, false);
+    }
 
     /**
      * 紧凑构造器：拒绝缺失的保护模式。
@@ -47,7 +59,7 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting) 
      * @return 选项实例
      */
     public static ImageCryptOptions of(final ImageCryptMode mode) {
-        return new ImageCryptOptions(mode, false);
+        return new ImageCryptOptions(mode, false, false);
     }
 
     /**
@@ -57,7 +69,19 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting) 
      * @return 选项实例
      */
     public static ImageCryptOptions overwriting(final ImageCryptMode mode) {
-        return new ImageCryptOptions(mode, true);
+        return new ImageCryptOptions(mode, true, false);
+    }
+
+    /**
+     * 构造启用抗重编码纠错载体的选项。
+     *
+     * @param mode              保护模式
+     * @param overwriteExisting true 表示允许覆盖已存在的输出文件
+     * @return 启用纠错载体的选项实例
+     */
+    public static ImageCryptOptions errorCorrecting(final ImageCryptMode mode,
+                                                     final boolean overwriteExisting) {
+        return new ImageCryptOptions(mode, overwriteExisting, true);
     }
 
     /**

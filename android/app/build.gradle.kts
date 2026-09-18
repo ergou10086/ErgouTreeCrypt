@@ -22,6 +22,9 @@ val syncCoreLibs by tasks.registering(Copy::class) {
             "hbnu/project/ergoutreecrypt/settings/SettingsManager.java",
             // 图像隐写 — 依赖 java.awt.BufferedImage / javax.imageio（Android 不可用）
             "hbnu/project/ergoutreecrypt/stego/**",
+            // 桌面 ImageIO/AWT 桥；Android 端后续由平台 Bitmap 桥实现
+            "hbnu/project/ergoutreecrypt/imagecrypt/robust/DesktopRobustImageDecoder.java",
+            "hbnu/project/ergoutreecrypt/imagecrypt/robust/DesktopRobustPayloadTranscoder.java",
             // JPMS 模块声明
             "module-info.java"
         )

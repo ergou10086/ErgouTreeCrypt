@@ -11,6 +11,8 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
 import hbnu.project.ergoutreecrypt.imagecrypt.png.PixelPngReader;
 import hbnu.project.ergoutreecrypt.imagecrypt.png.PixelPngWriter;
+import hbnu.project.ergoutreecrypt.imagecrypt.png.RobustPngWriter;
+import hbnu.project.ergoutreecrypt.imagecrypt.robust.RobustCarrier;
 import hbnu.project.ergoutreecrypt.log.LogService;
 
 import java.io.BufferedInputStream;
@@ -19,6 +21,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.SequenceInputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
@@ -109,6 +113,17 @@ public final class ImageCryptCodec {
     private static final int MANIFEST_LENGTH_FIELD_END = 16;
 
     /**
+     * 纠错模式中保留原文件字节的安全上限。
+     *
+     * <p>为协议头、认证标签、清单与交织组取整预留约 128 KiB；超过后生成 JPEG 恢复副本。
+     */
+    private static final long ROBUST_SOURCE_BYTES = 800_000L;
+
+    /** 桌面大图 JPEG 转码桥。 */
+    private static final String ROBUST_TRANSCODER =
+            "hbnu.project.ergoutreecrypt.imagecrypt.robust.DesktopRobustPayloadTranscoder";
+
+    /**
      * 生产随机源。
      */
     private final ImageCryptRandomSource randomSource;
@@ -184,6 +199,7 @@ public final class ImageCryptCodec {
         byte[] passwordCopy = password == null ? null : password.clone();
         ImageKeySchedule keys = null;
         Path tempFile = null;
+        Path payloadTempFile = null;
         boolean committed = false;
         try {
             listener.onPhase(ImageCryptPhase.PROBE);
@@ -202,19 +218,53 @@ public final class ImageCryptCodec {
                         + probe.format() + "：" + source.getFileName());
             }
 
-            ImageFormat format = probe.format();
+            Path payloadSource = source;
+            ImageProbe.Result payloadProbe = probe;
+            String payloadName = source.getFileName().toString();
+            if (effectiveOptions.errorCorrection() && sourceLength > ROBUST_SOURCE_BYTES) {
+                payloadTempFile = createTempFile(target.getParent());
+                transcodeRobustPayload(source, payloadTempFile, ROBUST_SOURCE_BYTES);
+                payloadSource = payloadTempFile;
+                payloadProbe = ImageProbe.probe(payloadSource);
+                if (!payloadProbe.recognized() || payloadProbe.format() != ImageFormat.JPEG) {
+                    throw new ImageCryptException(ErrorKind.INTERNAL_ERROR,
+                            "纠错模式 JPEG 恢复副本生成失败");
+                }
+                sourceLength = Files.size(payloadSource);
+                payloadName = replaceExtension(payloadName, "jpg");
+                LogService.warn(LOG_CATEGORY, "原图超过抗重编码容量，已生成有损 JPEG 恢复副本："
+                        + source.getFileName());
+            }
+
+            ImageFormat format = payloadProbe.format();
             InnerManifest manifest = InnerManifest.create(format, sourceLength,
-                    source.getFileName().toString(), format.defaultMimeType(),
-                    resolveExtension(source, format), false);
+                    payloadName, format.defaultMimeType(),
+                    effectiveOptions.errorCorrection() && payloadTempFile != null
+                            ? "jpg" : resolveExtension(source, format), false);
             byte[] descriptor = manifest.toBytes();
             long innerPlainLength = manifest.totalLength();
-            long requiredPixels = ImageCryptProtocol.requiredPixels(innerPlainLength);
-            if (requiredPixels <= 0) {
+            long logicalLength;
+            try {
+                logicalLength = Math.addExact((long) ImageCryptProtocol.OUTER_HEADER_LENGTH,
+                        innerPlainLength);
+                logicalLength = Math.addExact(logicalLength,
+                        (long) ImageCryptProtocol.AUTH_TAG_LENGTH);
+            } catch (ArithmeticException e) {
                 throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
-                        "载荷长度超出画布可承载上限");
+                        "协议帧长度溢出", e);
             }
-            int[] canvas = ImageCryptProtocol.chooseCanvasSize(requiredPixels,
-                    probe.width(), probe.height());
+            int[] canvas;
+            if (effectiveOptions.errorCorrection()) {
+                canvas = RobustCarrier.chooseCanvas(logicalLength);
+            } else {
+                long requiredPixels = ImageCryptProtocol.requiredPixels(innerPlainLength);
+                if (requiredPixels <= 0) {
+                    throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                            "载荷长度超出画布可承载上限");
+                }
+                canvas = ImageCryptProtocol.chooseCanvasSize(requiredPixels,
+                        payloadProbe.width(), payloadProbe.height());
+            }
             long outputEstimate = Math.multiplyExact(
                     Math.multiplyExact((long) canvas[0], (long) canvas[1]),
                     (long) ImageCryptProtocol.PNG_BYTES_PER_PIXEL);
@@ -229,12 +279,12 @@ public final class ImageCryptCodec {
                 keys = ImageKeySchedule.fromPassword(passwordCopy, argon2Salt, hkdfSalt,
                         passListener(listener));
                 frame = ImageCryptFrame.newPasswordFrame(canvas[0], canvas[1], innerPlainLength,
-                        probe.width(), probe.height(), argon2Salt, hkdfSalt, nonce);
+                        payloadProbe.width(), payloadProbe.height(), argon2Salt, hkdfSalt, nonce);
             } else {
                 byte[] masterKey = randomSource.nextBytes(ImageCryptProtocol.MASTER_KEY_LENGTH);
                 keys = ImageKeySchedule.fromPublicMasterKey(masterKey, hkdfSalt);
                 frame = ImageCryptFrame.newPublicFrame(canvas[0], canvas[1], innerPlainLength,
-                        probe.width(), probe.height(), hkdfSalt, nonce, masterKey);
+                        payloadProbe.width(), payloadProbe.height(), hkdfSalt, nonce, masterKey);
                 SecureZero.zero(masterKey);
             }
 
@@ -245,21 +295,13 @@ public final class ImageCryptCodec {
                 SecureZero.zero(keyConfirm);
             }
             byte[] headerBytes = frame.toBytes();
-            long logicalLength;
-            try {
-                logicalLength = Math.addExact((long) headerBytes.length, innerPlainLength);
-                logicalLength = Math.addExact(logicalLength,
-                        (long) ImageCryptProtocol.AUTH_TAG_LENGTH);
-            } catch (ArithmeticException e) {
-                throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT, "协议帧长度溢出", e);
-            }
-
             listener.onPhase(ImageCryptPhase.ENCRYPTING);
             tempFile = createTempFile(target.getParent());
             XChaCha20 cipher = new XChaCha20(keys.encKey(), frame.nonce());
             Mac mac = keys.beginAuthTag(frame.authenticationPrefixBytes(), innerPlainLength);
-            commitLogicalFrame(source, tempFile, descriptor, headerBytes, innerPlainLength,
-                    canvas, cipher, mac, listener, logicalLength);
+            commitLogicalFrame(payloadSource, tempFile, descriptor, headerBytes, innerPlainLength,
+                    canvas, cipher, mac, listener, logicalLength,
+                    effectiveOptions.errorCorrection());
             commit(tempFile, target, effectiveOptions.overwriteExisting());
             committed = true;
             listener.onPhase(ImageCryptPhase.DONE);
@@ -272,6 +314,7 @@ public final class ImageCryptCodec {
             if (!committed) {
                 deleteQuietly(tempFile, "图片加密未完成，已清理临时文件");
             }
+            deleteQuietly(payloadTempFile, "已清理纠错模式 JPEG 临时副本");
         }
     }
 
@@ -292,6 +335,7 @@ public final class ImageCryptCodec {
      * @param mac             已喂入认证前缀的 MAC
      * @param listener        进度与取消回调
      * @param logicalLength   逻辑帧总长度
+     * @param errorCorrection 是否写为抗重编码纠错载体
      * @throws ImageCryptException 载体格式、长度或认证标签构造失败
      * @throws CancelledException  用户取消
      * @throws IOException         读写失败
@@ -301,7 +345,8 @@ public final class ImageCryptCodec {
                                            final long innerPlainLength, final int[] canvas,
                                            final XChaCha20 cipher, final Mac mac,
                                            final ImageCryptProgress listener,
-                                           final long logicalLength)
+                                           final long logicalLength,
+                                           final boolean errorCorrection)
             throws ImageCryptException, CancelledException, IOException {
         try (InputStream plaintext = new SequenceInputStream(
                 new ByteArrayInputStream(descriptor), Files.newInputStream(source));
@@ -309,7 +354,13 @@ public final class ImageCryptCodec {
                      innerPlainLength, listener);
              OutputStream rawOutput = Files.newOutputStream(tempFile,
                      StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-            new PixelPngWriter().write(rawOutput, canvas[0], canvas[1], logical, logicalLength);
+            if (errorCorrection) {
+                new RobustPngWriter().write(rawOutput, canvas[0], canvas[1], logical,
+                        logicalLength);
+            } else {
+                new PixelPngWriter().write(rawOutput, canvas[0], canvas[1], logical,
+                        logicalLength);
+            }
         } catch (LogicalStreamException e) {
             rethrow(e);
         }
@@ -403,6 +454,30 @@ public final class ImageCryptCodec {
     public Path decrypt(final Path input, final Path outputDirectory, final byte[] password,
                         final boolean overwriteExisting, final ImageCryptProgress progress)
             throws ImageCryptException, CancelledException, IOException {
+        return decrypt(input, outputDirectory, password, overwriteExisting, false, progress);
+    }
+
+    /**
+     * 还原 EGTC-IMG 产物，并可在显式授权时保留认证失败的尽力恢复结果。
+     *
+     * <p>尽力恢复不会绕过密码确认，也不会猜测损坏的协议头；它只在纠错层已尽可能恢复
+     * 密文字节后，允许认证标签不一致的明文临时文件被提交。输出可能是局部损坏的图片。
+     *
+     * @param input 待还原图片
+     * @param outputDirectory 输出目录
+     * @param password 规范化密码字节
+     * @param overwriteExisting 是否覆盖同名文件
+     * @param bestEffort 是否允许提交未通过最终认证的有损恢复结果
+     * @param progress 进度回调
+     * @return 实际恢复文件路径
+     * @throws ImageCryptException 协议头、密码、输出或严格认证失败
+     * @throws CancelledException 用户取消
+     * @throws IOException 文件读写失败
+     */
+    public Path decrypt(final Path input, final Path outputDirectory, final byte[] password,
+                        final boolean overwriteExisting, final boolean bestEffort,
+                        final ImageCryptProgress progress)
+            throws ImageCryptException, CancelledException, IOException {
         Objects.requireNonNull(input, "input");
         Objects.requireNonNull(outputDirectory, "outputDirectory");
         ImageCryptProgress listener = progress == null ? ImageCryptProgress.NONE : progress;
@@ -422,7 +497,7 @@ public final class ImageCryptCodec {
 
             Path tempFile = createTempFile(directory);
             sink = new DecryptingFrameSink(passwordCopy, directory, tempFile, overwriteExisting,
-                    true, listener);
+                    true, bestEffort, listener);
             decodeFrame(source, sink);
 
             listener.onPhase(ImageCryptPhase.COMMITTING);
@@ -463,9 +538,8 @@ public final class ImageCryptCodec {
         if (!Files.isRegularFile(source)) {
             return false;
         }
-        try (InputStream rawInput = new BufferedInputStream(
-                Files.newInputStream(source), IO_BUFFER_BYTES)) {
-            new PixelPngReader().peekFrame(rawInput);
+        try {
+            peek(source);
             return true;
         } catch (ImageCryptException e) {
             LogService.trace(LOG_CATEGORY, "EGTC-IMG 轻探测未通过: " + e.getMessage());
@@ -539,7 +613,7 @@ public final class ImageCryptCodec {
             requirePassword(header, passwordCopy);
 
             sink = new DecryptingFrameSink(passwordCopy, source.getParent(), null, false,
-                    false, listener);
+                    false, false, listener);
             decodeFrame(source, sink);
             listener.onPhase(ImageCryptPhase.DONE);
         } finally {
@@ -561,9 +635,21 @@ public final class ImageCryptCodec {
      */
     private static void decodeFrame(final Path source, final DecryptingFrameSink sink)
             throws ImageCryptException, CancelledException, IOException {
-        try (InputStream rawInput = new BufferedInputStream(
-                Files.newInputStream(source), IO_BUFFER_BYTES)) {
-            new PixelPngReader().readFrame(rawInput, sink);
+        if (isDirectCarrier(source)) {
+            try (InputStream rawInput = new BufferedInputStream(
+                    Files.newInputStream(source), IO_BUFFER_BYTES)) {
+                new PixelPngReader().readFrame(rawInput, sink);
+            } catch (LogicalStreamException e) {
+                rethrow(e);
+            }
+            return;
+        }
+        try {
+            boolean corrupted = RobustCarrier.readFrame(source, sink);
+            if (corrupted) {
+                LogService.warn(LOG_CATEGORY,
+                        "纠错载体存在超过 Reed-Solomon 能力的码字，已使用尽力恢复数据");
+            }
         } catch (LogicalStreamException e) {
             rethrow(e);
         }
@@ -578,6 +664,47 @@ public final class ImageCryptCodec {
      * @throws IOException         读取失败
      */
     private static ImageCryptFrame peek(final Path source) throws ImageCryptException, IOException {
+        try {
+            return peekDirect(source);
+        } catch (ImageCryptException directFailure) {
+            if (directFailure.kind() != ErrorKind.NOT_IMAGE_CRYPT) {
+                throw directFailure;
+            }
+            try {
+                return RobustCarrier.peekFrame(source);
+            } catch (ImageCryptException robustFailure) {
+                robustFailure.addSuppressed(directFailure);
+                throw robustFailure;
+            }
+        }
+    }
+
+    /**
+     * 判断输入是否为原始逐 RGB 字节载体。
+     *
+     * @param source 输入路径
+     * @return true 表示原始载体头可解析
+     * @throws IOException 读取失败
+     */
+    private static boolean isDirectCarrier(final Path source) throws IOException {
+        try {
+            peekDirect(source);
+            return true;
+        } catch (ImageCryptException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 只按原始 PNG RGB 字节布局读取协议头。
+     *
+     * @param source 输入路径
+     * @return 外层协议头
+     * @throws ImageCryptException 不是原始载体
+     * @throws IOException 读取失败
+     */
+    private static ImageCryptFrame peekDirect(final Path source)
+            throws ImageCryptException, IOException {
         try (InputStream rawInput = new BufferedInputStream(
                 Files.newInputStream(source), IO_BUFFER_BYTES)) {
             byte[] signature = readFully(rawInput, ImageCryptProtocol.PNG_SIGNATURE.length);
@@ -694,6 +821,51 @@ public final class ImageCryptCodec {
             LogService.trace(LOG_CATEGORY, "无法查询磁盘可用空间，跳过预检: "
                     + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * 通过桌面桥把超大源图转换为限定大小的 JPEG 恢复副本。
+     *
+     * @param source 输入图片
+     * @param target JPEG 临时文件
+     * @param maximumBytes 最大字节数
+     * @throws ImageCryptException 当前平台不支持转码或图片无法压缩到目标大小
+     * @throws IOException 文件读写失败
+     */
+    private static void transcodeRobustPayload(final Path source, final Path target,
+                                               final long maximumBytes)
+            throws ImageCryptException, IOException {
+        try {
+            Class<?> type = Class.forName(ROBUST_TRANSCODER);
+            Method method = type.getMethod("transcode", Path.class, Path.class, long.class);
+            method.invoke(null, source, target, maximumBytes);
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    "当前平台无法为超大图片生成纠错模式 JPEG 恢复副本", e);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof ImageCryptException imageCrypt) {
+                throw imageCrypt;
+            }
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            throw new ImageCryptException(ErrorKind.INTERNAL_ERROR,
+                    "生成纠错模式 JPEG 恢复副本失败", cause);
+        }
+    }
+
+    /**
+     * 把文件名的最后一个扩展名替换为指定扩展名。
+     *
+     * @param fileName 原文件名
+     * @param extension 新扩展名，不含点
+     * @return 替换后的文件名
+     */
+    private static String replaceExtension(final String fileName, final String extension) {
+        int dot = fileName.lastIndexOf('.');
+        String base = dot > 0 ? fileName.substring(0, dot) : fileName;
+        return base + "." + extension;
     }
 
     /**
@@ -1176,6 +1348,9 @@ public final class ImageCryptCodec {
          */
         private final boolean produceOutput;
 
+        /** 是否允许提交认证失败的尽力恢复结果。 */
+        private final boolean bestEffort;
+
         /**
          * 进度与取消回调。
          */
@@ -1294,16 +1469,19 @@ public final class ImageCryptCodec {
          * @param tempFile          明文临时文件；校验模式传 {@code null}
          * @param overwriteExisting 是否允许覆盖同名恢复产物
          * @param produceOutput     是否产出恢复文件
+         * @param bestEffort       是否允许有损尽力恢复
          * @param listener          进度与取消回调
          */
         private DecryptingFrameSink(final byte[] password, final Path outputDirectory,
                                     final Path tempFile, final boolean overwriteExisting,
-                                    final boolean produceOutput, final ImageCryptProgress listener) {
+                                    final boolean produceOutput, final boolean bestEffort,
+                                    final ImageCryptProgress listener) {
             this.password = password;
             this.outputDirectory = outputDirectory;
             this.tempFile = tempFile;
             this.overwriteExisting = overwriteExisting;
             this.produceOutput = produceOutput;
+            this.bestEffort = bestEffort;
             this.listener = listener;
         }
 
@@ -1585,8 +1763,12 @@ public final class ImageCryptCodec {
                 SecureZero.zero(computed);
             }
             if (!verified) {
-                throw new ImageCryptException(ErrorKind.TAMPERED_DATA,
-                        "认证标签校验失败: 文件已损坏、被修改或不是原始产物");
+                if (!bestEffort || !produceOutput) {
+                    throw new ImageCryptException(ErrorKind.TAMPERED_DATA,
+                            "认证标签校验失败: 文件已损坏、被修改或不是原始产物");
+                }
+                LogService.warn(LOG_CATEGORY,
+                        "尽力恢复已忽略认证失败，输出图片可能包含局部损坏");
             }
             if (payloadOutput != null) {
                 payloadOutput.flush();

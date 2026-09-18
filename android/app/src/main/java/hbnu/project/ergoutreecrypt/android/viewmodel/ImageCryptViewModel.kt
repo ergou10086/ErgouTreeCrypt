@@ -79,6 +79,8 @@ data class ImageCryptResultInfo(
  * @property mode 新建密文的保护模式
  * @property password 密码输入
  * @property confirmPassword 加密时的密码确认
+ * @property errorCorrection 是否使用抗图片重编码纠错载体
+ * @property bestEffort 是否允许提交认证失败的有损恢复结果
  * @property inputName 输入显示名
  * @property inputBytes 输入字节数
  * @property inputDescription 格式、尺寸或协议元数据描述
@@ -99,6 +101,8 @@ data class ImageCryptUiState(
     val mode: ImageCryptMode = ImageCryptMode.PUBLIC_RECOVERY,
     val password: String = "",
     val confirmPassword: String = "",
+    val errorCorrection: Boolean = false,
+    val bestEffort: Boolean = false,
     val inputName: String? = null,
     val inputBytes: Long = 0L,
     val inputDescription: String = "",
@@ -219,6 +223,28 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.update { it.copy(mode = mode, formError = null) }
         viewModelScope.launch(Dispatchers.IO) {
             settings.setImageCryptDefaultMode(mode.name)
+        }
+    }
+
+    /**
+     * 设置加密时是否启用抗重编码纠错载体。
+     *
+     * @param enabled true 表示启用纠错载体
+     */
+    fun setErrorCorrection(enabled: Boolean) {
+        if (!isRunning()) {
+            _uiState.update { it.copy(errorCorrection = enabled, formError = null) }
+        }
+    }
+
+    /**
+     * 设置解密时是否允许尽力恢复损坏图片。
+     *
+     * @param enabled true 表示允许忽略最终认证失败
+     */
+    fun setBestEffort(enabled: Boolean) {
+        if (!isRunning()) {
+            _uiState.update { it.copy(bestEffort = enabled, formError = null) }
         }
     }
 
@@ -502,7 +528,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                     input.file.toPath(),
                     resultPath,
                     passwordBytes,
-                    ImageCryptOptions.of(snapshot.mode),
+                    ImageCryptOptions(snapshot.mode, false, snapshot.errorCorrection),
                     progress
                 )
             } else {
@@ -510,6 +536,8 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                     input.file.toPath(),
                     plan.directory,
                     passwordBytes,
+                    false,
+                    snapshot.bestEffort,
                     progress
                 )
             }

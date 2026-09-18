@@ -142,6 +142,16 @@ public final class ImageCryptController {
     @FXML
     private Label imageKdfHint;
     @FXML
+    private Label imageTransportTitle;
+    @FXML
+    private CheckBox imageErrorCorrectionCheck;
+    @FXML
+    private Label imageErrorCorrectionHint;
+    @FXML
+    private CheckBox imageBestEffortCheck;
+    @FXML
+    private Label imageBestEffortHint;
+    @FXML
     private VBox imagePublicWarningCard;
     @FXML
     private Label imagePublicWarning;
@@ -285,6 +295,11 @@ public final class ImageCryptController {
         imageShowPasswordCheck.setText(Messages.get("password.show"));
         imageConfirmField.setPromptText(Messages.get("password.confirm.placeholder"));
         imageKdfHint.setText(Messages.get("imageCrypt.kdf.hint"));
+        imageTransportTitle.setText(Messages.get("imageCrypt.transport.title"));
+        imageErrorCorrectionCheck.setText(Messages.get("imageCrypt.transport.errorCorrection"));
+        imageErrorCorrectionHint.setText(Messages.get("imageCrypt.transport.errorCorrection.hint"));
+        imageBestEffortCheck.setText(Messages.get("imageCrypt.transport.bestEffort"));
+        imageBestEffortHint.setText(Messages.get("imageCrypt.transport.bestEffort.hint"));
         imagePublicWarning.setText(Messages.get("imageCrypt.public.warning"));
         imageSendAsFileHint.setText(Messages.get("imageCrypt.sendAsFile.hint"));
 
@@ -326,6 +341,10 @@ public final class ImageCryptController {
         boolean encrypting = mode == OperationMode.ENCRYPT;
         imagePublicModeBtn.setDisable(!encrypting || running || probing);
         imagePasswordModeBtn.setDisable(!encrypting || running || probing);
+        setVisible(imageErrorCorrectionCheck, encrypting);
+        setVisible(imageErrorCorrectionHint, encrypting);
+        setVisible(imageBestEffortCheck, !encrypting);
+        setVisible(imageBestEffortHint, !encrypting);
         if (encrypting) {
             switchProtection(protectionMode);
         } else if (encryptedMetadata == null) {
@@ -416,7 +435,8 @@ public final class ImageCryptController {
                     "*.png", "*.apng", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp"));
         } else {
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
-                    Messages.get("imageCrypt.file.filter.encrypted"), "*.png"));
+                    Messages.get("imageCrypt.file.filter.encrypted"),
+                    "*.png", "*.jpg", "*.jpeg"));
         }
         File file = chooser.showOpenDialog(stage());
         if (file != null) {
@@ -784,8 +804,10 @@ public final class ImageCryptController {
                 OutputNaming.imageCryptOutputName(input.getFileName().toString()));
         String password = imagePasswordField.getText();
         ImageCryptMode selectedMode = protectionMode;
+        boolean errorCorrection = imageErrorCorrectionCheck.isSelected();
         runCryptoTask("IMAGE_ENCRYPT", progress -> {
-            workflow.encrypt(input, output, selectedMode, password, overwriteExisting, progress);
+            workflow.encrypt(input, output, selectedMode, password, overwriteExisting,
+                    errorCorrection, progress);
             HistoryService.record(OperationType.IMAGE_ENCRYPT,
                     output.getFileName().toString(), output.toString(), null);
         }, () -> finishSuccess(Messages.format("imageCrypt.status.encryptSuccess",
@@ -810,10 +832,11 @@ public final class ImageCryptController {
     private void startDecrypt(final Path outputDirectory, final boolean overwriteExisting) {
         Path input = selectedInput;
         String password = imagePasswordField.getText();
+        boolean bestEffort = imageBestEffortCheck.isSelected();
         AtomicReference<Path> restored = new AtomicReference<>();
         runCryptoTask("IMAGE_DECRYPT", progress -> {
             Path output = workflow.decrypt(input, outputDirectory, password,
-                    overwriteExisting, progress);
+                    overwriteExisting, bestEffort, progress);
             restored.set(output);
             HistoryService.record(OperationType.IMAGE_DECRYPT,
                     output.getFileName().toString(), output.toString(), null);
@@ -1128,6 +1151,8 @@ public final class ImageCryptController {
         imageDecryptTab.setDisable(value || probing);
         imagePublicModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
         imagePasswordModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
+        imageErrorCorrectionCheck.setDisable(value || probing);
+        imageBestEffortCheck.setDisable(value || probing);
         imageReselectFileBtn.setDisable(value);
         imageClearFileBtn.setDisable(value);
         imageOutputBrowseBtn.setDisable(value);

@@ -14,13 +14,13 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  *
  * @param mode             保护模式，不可为 {@code null}
  * @param overwriteExisting true 表示允许覆盖已存在的输出文件
- * @param errorCorrection   true 表示使用抗图片重编码的纠错载体
+ * @param robustness         抗图片重编码强度
  *
  * @author ErgouTree
  * @since 2026/9/16
  */
 public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
-                                boolean errorCorrection) {
+                                ImageCryptRobustness robustness) {
 
     /**
      * 默认的公开恢复选项：不覆盖已有输出。
@@ -29,7 +29,8 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      * 避免调用方忘记传参时误以为产物受到密码保护。
      */
     public static final ImageCryptOptions DEFAULT =
-            new ImageCryptOptions(ImageCryptMode.PUBLIC_RECOVERY, false, false);
+            new ImageCryptOptions(ImageCryptMode.PUBLIC_RECOVERY, false,
+                    ImageCryptRobustness.NONE);
 
     /**
      * 兼容既有调用方的双参数构造器，默认不启用纠错载体。
@@ -38,7 +39,20 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      * @param overwriteExisting true 表示允许覆盖已存在的输出文件
      */
     public ImageCryptOptions(final ImageCryptMode mode, final boolean overwriteExisting) {
-        this(mode, overwriteExisting, false);
+        this(mode, overwriteExisting, ImageCryptRobustness.NONE);
+    }
+
+    /**
+     * 兼容既有调用方的布尔纠错构造器。
+     *
+     * @param mode 保护模式
+     * @param overwriteExisting true 表示允许覆盖已有输出文件
+     * @param errorCorrection true 表示启用兼容的均衡纠错档
+     */
+    public ImageCryptOptions(final ImageCryptMode mode, final boolean overwriteExisting,
+                             final boolean errorCorrection) {
+        this(mode, overwriteExisting, errorCorrection
+                ? ImageCryptRobustness.BALANCED : ImageCryptRobustness.NONE);
     }
 
     /**
@@ -50,6 +64,9 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
         if (mode == null) {
             throw new IllegalArgumentException("图片加密必须显式指定保护模式");
         }
+        if (robustness == null) {
+            throw new IllegalArgumentException("图片加密必须显式指定抗干扰强度");
+        }
     }
 
     /**
@@ -59,7 +76,7 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      * @return 选项实例
      */
     public static ImageCryptOptions of(final ImageCryptMode mode) {
-        return new ImageCryptOptions(mode, false, false);
+        return new ImageCryptOptions(mode, false, ImageCryptRobustness.NONE);
     }
 
     /**
@@ -69,7 +86,7 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      * @return 选项实例
      */
     public static ImageCryptOptions overwriting(final ImageCryptMode mode) {
-        return new ImageCryptOptions(mode, true, false);
+        return new ImageCryptOptions(mode, true, ImageCryptRobustness.NONE);
     }
 
     /**
@@ -81,7 +98,30 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      */
     public static ImageCryptOptions errorCorrecting(final ImageCryptMode mode,
                                                      final boolean overwriteExisting) {
-        return new ImageCryptOptions(mode, overwriteExisting, true);
+        return new ImageCryptOptions(mode, overwriteExisting, ImageCryptRobustness.BALANCED);
+    }
+
+    /**
+     * 构造指定抗干扰强度的图片加密选项。
+     *
+     * @param mode 保护模式
+     * @param overwriteExisting true 表示允许覆盖已有输出文件
+     * @param robustness 抗干扰强度
+     * @return 图片加密选项
+     */
+    public static ImageCryptOptions robust(final ImageCryptMode mode,
+                                            final boolean overwriteExisting,
+                                            final ImageCryptRobustness robustness) {
+        return new ImageCryptOptions(mode, overwriteExisting, robustness);
+    }
+
+    /**
+     * 判断是否启用任意抗重编码纠错载体。
+     *
+     * @return true 表示启用纠错载体
+     */
+    public boolean errorCorrection() {
+        return robustness.enabled();
     }
 
     /**

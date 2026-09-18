@@ -12,6 +12,7 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMetadata;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMode;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptPhase;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProgress;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageProbe;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
@@ -26,6 +27,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressBar;
@@ -44,6 +46,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 
 import java.awt.Desktop;
 import java.awt.image.BufferedImage;
@@ -147,6 +150,12 @@ public final class ImageCryptController {
     private CheckBox imageErrorCorrectionCheck;
     @FXML
     private Label imageErrorCorrectionHint;
+    @FXML
+    private VBox imageRobustnessBox;
+    @FXML
+    private ComboBox<ImageCryptRobustness> imageRobustnessCombo;
+    @FXML
+    private Label imageRobustnessHint;
     @FXML
     private CheckBox imageBestEffortCheck;
     @FXML
@@ -266,6 +275,36 @@ public final class ImageCryptController {
                 updatePasswordFeedback());
         imageConfirmField.textProperty().addListener((observable, oldValue, newValue) ->
                 updatePasswordFeedback());
+        imageRobustnessCombo.getItems().setAll(ImageCryptRobustness.BALANCED,
+                ImageCryptRobustness.STRONG, ImageCryptRobustness.EXTREME);
+        imageRobustnessCombo.getSelectionModel().select(ImageCryptRobustness.BALANCED);
+        imageRobustnessCombo.setConverter(new StringConverter<>() {
+            /**
+             * 返回当前语言下的抗干扰档位名称。
+             *
+             * @param robustness 抗干扰强度
+             * @return 本地化名称
+             */
+            @Override
+            public String toString(final ImageCryptRobustness robustness) {
+                return robustness == null ? "" : robustnessText(robustness);
+            }
+
+            /**
+             * 档位只允许列表选择，不从文本反向解析。
+             *
+             * @param value 输入文本
+             * @return 当前选中档位
+             */
+            @Override
+            public ImageCryptRobustness fromString(final String value) {
+                return imageRobustnessCombo.getValue();
+            }
+        });
+        imageErrorCorrectionCheck.selectedProperty().addListener(
+                (observable, oldValue, newValue) -> updateRobustnessControls());
+        imageRobustnessCombo.valueProperty().addListener(
+                (observable, oldValue, newValue) -> updateRobustnessControls());
 
         applyTexts();
         switchOperation(OperationMode.ENCRYPT);
@@ -298,6 +337,7 @@ public final class ImageCryptController {
         imageTransportTitle.setText(Messages.get("imageCrypt.transport.title"));
         imageErrorCorrectionCheck.setText(Messages.get("imageCrypt.transport.errorCorrection"));
         imageErrorCorrectionHint.setText(Messages.get("imageCrypt.transport.errorCorrection.hint"));
+        updateRobustnessControls();
         imageBestEffortCheck.setText(Messages.get("imageCrypt.transport.bestEffort"));
         imageBestEffortHint.setText(Messages.get("imageCrypt.transport.bestEffort.hint"));
         imagePublicWarning.setText(Messages.get("imageCrypt.public.warning"));
@@ -343,6 +383,7 @@ public final class ImageCryptController {
         imagePasswordModeBtn.setDisable(!encrypting || running || probing);
         setVisible(imageErrorCorrectionCheck, encrypting);
         setVisible(imageErrorCorrectionHint, encrypting);
+        updateRobustnessControls();
         setVisible(imageBestEffortCheck, !encrypting);
         setVisible(imageBestEffortHint, !encrypting);
         if (encrypting) {
@@ -399,6 +440,35 @@ public final class ImageCryptController {
                 ? protectionMode == ImageCryptMode.PUBLIC_RECOVERY
                 : encryptedMetadata != null && !encryptedMetadata.requiresPassword();
         setVisible(imagePublicWarningCard, publicRecovery);
+    }
+
+    /**
+     * 刷新抗干扰档位选择器及其容量与适用场景提示。
+     */
+    private void updateRobustnessControls() {
+        if (imageRobustnessBox == null || imageRobustnessCombo == null) {
+            return;
+        }
+        boolean visible = operationMode == OperationMode.ENCRYPT
+                && imageErrorCorrectionCheck.isSelected();
+        setVisible(imageRobustnessBox, visible);
+        ImageCryptRobustness robustness = imageRobustnessCombo.getValue();
+        if (robustness == null) {
+            robustness = ImageCryptRobustness.BALANCED;
+        }
+        imageRobustnessHint.setText(Messages.get("imageCrypt.transport.robustness."
+                + robustness.name().toLowerCase(Locale.ROOT) + ".hint"));
+    }
+
+    /**
+     * 返回抗干扰档位的本地化名称。
+     *
+     * @param robustness 抗干扰强度
+     * @return 本地化名称
+     */
+    private static String robustnessText(final ImageCryptRobustness robustness) {
+        return Messages.get("imageCrypt.transport.robustness."
+                + robustness.name().toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -804,10 +874,15 @@ public final class ImageCryptController {
                 OutputNaming.imageCryptOutputName(input.getFileName().toString()));
         String password = imagePasswordField.getText();
         ImageCryptMode selectedMode = protectionMode;
-        boolean errorCorrection = imageErrorCorrectionCheck.isSelected();
+        ImageCryptRobustness robustness = imageErrorCorrectionCheck.isSelected()
+                ? imageRobustnessCombo.getValue() : ImageCryptRobustness.NONE;
+        if (robustness == null) {
+            robustness = ImageCryptRobustness.BALANCED;
+        }
+        ImageCryptRobustness selectedRobustness = robustness;
         runCryptoTask("IMAGE_ENCRYPT", progress -> {
             workflow.encrypt(input, output, selectedMode, password, overwriteExisting,
-                    errorCorrection, progress);
+                    selectedRobustness, progress);
             HistoryService.record(OperationType.IMAGE_ENCRYPT,
                     output.getFileName().toString(), output.toString(), null);
         }, () -> finishSuccess(Messages.format("imageCrypt.status.encryptSuccess",
@@ -1152,6 +1227,7 @@ public final class ImageCryptController {
         imagePublicModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
         imagePasswordModeBtn.setDisable(value || probing || operationMode == OperationMode.DECRYPT);
         imageErrorCorrectionCheck.setDisable(value || probing);
+        imageRobustnessCombo.setDisable(value || probing);
         imageBestEffortCheck.setDisable(value || probing);
         imageReselectFileBtn.setDisable(value);
         imageClearFileBtn.setDisable(value);

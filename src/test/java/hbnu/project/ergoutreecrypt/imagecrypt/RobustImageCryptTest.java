@@ -10,6 +10,8 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,6 +76,57 @@ final class RobustImageCryptTest {
         Path restored = codec.decrypt(recompressed,
                 Files.createDirectory(workDirectory.resolve("qq-out")), null);
         assertArrayEquals(Files.readAllBytes(source), Files.readAllBytes(restored));
+    }
+
+    /**
+     * 增强档在较低质量 JPEG 重编码和小块局部损坏后仍须恢复原文件。
+     *
+     * @throws Exception 测试读写失败
+     */
+    @Test
+    void strongProfileSurvivesQuality75AndLocalDamage() throws Exception {
+        Path source = workDirectory.resolve("strong-source.jpg");
+        Files.write(source, fixture("sample.jpg"));
+        Path encrypted = workDirectory.resolve("strong.png");
+        Path recompressed = workDirectory.resolve("strong-recompressed.jpg");
+
+        ImageCryptCodec codec = new ImageCryptCodec();
+        codec.encrypt(source, encrypted, null,
+                ImageCryptOptions.robust(ImageCryptMode.PUBLIC_RECOVERY, false,
+                        ImageCryptRobustness.STRONG));
+        BufferedImage image = ImageIO.read(encrypted.toFile());
+        damageSquare(image, image.getWidth() / 2, image.getHeight() / 2, 20);
+        writeJpeg(image, recompressed, 0.75f);
+
+        Path restored = codec.decrypt(recompressed,
+                Files.createDirectory(workDirectory.resolve("strong-out")), null);
+        assertArrayEquals(Files.readAllBytes(source), Files.readAllBytes(restored));
+    }
+
+    /**
+     * 极强档在低质量 JPEG 重编码并等比例缩小后仍须恢复同一有损恢复副本。
+     *
+     * @throws Exception 测试读写失败
+     */
+    @Test
+    void extremeProfileSurvivesQuality60AndUniformResize() throws Exception {
+        Path source = workDirectory.resolve("extreme-source.png");
+        Files.write(source, fixture("sample.png"));
+        Path encrypted = workDirectory.resolve("extreme.png");
+        Path recompressed = workDirectory.resolve("extreme-recompressed.jpg");
+
+        ImageCryptCodec codec = new ImageCryptCodec();
+        codec.encrypt(source, encrypted, null,
+                ImageCryptOptions.robust(ImageCryptMode.PUBLIC_RECOVERY, false,
+                        ImageCryptRobustness.EXTREME));
+        Path baseline = codec.decrypt(encrypted,
+                Files.createDirectory(workDirectory.resolve("extreme-baseline")), null);
+        BufferedImage resized = resize(ImageIO.read(encrypted.toFile()), 1440, 1440);
+        writeJpeg(resized, recompressed, 0.60f);
+
+        Path restored = codec.decrypt(recompressed,
+                Files.createDirectory(workDirectory.resolve("extreme-out")), null);
+        assertArrayEquals(Files.readAllBytes(baseline), Files.readAllBytes(restored));
     }
 
     /**
@@ -160,6 +213,52 @@ final class RobustImageCryptTest {
         int value = image.getRGB(x, y) & 0xff;
         int inverted = 255 - value;
         image.setRGB(x, y, 0xff000000 | inverted << 16 | inverted << 8 | inverted);
+    }
+
+    /**
+     * 把指定正方形区域改为反相灰度，模拟贴图瑕疵或局部像素破坏。
+     *
+     * @param image 待修改图片
+     * @param centerX 区域中心横坐标
+     * @param centerY 区域中心纵坐标
+     * @param side 区域边长
+     */
+    private static void damageSquare(final BufferedImage image, final int centerX,
+                                     final int centerY, final int side) {
+        int startX = Math.max(0, centerX - side / 2);
+        int startY = Math.max(0, centerY - side / 2);
+        int endX = Math.min(image.getWidth(), startX + side);
+        int endY = Math.min(image.getHeight(), startY + side);
+        for (int y = startY; y < endY; y++) {
+            for (int x = startX; x < endX; x++) {
+                int value = image.getRGB(x, y) & 0xff;
+                int inverted = 255 - value;
+                image.setRGB(x, y,
+                        0xff000000 | inverted << 16 | inverted << 8 | inverted);
+            }
+        }
+    }
+
+    /**
+     * 以双线性插值等比例缩放图片。
+     *
+     * @param source 原图
+     * @param width 目标宽度
+     * @param height 目标高度
+     * @return 缩放后的 RGB 图片
+     */
+    private static BufferedImage resize(final BufferedImage source, final int width,
+                                        final int height) {
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = result.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(source, 0, 0, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return result;
     }
 
     /**

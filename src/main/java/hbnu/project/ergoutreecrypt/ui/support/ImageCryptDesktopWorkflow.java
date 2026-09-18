@@ -7,6 +7,7 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMode;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptOptions;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptPassword;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProgress;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -83,11 +84,37 @@ public final class ImageCryptDesktopWorkflow {
                         final boolean errorCorrection, final ImageCryptProgress progress)
             throws ImageCryptException,
             hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
+        encrypt(input, output, mode, password, overwriteExisting,
+                errorCorrection ? ImageCryptRobustness.BALANCED : ImageCryptRobustness.NONE,
+                progress);
+    }
+
+    /**
+     * 加密图片并使用指定抗干扰强度。
+     *
+     * @param input 输入图片
+     * @param output 输出 PNG
+     * @param mode 保护模式
+     * @param password 用户输入密码
+     * @param overwriteExisting 是否覆盖已有输出
+     * @param robustness 抗干扰强度
+     * @param progress 进度回调
+     * @throws ImageCryptException 图片格式、密码、容量或协议处理失败
+     * @throws hbnu.project.ergoutreecrypt.exception.CancelledException 用户取消
+     * @throws IOException 文件读写失败
+     */
+    public void encrypt(final Path input, final Path output, final ImageCryptMode mode,
+                        final String password, final boolean overwriteExisting,
+                        final ImageCryptRobustness robustness,
+                        final ImageCryptProgress progress)
+            throws ImageCryptException,
+            hbnu.project.ergoutreecrypt.exception.CancelledException, IOException {
         Objects.requireNonNull(mode, "mode");
+        Objects.requireNonNull(robustness, "robustness");
         byte[] passwordBytes = encodePassword(mode, password);
         try {
             codec.encrypt(input, output, passwordBytes,
-                    new ImageCryptOptions(mode, overwriteExisting, errorCorrection), progress);
+                    new ImageCryptOptions(mode, overwriteExisting, robustness), progress);
         } finally {
             erase(passwordBytes);
         }

@@ -30,7 +30,12 @@ import java.util.Iterator;
 public final class DesktopRobustPayloadTranscoder {
 
     /** JPEG 尝试质量，从高到低。 */
-    private static final float[] QUALITIES = {0.92f, 0.86f, 0.78f, 0.68f, 0.58f};
+    private static final float[] QUALITIES = {
+            0.92f, 0.86f, 0.78f, 0.68f, 0.58f, 0.48f, 0.38f
+    };
+
+    /** 为极强档小容量恢复副本保留的最大缩放轮数。 */
+    private static final int SCALE_PASSES = 8;
 
     /** 工具类不允许实例化。 */
     private DesktopRobustPayloadTranscoder() {
@@ -55,7 +60,7 @@ public final class DesktopRobustPayloadTranscoder {
         }
         BufferedImage image = flatten(decoded);
         try {
-            for (int scalePass = 0; scalePass < 6; scalePass++) {
+            for (int scalePass = 0; scalePass < SCALE_PASSES; scalePass++) {
                 for (float quality : QUALITIES) {
                     writeJpeg(image, output, quality);
                     if (Files.size(output) <= maximumBytes) {

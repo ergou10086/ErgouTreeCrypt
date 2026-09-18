@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.imagecrypt.png;
 import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptException;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProtocol;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness;
 import hbnu.project.ergoutreecrypt.imagecrypt.robust.RobustCarrier;
 
 import java.io.IOException;
@@ -10,15 +11,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 
 /**
- * 把 RS 交织字节写成 8 阶灰度 RGB8 PNG。
+ * 把分级 Reed-Solomon 交织字节写成量化灰度 RGB8 PNG。
  *
- * <p>编码位流每 3 bit 对应一个灰度像素；重建值位于 32 宽量化区间的中心。PNG 本身
- * 保持无损，聊天软件转为 JPEG 后可按亮度区间重新判决。
+ * <p>均衡、增强和极强档分别使用 8、4、2 个等距灰度级。每个重建值位于量化区间中心，
+ * 为 JPEG 引入的亮度偏移保留最大判决余量；极强档还把每个符号复制到 2×2 像素块。
  *
  * @author ErgouTree
  * @since 2026/9/17
@@ -32,7 +34,7 @@ public final class RobustPngWriter {
     private static final byte SRGB_RENDERING_INTENT = 0;
 
     /**
-     * 流式写出抗重编码 PNG。
+     * 按兼容的均衡档流式写出抗重编码 PNG。
      *
      * @param output PNG 输出；本方法不关闭
      * @param width 画布宽度
@@ -45,9 +47,29 @@ public final class RobustPngWriter {
     public void write(final OutputStream output, final int width, final int height,
                       final InputStream logical, final long logicalLength)
             throws IOException, ImageCryptException {
+        write(output, width, height, logical, logicalLength,
+                ImageCryptRobustness.BALANCED);
+    }
+
+    /**
+     * 按指定抗干扰强度流式写出抗重编码 PNG。
+     *
+     * @param output PNG 输出；本方法不关闭
+     * @param width 画布宽度
+     * @param height 画布高度
+     * @param logical 逻辑协议帧；本方法不关闭
+     * @param logicalLength 逻辑帧精确长度
+     * @param profile 抗干扰强度
+     * @throws IOException 底层读写失败
+     * @throws ImageCryptException 画布容量不足或输入长度非法
+     */
+    public void write(final OutputStream output, final int width, final int height,
+                      final InputStream logical, final long logicalLength,
+                      final ImageCryptRobustness profile)
+            throws IOException, ImageCryptException {
         Objects.requireNonNull(output, "output");
         Objects.requireNonNull(logical, "logical");
-        validate(width, height, logicalLength);
+        validate(width, height, logicalLength, profile);
 
         PngChunkWriter chunks = new PngChunkWriter(output);
         chunks.writeSignature();
@@ -58,7 +80,7 @@ public final class RobustPngWriter {
         Deflater deflater = new Deflater(Deflater.BEST_SPEED);
         try {
             DeflaterOutputStream zlib = new DeflaterOutputStream(idat, deflater, 64 * 1024);
-            writePixels(zlib, width, height, logical, logicalLength);
+            writePixels(zlib, width, height, logical, logicalLength, profile);
             zlib.finish();
             idat.finish();
         } finally {
@@ -69,24 +91,35 @@ public final class RobustPngWriter {
     }
 
     /**
-     * 校验画布和逻辑长度。
+     * 校验画布、档位和逻辑长度。
      *
      * @param width 宽度
      * @param height 高度
      * @param logicalLength 逻辑长度
+     * @param profile 抗干扰强度
      * @throws ImageCryptException 参数非法
      */
-    private static void validate(final int width, final int height, final long logicalLength)
+    private static void validate(final int width, final int height, final long logicalLength,
+                                 final ImageCryptRobustness profile)
             throws ImageCryptException {
-        if (width <= 0 || height <= 0 || width > RobustCarrier.MAX_CANVAS_SIDE
-                || height > RobustCarrier.MAX_CANVAS_SIDE) {
+        if (profile == null || !profile.enabled()) {
             throw new ImageCryptException(ErrorKind.INVALID_HEADER,
-                    "抗重编码画布尺寸越界: " + width + "×" + height);
+                    "抗重编码 PNG 必须指定纠错强度");
         }
-        long required = RobustCarrier.groupsFor(logicalLength) * RobustCarrier.GROUP_PIXELS;
-        if ((long) width * height < required) {
+        if (width <= 0 || height <= 0 || width > RobustCarrier.MAX_CANVAS_SIDE
+                || height > RobustCarrier.MAX_CANVAS_SIDE
+                || width % profile.moduleSize() != 0
+                || height % profile.moduleSize() != 0) {
+            throw new ImageCryptException(ErrorKind.INVALID_HEADER,
+                    "抗重编码画布尺寸越界或未按符号块对齐: " + width + "×" + height);
+        }
+        long required = RobustCarrier.groupsFor(logicalLength, profile)
+                * RobustCarrier.symbolsPerGroup(profile);
+        long capacity = (long) (width / profile.moduleSize())
+                * (height / profile.moduleSize());
+        if (capacity < required) {
             throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
-                    "抗重编码画布像素不足: 需要 " + required);
+                    "抗重编码画布符号不足: 需要 " + required + "，实际 " + capacity);
         }
     }
 
@@ -111,28 +144,37 @@ public final class RobustPngWriter {
     }
 
     /**
-     * 写出全部灰度像素和固定中灰 padding。
+     * 写出全部灰度符号块和固定中灰填充。
      *
      * @param zlib zlib 输出
-     * @param width 宽度
-     * @param height 高度
+     * @param width 画布宽度
+     * @param height 画布高度
      * @param logical 逻辑帧
      * @param logicalLength 逻辑长度
+     * @param profile 抗干扰强度
      * @throws IOException 读写失败
      */
     private static void writePixels(final OutputStream zlib, final int width, final int height,
-                                    final InputStream logical, final long logicalLength)
+                                    final InputStream logical, final long logicalLength,
+                                    final ImageCryptRobustness profile)
             throws IOException {
-        try (InputStream encoded = RobustCarrier.encodingStream(logical, logicalLength)) {
+        int moduleSize = profile.moduleSize();
+        int moduleColumns = width / moduleSize;
+        int moduleRows = height / moduleSize;
+        int symbolBits = profile.bitsPerSymbol();
+        int symbolMask = (1 << symbolBits) - 1;
+        int quantizationShift = 8 - symbolBits;
+        try (InputStream encoded = RobustCarrier.encodingStream(logical, logicalLength,
+                profile)) {
             int bitBuffer = 0;
             int bitCount = 0;
             boolean exhausted = false;
             byte[] row = new byte[width * 3];
-            for (int y = 0; y < height; y++) {
+            for (int moduleY = 0; moduleY < moduleRows; moduleY++) {
                 int offset = 0;
-                for (int x = 0; x < width; x++) {
+                for (int moduleX = 0; moduleX < moduleColumns; moduleX++) {
                     int level = 128;
-                    while (!exhausted && bitCount < 3) {
+                    while (!exhausted && bitCount < symbolBits) {
                         int value = encoded.read();
                         if (value < 0) {
                             exhausted = true;
@@ -141,18 +183,25 @@ public final class RobustPngWriter {
                             bitCount += 8;
                         }
                     }
-                    if (bitCount >= 3) {
-                        bitCount -= 3;
-                        int symbol = (bitBuffer >>> bitCount) & 0x07;
-                        bitBuffer = bitCount == 0 ? 0 : bitBuffer & ((1 << bitCount) - 1);
-                        level = symbol * 32 + 16;
+                    if (bitCount >= symbolBits) {
+                        bitCount -= symbolBits;
+                        int symbol = (bitBuffer >>> bitCount) & symbolMask;
+                        bitBuffer = bitCount == 0 ? 0
+                                : bitBuffer & ((1 << bitCount) - 1);
+                        level = (symbol << quantizationShift)
+                                + (1 << (quantizationShift - 1));
                     }
-                    row[offset++] = (byte) level;
-                    row[offset++] = (byte) level;
-                    row[offset++] = (byte) level;
+                    for (int repeatX = 0; repeatX < moduleSize; repeatX++) {
+                        row[offset++] = (byte) level;
+                        row[offset++] = (byte) level;
+                        row[offset++] = (byte) level;
+                    }
                 }
-                zlib.write(PngFilters.NONE);
-                zlib.write(row);
+                for (int repeatY = 0; repeatY < moduleSize; repeatY++) {
+                    zlib.write(PngFilters.NONE);
+                    zlib.write(row);
+                }
+                Arrays.fill(row, (byte) 0);
             }
             if (bitCount != 0 || !exhausted && encoded.read() >= 0) {
                 throw new IOException("抗重编码画布未消费完整编码流");
@@ -168,7 +217,7 @@ public final class RobustPngWriter {
      */
     private static final class ChunkedIdatOutputStream extends OutputStream {
 
-        /** PNG 块 writer。 */
+        /** PNG 块写入器。 */
         private final PngChunkWriter chunks;
 
         /** IDAT 缓冲。 */
@@ -183,7 +232,7 @@ public final class RobustPngWriter {
         /**
          * 创建 IDAT 输出。
          *
-         * @param chunks PNG 块 writer
+         * @param chunks PNG 块写入器
          */
         private ChunkedIdatOutputStream(final PngChunkWriter chunks) {
             this.chunks = chunks;

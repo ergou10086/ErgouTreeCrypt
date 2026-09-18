@@ -71,6 +71,7 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptViewModel
 import hbnu.project.ergoutreecrypt.android.viewmodel.OperationCoordinator
 import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMode
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -175,9 +176,11 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
             TransportProtectionCard(
                 direction = state.direction,
                 errorCorrection = state.errorCorrection,
+                robustness = state.robustness,
                 bestEffort = state.bestEffort,
                 enabled = !running,
                 onErrorCorrection = viewModel::setErrorCorrection,
+                onRobustness = viewModel::setRobustness,
                 onBestEffort = viewModel::setBestEffort
             )
 
@@ -253,18 +256,22 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
  *
  * @param direction 当前操作方向
  * @param errorCorrection 是否启用抗重编码载体
+ * @param robustness 抗重编码强度
  * @param bestEffort 是否允许有损尽力恢复
  * @param enabled 是否允许修改
  * @param onErrorCorrection 纠错选项回调
+ * @param onRobustness 抗干扰强度回调
  * @param onBestEffort 尽力恢复选项回调
  */
 @Composable
 private fun TransportProtectionCard(
     direction: ImageCryptDirection,
     errorCorrection: Boolean,
+    robustness: ImageCryptRobustness,
     bestEffort: Boolean,
     enabled: Boolean,
     onErrorCorrection: (Boolean) -> Unit,
+    onRobustness: (ImageCryptRobustness) -> Unit,
     onBestEffort: (Boolean) -> Unit
 ) {
     val encrypting = direction == ImageCryptDirection.ENCRYPT
@@ -293,6 +300,48 @@ private fun TransportProtectionCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (encrypting && errorCorrection) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val profiles = listOf(
+                    Triple(
+                        ImageCryptRobustness.BALANCED,
+                        "均衡（兼容旧版）",
+                        "约 800 KiB；适合常见高质量 JPEG 重编码"
+                    ),
+                    Triple(
+                        ImageCryptRobustness.STRONG,
+                        "增强",
+                        "约 380 KiB；适合更强压缩和轻微局部损坏"
+                    ),
+                    Triple(
+                        ImageCryptRobustness.EXTREME,
+                        "极强",
+                        "约 45 KiB；支持更强压缩、局部损坏和轻微缩放"
+                    )
+                )
+                profiles.forEach { (profile, title, hint) ->
+                    FilterChip(
+                        selected = robustness == profile,
+                        onClick = { onRobustness(profile) },
+                        label = {
+                            Column {
+                                Text(title)
+                                Text(
+                                    hint,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        },
+                        enabled = enabled,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Text(
+                    "强度越高，原图越可能先转为较低画质的 JPEG 恢复副本。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
     }
 }

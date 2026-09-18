@@ -6,6 +6,7 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptException;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptFrame;
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProtocol;
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,43 +15,54 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
- * 抗图片重编码载体的前向纠错与灰度符号编解码器。
+ * 抗图片重编码载体的分级前向纠错与灰度符号编解码器。
  *
- * <p>逻辑帧按 128 字节分块，经 RS(192,128) 增加 64 字节校验。每 16 个码字按列交织，
- * 再把编码位流按 3 bit 分组，以 8 阶灰度表示。灰度只承载亮度信息，避免 JPEG
- * 4:2:0 色度抽样破坏数据；交织则把局部污损分散到多个 Reed-Solomon 码字。
+ * <p>载体采用“灰度调制或像素块重复 + Reed-Solomon + 交织”的串接结构。均衡档保持
+ * RS(192,128) 与 8 级灰度，以兼容已有产物；增强档和极强档使用 RS(192,96)，并依次
+ * 降为 4 级与 2 级灰度。交织会把连续的像素污染分散到多个码字，极强档还通过 2×2
+ * 重复块和归一化采样抵抗更强的压缩以及轻微等比例缩放。
  *
  * @author ErgouTree
  * @since 2026/9/17
  */
 public final class RobustCarrier {
 
-    /** 单个 RS 码字的数据字节数。 */
-    public static final int DATA_BYTES = 128;
+    /** 兼容均衡档单个 RS 码字的数据字节数。 */
+    public static final int DATA_BYTES = ImageCryptRobustness.BALANCED.dataBytes();
 
-    /** 单个 RS 码字的编码字节数。 */
-    public static final int CODE_BYTES = 192;
+    /** 兼容均衡档单个 RS 码字的编码字节数。 */
+    public static final int CODE_BYTES = ImageCryptRobustness.BALANCED.codeBytes();
 
-    /** 一个交织组包含的码字数。 */
-    public static final int INTERLEAVE = 16;
+    /** 兼容均衡档一个交织组包含的码字数。 */
+    public static final int INTERLEAVE = ImageCryptRobustness.BALANCED.interleave();
 
-    /** 一个交织组承载的逻辑字节数。 */
+    /** 兼容均衡档一个交织组承载的逻辑字节数。 */
     public static final int GROUP_DATA_BYTES = DATA_BYTES * INTERLEAVE;
 
-    /** 一个交织组占用的灰度像素数。 */
-    public static final int GROUP_PIXELS = CODE_BYTES * INTERLEAVE * 8 / 3;
+    /** 兼容均衡档一个交织组占用的灰度像素数。 */
+    public static final int GROUP_PIXELS = CODE_BYTES * INTERLEAVE * 8
+            / ImageCryptRobustness.BALANCED.bitsPerSymbol();
 
     /** 为避免常见聊天软件缩放而采用的最大画布边长。 */
     public static final int MAX_CANVAS_SIDE = 1920;
 
-    /** 最大可承载的逻辑帧长度。 */
-    public static final long MAX_LOGICAL_BYTES =
-            (long) (MAX_CANVAS_SIDE * MAX_CANVAS_SIDE / GROUP_PIXELS) * GROUP_DATA_BYTES;
+    /** 兼容均衡档最大可承载的逻辑帧长度。 */
+    public static final long MAX_LOGICAL_BYTES = maximumLogicalBytes(
+            ImageCryptRobustness.BALANCED);
 
-    /** RS(192,128) 编解码器。 */
-    private static final Fec FEC = Fec.newFec(DATA_BYTES, CODE_BYTES);
+    /** 自动探测时按兼容性和计算成本排列的强度顺序。 */
+    private static final ImageCryptRobustness[] DECODING_PROFILES = {
+            ImageCryptRobustness.BALANCED,
+            ImageCryptRobustness.STRONG,
+            ImageCryptRobustness.EXTREME
+    };
+
+    /** 每个抗干扰档位对应的 Reed-Solomon 编解码器。 */
+    private static final Map<ImageCryptRobustness, Fec> FEC_BY_PROFILE = createFecProfiles();
 
     /** 桌面图像解码桥的类名。 */
     private static final String DESKTOP_DECODER =
@@ -61,83 +73,112 @@ public final class RobustCarrier {
     }
 
     /**
-     * 根据逻辑帧长度选择不超过 1920×1920 的 JPEG 友好画布。
+     * 根据均衡档逻辑帧长度选择画布。
      *
      * @param logicalLength 逻辑帧字节数
-     * @return 宽、高二元数组；两边均按 16 像素对齐
-     * @throws ImageCryptException 载荷超过纠错载体上限
+     * @return 宽、高二元数组
+     * @throws ImageCryptException 载荷超过均衡档上限
      */
     public static int[] chooseCanvas(final long logicalLength) throws ImageCryptException {
-        if (logicalLength <= 0 || logicalLength > MAX_LOGICAL_BYTES) {
-            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
-                    "抗重编码载体最多承载 " + MAX_LOGICAL_BYTES + " 字节，实际需要 "
-                            + logicalLength + " 字节");
-        }
-        long groups = groupsFor(logicalLength);
-        long pixels = groups * GROUP_PIXELS;
-        int width = align16((int) Math.ceil(Math.sqrt((double) pixels)));
-        if (width > MAX_CANVAS_SIDE) {
-            width = MAX_CANVAS_SIDE;
-        }
-        int height = align16((int) ((pixels + width - 1L) / width));
-        if (height > MAX_CANVAS_SIDE) {
-            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
-                    "抗重编码载体画布超过 " + MAX_CANVAS_SIDE + "×" + MAX_CANVAS_SIDE);
-        }
-        return new int[]{width, height};
+        return chooseCanvas(logicalLength, ImageCryptRobustness.BALANCED);
     }
 
     /**
-     * 把逻辑帧编码为交织后的 RS 字节流。
+     * 根据逻辑帧长度和抗干扰强度选择画布。
      *
-     * <p>返回流的每个字节仍需由 PNG writer 拆成两个 16 阶灰度像素。
+     * <p>极强档固定使用 1920×1920 画布，以便接收端在图片被等比例缩放后仍能映射回统一
+     * 的符号网格；其余档位选择不超过该尺寸的近似方形画布。
      *
-     * @param logical       逻辑帧输入；生命周期由调用方管理
+     * @param logicalLength 逻辑帧字节数
+     * @param profile 抗干扰强度
+     * @return 宽、高二元数组；两边均按 16 像素对齐
+     * @throws ImageCryptException 载荷超过所选档位上限
+     */
+    public static int[] chooseCanvas(final long logicalLength,
+                                     final ImageCryptRobustness profile)
+            throws ImageCryptException {
+        requireProfile(profile);
+        long maximum = maximumLogicalBytes(profile);
+        if (logicalLength <= 0 || logicalLength > maximum) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    profile + " 纠错载体最多承载 " + maximum + " 字节，实际需要 "
+                            + logicalLength + " 字节");
+        }
+        if (profile == ImageCryptRobustness.EXTREME) {
+            return new int[]{MAX_CANVAS_SIDE, MAX_CANVAS_SIDE};
+        }
+        long modules = groupsFor(logicalLength, profile) * symbolsPerGroup(profile);
+        int widthModules = align16((int) Math.ceil(Math.sqrt((double) modules)));
+        int maximumModules = MAX_CANVAS_SIDE / profile.moduleSize();
+        if (widthModules > maximumModules) {
+            widthModules = maximumModules;
+        }
+        int heightModules = align16((int) ((modules + widthModules - 1L) / widthModules));
+        if (heightModules > maximumModules) {
+            throw new ImageCryptException(ErrorKind.CAPACITY_INSUFFICIENT,
+                    profile + " 纠错载体画布超过 " + MAX_CANVAS_SIDE + "×"
+                            + MAX_CANVAS_SIDE);
+        }
+        return new int[]{widthModules * profile.moduleSize(),
+                heightModules * profile.moduleSize()};
+    }
+
+    /**
+     * 把逻辑帧按均衡档编码为交织后的 Reed-Solomon 字节流。
+     *
+     * @param logical 逻辑帧输入；生命周期由调用方管理
      * @param logicalLength 逻辑帧精确长度
      * @return 编码字节输入流
      */
     public static InputStream encodingStream(final InputStream logical,
                                              final long logicalLength) {
-        return new EncodingInputStream(logical, logicalLength);
+        return encodingStream(logical, logicalLength, ImageCryptRobustness.BALANCED);
     }
 
     /**
-     * 从 PNG 或 JPEG 纠错载体读取外层协议头。
+     * 把逻辑帧按指定强度编码为交织后的 Reed-Solomon 字节流。
+     *
+     * @param logical 逻辑帧输入；生命周期由调用方管理
+     * @param logicalLength 逻辑帧精确长度
+     * @param profile 抗干扰强度
+     * @return 编码字节输入流
+     */
+    public static InputStream encodingStream(final InputStream logical,
+                                             final long logicalLength,
+                                             final ImageCryptRobustness profile) {
+        requireProfile(profile);
+        return new EncodingInputStream(logical, logicalLength, profile);
+    }
+
+    /**
+     * 从 PNG 或 JPEG 纠错载体自动识别强度并读取外层协议头。
      *
      * @param input 载体路径
      * @return 已纠错的 EGTC-IMG 外层头
-     * @throws ImageCryptException 不是纠错载体或头部无法纠正
-     * @throws IOException 图像读取失败
+     * @throws ImageCryptException 不是支持的纠错载体或头部无法纠正
+     * @throws IOException 图片读取失败
      */
     public static ImageCryptFrame peekFrame(final Path input)
             throws ImageCryptException, IOException {
-        RobustRaster raster = decodeRaster(input);
-        byte[] firstGroup = decodeGroup(raster, 0).data();
-        if (firstGroup.length < ImageCryptProtocol.OUTER_HEADER_LENGTH) {
-            throw invalid("纠错载体首组不足以容纳协议头");
-        }
-        ImageCryptFrame frame = ImageCryptFrame.fromBytes(Arrays.copyOf(firstGroup,
-                ImageCryptProtocol.OUTER_HEADER_LENGTH));
-        validateCanvas(frame, raster);
-        return frame;
+        return detectCarrier(input).frame();
     }
 
     /**
-     * 解码完整纠错载体并把逻辑帧写入接收器。
+     * 自动识别强度、解码完整纠错载体并把逻辑帧写入接收器。
      *
      * @param input 载体路径
      * @param output 逻辑帧接收器；生命周期由调用方管理
-     * @return true 表示至少一个 RS 码字超过纠错能力并使用了系统码尽力恢复
+     * @return true 表示至少一个 RS 码字超出纠错能力并使用了系统码尽力恢复
      * @throws ImageCryptException 结构或长度非法
-     * @throws IOException 图像读取或接收器写入失败
+     * @throws IOException 图片读取或接收器写入失败
      */
     public static boolean readFrame(final Path input, final OutputStream output)
             throws ImageCryptException, IOException {
-        RobustRaster raster = decodeRaster(input);
-        GroupResult first = decodeGroup(raster, 0);
-        ImageCryptFrame frame = ImageCryptFrame.fromBytes(Arrays.copyOf(first.data(),
-                ImageCryptProtocol.OUTER_HEADER_LENGTH));
-        validateCanvas(frame, raster);
+        DecodedCarrier carrier = detectCarrier(input);
+        RobustRaster raster = carrier.raster();
+        ImageCryptRobustness profile = carrier.profile();
+        GroupResult first = carrier.firstGroup();
+        ImageCryptFrame frame = carrier.frame();
         long logicalLength;
         try {
             logicalLength = Math.addExact((long) ImageCryptProtocol.OUTER_HEADER_LENGTH,
@@ -145,17 +186,18 @@ public final class RobustCarrier {
             logicalLength = Math.addExact(logicalLength,
                     (long) ImageCryptProtocol.AUTH_TAG_LENGTH);
         } catch (ArithmeticException e) {
-            throw new ImageCryptException(ErrorKind.INVALID_HEADER, "纠错载体帧长度溢出", e);
+            throw new ImageCryptException(ErrorKind.INVALID_HEADER,
+                    "纠错载体帧长度溢出", e);
         }
-        long groups = groupsFor(logicalLength);
-        if (groups * GROUP_PIXELS > raster.pixelCount()) {
-            throw invalid("纠错载体像素不足，图片可能被裁剪或缩放");
+        long groups = groupsFor(logicalLength, profile);
+        if (groups * symbolsPerGroup(profile) > availableModules(raster, profile)) {
+            throw invalid("纠错载体像素不足，图片可能被裁剪或过度缩放");
         }
 
         long remaining = logicalLength;
         boolean corrupted = false;
         for (long group = 0; group < groups; group++) {
-            GroupResult result = group == 0 ? first : decodeGroup(raster, group);
+            GroupResult result = group == 0 ? first : decodeGroup(raster, group, profile);
             int count = (int) Math.min((long) result.data().length, remaining);
             output.write(result.data(), 0, count);
             remaining -= count;
@@ -168,23 +210,91 @@ public final class RobustCarrier {
     }
 
     /**
-     * 返回指定逻辑长度需要的完整交织组数。
+     * 返回均衡档指定逻辑长度需要的完整交织组数。
      *
      * @param logicalLength 逻辑帧长度
      * @return 向上取整后的组数
      */
     public static long groupsFor(final long logicalLength) {
-        return (logicalLength + GROUP_DATA_BYTES - 1L) / GROUP_DATA_BYTES;
+        return groupsFor(logicalLength, ImageCryptRobustness.BALANCED);
     }
 
     /**
-     * 将数值向上对齐到 16 的整数倍。
+     * 返回指定档位和逻辑长度需要的完整交织组数。
      *
-     * @param value 正整数
-     * @return 对齐后的值
+     * @param logicalLength 逻辑帧长度
+     * @param profile 抗干扰强度
+     * @return 向上取整后的组数
      */
-    private static int align16(final int value) {
-        return (value + 15) & ~15;
+    public static long groupsFor(final long logicalLength,
+                                 final ImageCryptRobustness profile) {
+        long groupBytes = groupDataBytes(profile);
+        return (logicalLength + groupBytes - 1L) / groupBytes;
+    }
+
+    /**
+     * 返回指定档位一个交织组的灰度符号数。
+     *
+     * @param profile 抗干扰强度
+     * @return 灰度符号数
+     */
+    public static long symbolsPerGroup(final ImageCryptRobustness profile) {
+        return (long) profile.codeBytes() * profile.interleave() * 8L
+                / profile.bitsPerSymbol();
+    }
+
+    /**
+     * 返回指定档位的最大逻辑帧容量。
+     *
+     * @param profile 抗干扰强度
+     * @return 最大逻辑帧字节数
+     */
+    public static long maximumLogicalBytes(final ImageCryptRobustness profile) {
+        requireProfile(profile);
+        long sideModules = MAX_CANVAS_SIDE / profile.moduleSize();
+        long groups = sideModules * sideModules / symbolsPerGroup(profile);
+        return groups * groupDataBytes(profile);
+    }
+
+    /**
+     * 创建各纠错档位的 Reed-Solomon 编解码器。
+     *
+     * @return 档位到编解码器的映射
+     */
+    private static Map<ImageCryptRobustness, Fec> createFecProfiles() {
+        Map<ImageCryptRobustness, Fec> result = new EnumMap<>(ImageCryptRobustness.class);
+        for (ImageCryptRobustness profile : DECODING_PROFILES) {
+            result.put(profile, Fec.newFec(profile.dataBytes(), profile.codeBytes()));
+        }
+        return result;
+    }
+
+    /**
+     * 自动探测载体采用的抗干扰强度。
+     *
+     * @param input 图片路径
+     * @return 已识别并解出首组的载体
+     * @throws ImageCryptException 所有支持档位均无法恢复有效协议头
+     * @throws IOException 图片读取失败
+     */
+    private static DecodedCarrier detectCarrier(final Path input)
+            throws ImageCryptException, IOException {
+        RobustRaster raster = decodeRaster(input);
+        for (ImageCryptRobustness profile : DECODING_PROFILES) {
+            try {
+                GroupResult first = decodeGroup(raster, 0, profile);
+                if (first.data().length < ImageCryptProtocol.OUTER_HEADER_LENGTH) {
+                    continue;
+                }
+                ImageCryptFrame frame = ImageCryptFrame.fromBytes(Arrays.copyOf(first.data(),
+                        ImageCryptProtocol.OUTER_HEADER_LENGTH));
+                validateCanvas(frame, raster, profile);
+                return new DecodedCarrier(raster, profile, frame, first);
+            } catch (ImageCryptException | RuntimeException ignored) {
+                // 协议头的魔数与 CRC 共同承担无歧义的档位识别。
+            }
+        }
+        throw invalid("图片不是受支持的纠错载体，或协议头损坏程度超过纠错能力");
     }
 
     /**
@@ -222,60 +332,175 @@ public final class RobustCarrier {
      *
      * @param raster 亮度栅格
      * @param groupIndex 组序号
-     * @return 2048 字节逻辑数据及超限错误标志
-     * @throws ImageCryptException 像素不足
+     * @param profile 抗干扰强度
+     * @return 逻辑数据及超限错误标志
+     * @throws ImageCryptException 灰度符号不足
      */
-    private static GroupResult decodeGroup(final RobustRaster raster, final long groupIndex)
+    private static GroupResult decodeGroup(final RobustRaster raster, final long groupIndex,
+                                           final ImageCryptRobustness profile)
             throws ImageCryptException {
-        long firstPixel = groupIndex * GROUP_PIXELS;
-        if (firstPixel < 0 || firstPixel + GROUP_PIXELS > raster.pixelCount()) {
+        long symbolsPerGroup = symbolsPerGroup(profile);
+        long firstSymbol = groupIndex * symbolsPerGroup;
+        if (firstSymbol < 0 || firstSymbol + symbolsPerGroup
+                > availableModules(raster, profile)) {
             throw invalid("纠错载体缺少第 " + groupIndex + " 个交织组");
         }
-        byte[] encoded = new byte[CODE_BYTES * INTERLEAVE];
-        long pixel = firstPixel;
+        int encodedLength = profile.codeBytes() * profile.interleave();
+        byte[] encoded = new byte[encodedLength];
+        long symbolIndex = firstSymbol;
         int bitBuffer = 0;
         int bitCount = 0;
         int encodedCursor = 0;
+        int symbolBits = profile.bitsPerSymbol();
+        int quantizationShift = 8 - symbolBits;
+        int symbolMask = (1 << symbolBits) - 1;
         while (encodedCursor < encoded.length) {
-            int symbol = raster.luminanceAt(pixel++) >>> 5;
-            bitBuffer = (bitBuffer << 3) | symbol;
-            bitCount += 3;
+            int symbol = sampleLuminance(raster, symbolIndex++, profile)
+                    >>> quantizationShift;
+            symbol = Math.min(symbol, symbolMask);
+            bitBuffer = (bitBuffer << symbolBits) | symbol;
+            bitCount += symbolBits;
             if (bitCount >= 8) {
                 bitCount -= 8;
                 encoded[encodedCursor++] = (byte) (bitBuffer >>> bitCount);
                 bitBuffer = bitCount == 0 ? 0 : bitBuffer & ((1 << bitCount) - 1);
             }
         }
-        byte[][] codewords = new byte[INTERLEAVE][CODE_BYTES];
+
+        byte[][] codewords = new byte[profile.interleave()][profile.codeBytes()];
         encodedCursor = 0;
-        for (int column = 0; column < CODE_BYTES; column++) {
-            for (int block = 0; block < INTERLEAVE; block++) {
+        for (int column = 0; column < profile.codeBytes(); column++) {
+            for (int block = 0; block < profile.interleave(); block++) {
                 codewords[block][column] = encoded[encodedCursor++];
             }
         }
 
-        byte[] decoded = new byte[GROUP_DATA_BYTES];
+        byte[] decoded = new byte[groupDataBytes(profile)];
         boolean corrupted = false;
-        for (int block = 0; block < INTERLEAVE; block++) {
-            ReedSolomon.DecodeResult result = ReedSolomon.decode(FEC, codewords[block], false);
-            System.arraycopy(result.data, 0, decoded, block * DATA_BYTES, DATA_BYTES);
+        Fec fec = FEC_BY_PROFILE.get(profile);
+        for (int block = 0; block < profile.interleave(); block++) {
+            ReedSolomon.DecodeResult result = ReedSolomon.decode(fec, codewords[block], false);
+            System.arraycopy(result.data, 0, decoded,
+                    block * profile.dataBytes(), profile.dataBytes());
             corrupted |= result.corrupted;
         }
         return new GroupResult(decoded, corrupted);
     }
 
     /**
-     * 校验协议头画布与实际解码图片一致。
+     * 取得一个符号块的平均亮度。
+     *
+     * <p>极强档把固定 960×960 符号网格按比例投影到实际图像，因此经过等比例缩小后仍可
+     * 解码。其余档位每个像素就是一个符号，保持与已有产物完全兼容。
+     *
+     * @param raster 亮度栅格
+     * @param symbolIndex 符号线性序号
+     * @param profile 抗干扰强度
+     * @return 0 至 255 的平均亮度
+     */
+    private static int sampleLuminance(final RobustRaster raster, final long symbolIndex,
+                                       final ImageCryptRobustness profile) {
+        if (profile.moduleSize() == 1) {
+            return raster.luminanceAt(symbolIndex);
+        }
+        int gridWidth = MAX_CANVAS_SIDE / profile.moduleSize();
+        int gridHeight = gridWidth;
+        int moduleX = (int) (symbolIndex % gridWidth);
+        int moduleY = (int) (symbolIndex / gridWidth);
+        int x0 = moduleX * raster.width() / gridWidth;
+        int x1 = (moduleX + 1) * raster.width() / gridWidth;
+        int y0 = moduleY * raster.height() / gridHeight;
+        int y1 = (moduleY + 1) * raster.height() / gridHeight;
+        x1 = Math.max(x0 + 1, x1);
+        y1 = Math.max(y0 + 1, y1);
+        long sum = 0;
+        int count = 0;
+        for (int y = y0; y < y1; y++) {
+            long row = (long) y * raster.width();
+            for (int x = x0; x < x1; x++) {
+                sum += raster.luminanceAt(row + x);
+                count++;
+            }
+        }
+        return (int) ((sum + count / 2L) / count);
+    }
+
+    /**
+     * 校验协议头画布与实际解码图片的关系。
      *
      * @param frame 协议头
      * @param raster 实际图片
-     * @throws ImageCryptException 尺寸不一致
+     * @param profile 已识别的抗干扰强度
+     * @throws ImageCryptException 尺寸不满足该档位约束
      */
-    private static void validateCanvas(final ImageCryptFrame frame, final RobustRaster raster)
+    private static void validateCanvas(final ImageCryptFrame frame, final RobustRaster raster,
+                                       final ImageCryptRobustness profile)
             throws ImageCryptException {
-        if (frame.canvasWidth() != raster.width() || frame.canvasHeight() != raster.height()) {
-            throw invalid("纠错载体尺寸已改变，期望 " + frame.canvasWidth() + "×"
-                    + frame.canvasHeight() + "，实际 " + raster.width() + "×" + raster.height());
+        if (profile != ImageCryptRobustness.EXTREME) {
+            if (frame.canvasWidth() != raster.width()
+                    || frame.canvasHeight() != raster.height()) {
+                throw invalid("纠错载体尺寸已改变，期望 " + frame.canvasWidth() + "×"
+                        + frame.canvasHeight() + "，实际 " + raster.width() + "×"
+                        + raster.height());
+            }
+            return;
+        }
+        int minimumSide = MAX_CANVAS_SIDE / profile.moduleSize();
+        double aspectError = Math.abs((double) raster.width() / raster.height() - 1.0);
+        if (frame.canvasWidth() != MAX_CANVAS_SIDE
+                || frame.canvasHeight() != MAX_CANVAS_SIDE
+                || raster.width() < minimumSide || raster.height() < minimumSide
+                || aspectError > 0.02) {
+            throw invalid("极强纠错载体必须保持近似正方形，且不得缩小到 "
+                    + minimumSide + " 像素以下");
+        }
+    }
+
+    /**
+     * 返回实际栅格可表示的符号块数量。
+     *
+     * @param raster 亮度栅格
+     * @param profile 抗干扰强度
+     * @return 可用符号块数
+     */
+    private static long availableModules(final RobustRaster raster,
+                                         final ImageCryptRobustness profile) {
+        if (profile == ImageCryptRobustness.EXTREME) {
+            long side = MAX_CANVAS_SIDE / profile.moduleSize();
+            return side * side;
+        }
+        return raster.pixelCount();
+    }
+
+    /**
+     * 返回一个交织组承载的逻辑字节数。
+     *
+     * @param profile 抗干扰强度
+     * @return 逻辑字节数
+     */
+    private static int groupDataBytes(final ImageCryptRobustness profile) {
+        return profile.dataBytes() * profile.interleave();
+    }
+
+    /**
+     * 将数值向上对齐到 16 的整数倍。
+     *
+     * @param value 正整数
+     * @return 对齐后的值
+     */
+    private static int align16(final int value) {
+        return (value + 15) & ~15;
+    }
+
+    /**
+     * 拒绝未启用纠错载体的档位。
+     *
+     * @param profile 待校验档位
+     * @throws IllegalArgumentException 档位为空或为 NONE
+     */
+    private static void requireProfile(final ImageCryptRobustness profile) {
+        if (profile == null || !profile.enabled()) {
+            throw new IllegalArgumentException("抗重编码载体需要启用纠错强度");
         }
     }
 
@@ -293,9 +518,21 @@ public final class RobustCarrier {
      * 单个交织组的解码结果。
      *
      * @param data 逻辑数据
-     * @param corrupted 是否存在超过 RS 能力的码字
+     * @param corrupted 是否存在超出 RS 能力的码字
      */
     private record GroupResult(byte[] data, boolean corrupted) {
+    }
+
+    /**
+     * 已识别档位并解码首组的载体。
+     *
+     * @param raster 亮度栅格
+     * @param profile 抗干扰强度
+     * @param frame 外层协议头
+     * @param firstGroup 已解码首组
+     */
+    private record DecodedCarrier(RobustRaster raster, ImageCryptRobustness profile,
+                                  ImageCryptFrame frame, GroupResult firstGroup) {
     }
 
     /**
@@ -309,16 +546,22 @@ public final class RobustCarrier {
         /** 逻辑输入。 */
         private final InputStream logical;
 
+        /** 当前抗干扰强度。 */
+        private final ImageCryptRobustness profile;
+
+        /** 当前 Reed-Solomon 编解码器。 */
+        private final Fec fec;
+
         /** 尚未读取的逻辑字节数。 */
         private long remaining;
 
         /** 当前交织组。 */
-        private final byte[] encoded = new byte[CODE_BYTES * INTERLEAVE];
+        private final byte[] encoded;
 
         /** 当前交织组读取位置。 */
-        private int cursor = encoded.length;
+        private int cursor;
 
-        /** 是否已验证逻辑输入末尾。 */
+        /** 是否已经验证逻辑输入末尾。 */
         private boolean finished;
 
         /**
@@ -326,13 +569,19 @@ public final class RobustCarrier {
          *
          * @param logical 逻辑输入
          * @param logicalLength 精确长度
+         * @param profile 抗干扰强度
          */
-        private EncodingInputStream(final InputStream logical, final long logicalLength) {
+        private EncodingInputStream(final InputStream logical, final long logicalLength,
+                                    final ImageCryptRobustness profile) {
             if (logicalLength <= 0) {
                 throw new IllegalArgumentException("逻辑帧长度必须为正");
             }
             this.logical = logical;
             this.remaining = logicalLength;
+            this.profile = profile;
+            this.fec = FEC_BY_PROFILE.get(profile);
+            this.encoded = new byte[profile.codeBytes() * profile.interleave()];
+            this.cursor = encoded.length;
         }
 
         /**
@@ -365,17 +614,17 @@ public final class RobustCarrier {
                 }
                 return false;
             }
-            byte[][] codewords = new byte[INTERLEAVE][];
-            for (int block = 0; block < INTERLEAVE; block++) {
-                byte[] data = new byte[DATA_BYTES];
-                int wanted = (int) Math.min((long) DATA_BYTES, remaining);
+            byte[][] codewords = new byte[profile.interleave()][];
+            for (int block = 0; block < profile.interleave(); block++) {
+                byte[] data = new byte[profile.dataBytes()];
+                int wanted = (int) Math.min((long) profile.dataBytes(), remaining);
                 readFully(data, wanted);
                 remaining -= wanted;
-                codewords[block] = ReedSolomon.encode(FEC, data);
+                codewords[block] = ReedSolomon.encode(fec, data);
             }
             int output = 0;
-            for (int column = 0; column < CODE_BYTES; column++) {
-                for (int block = 0; block < INTERLEAVE; block++) {
+            for (int column = 0; column < profile.codeBytes(); column++) {
+                for (int block = 0; block < profile.interleave(); block++) {
                     encoded[output++] = codewords[block][column];
                 }
             }

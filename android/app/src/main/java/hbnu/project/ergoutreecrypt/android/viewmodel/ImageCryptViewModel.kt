@@ -28,6 +28,7 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptOptions
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptPassword
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptPhase
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptProgress
+import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptRobustness
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageProbe
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.exception.CancelledException
@@ -80,6 +81,7 @@ data class ImageCryptResultInfo(
  * @property password 密码输入
  * @property confirmPassword 加密时的密码确认
  * @property errorCorrection 是否使用抗图片重编码纠错载体
+ * @property robustness 抗图片重编码强度
  * @property bestEffort 是否允许提交认证失败的有损恢复结果
  * @property inputName 输入显示名
  * @property inputBytes 输入字节数
@@ -102,6 +104,7 @@ data class ImageCryptUiState(
     val password: String = "",
     val confirmPassword: String = "",
     val errorCorrection: Boolean = false,
+    val robustness: ImageCryptRobustness = ImageCryptRobustness.BALANCED,
     val bestEffort: Boolean = false,
     val inputName: String? = null,
     val inputBytes: Long = 0L,
@@ -234,6 +237,17 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
     fun setErrorCorrection(enabled: Boolean) {
         if (!isRunning()) {
             _uiState.update { it.copy(errorCorrection = enabled, formError = null) }
+        }
+    }
+
+    /**
+     * 设置抗图片重编码纠错强度。
+     *
+     * @param robustness 均衡、增强或极强档
+     */
+    fun setRobustness(robustness: ImageCryptRobustness) {
+        if (!isRunning() && robustness.enabled()) {
+            _uiState.update { it.copy(robustness = robustness, formError = null) }
         }
     }
 
@@ -528,7 +542,15 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                     input.file.toPath(),
                     resultPath,
                     passwordBytes,
-                    ImageCryptOptions(snapshot.mode, false, snapshot.errorCorrection),
+                    ImageCryptOptions(
+                        snapshot.mode,
+                        false,
+                        if (snapshot.errorCorrection) {
+                            snapshot.robustness
+                        } else {
+                            ImageCryptRobustness.NONE
+                        }
+                    ),
                     progress
                 )
             } else {

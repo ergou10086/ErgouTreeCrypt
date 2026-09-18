@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.ProgressBar?>
@@ -96,6 +97,12 @@
                         <CheckBox fx:id="imageErrorCorrectionCheck" styleClass="check"/>
                         <Label fx:id="imageErrorCorrectionHint" styleClass="field-hint"
                                wrapText="true"/>
+                        <VBox fx:id="imageRobustnessBox" spacing="6"
+                              managed="false" visible="false">
+                            <ComboBox fx:id="imageRobustnessCombo" maxWidth="Infinity"/>
+                            <Label fx:id="imageRobustnessHint" styleClass="field-hint"
+                                   wrapText="true"/>
+                        </VBox>
                         <CheckBox fx:id="imageBestEffortCheck" styleClass="check"
                                   managed="false" visible="false"/>
                         <Label fx:id="imageBestEffortHint" styleClass="warning-text"

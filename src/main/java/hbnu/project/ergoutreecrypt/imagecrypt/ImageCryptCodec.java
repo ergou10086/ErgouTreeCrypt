@@ -112,13 +112,6 @@ public final class ImageCryptCodec {
      */
     private static final int MANIFEST_LENGTH_FIELD_END = 16;
 
-    /**
-     * 纠错模式中保留原文件字节的安全上限。
-     *
-     * <p>为协议头、认证标签、清单与交织组取整预留约 128 KiB；超过后生成 JPEG 恢复副本。
-     */
-    private static final long ROBUST_SOURCE_BYTES = 800_000L;
-
     /** 桌面大图 JPEG 转码桥。 */
     private static final String ROBUST_TRANSCODER =
             "hbnu.project.ergoutreecrypt.imagecrypt.robust.DesktopRobustPayloadTranscoder";
@@ -221,9 +214,10 @@ public final class ImageCryptCodec {
             Path payloadSource = source;
             ImageProbe.Result payloadProbe = probe;
             String payloadName = source.getFileName().toString();
-            if (effectiveOptions.errorCorrection() && sourceLength > ROBUST_SOURCE_BYTES) {
+            long robustSourceLimit = effectiveOptions.robustness().sourceBytesLimit();
+            if (effectiveOptions.errorCorrection() && sourceLength > robustSourceLimit) {
                 payloadTempFile = createTempFile(target.getParent());
-                transcodeRobustPayload(source, payloadTempFile, ROBUST_SOURCE_BYTES);
+                transcodeRobustPayload(source, payloadTempFile, robustSourceLimit);
                 payloadSource = payloadTempFile;
                 payloadProbe = ImageProbe.probe(payloadSource);
                 if (!payloadProbe.recognized() || payloadProbe.format() != ImageFormat.JPEG) {
@@ -255,7 +249,8 @@ public final class ImageCryptCodec {
             }
             int[] canvas;
             if (effectiveOptions.errorCorrection()) {
-                canvas = RobustCarrier.chooseCanvas(logicalLength);
+                canvas = RobustCarrier.chooseCanvas(logicalLength,
+                        effectiveOptions.robustness());
             } else {
                 long requiredPixels = ImageCryptProtocol.requiredPixels(innerPlainLength);
                 if (requiredPixels <= 0) {
@@ -301,7 +296,7 @@ public final class ImageCryptCodec {
             Mac mac = keys.beginAuthTag(frame.authenticationPrefixBytes(), innerPlainLength);
             commitLogicalFrame(payloadSource, tempFile, descriptor, headerBytes, innerPlainLength,
                     canvas, cipher, mac, listener, logicalLength,
-                    effectiveOptions.errorCorrection());
+                    effectiveOptions.robustness());
             commit(tempFile, target, effectiveOptions.overwriteExisting());
             committed = true;
             listener.onPhase(ImageCryptPhase.DONE);
@@ -335,7 +330,7 @@ public final class ImageCryptCodec {
      * @param mac             已喂入认证前缀的 MAC
      * @param listener        进度与取消回调
      * @param logicalLength   逻辑帧总长度
-     * @param errorCorrection 是否写为抗重编码纠错载体
+     * @param robustness      抗重编码纠错强度；NONE 表示普通 RGB 载体
      * @throws ImageCryptException 载体格式、长度或认证标签构造失败
      * @throws CancelledException  用户取消
      * @throws IOException         读写失败
@@ -346,7 +341,7 @@ public final class ImageCryptCodec {
                                            final XChaCha20 cipher, final Mac mac,
                                            final ImageCryptProgress listener,
                                            final long logicalLength,
-                                           final boolean errorCorrection)
+                                           final ImageCryptRobustness robustness)
             throws ImageCryptException, CancelledException, IOException {
         try (InputStream plaintext = new SequenceInputStream(
                 new ByteArrayInputStream(descriptor), Files.newInputStream(source));
@@ -354,9 +349,9 @@ public final class ImageCryptCodec {
                      innerPlainLength, listener);
              OutputStream rawOutput = Files.newOutputStream(tempFile,
                      StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-            if (errorCorrection) {
+            if (robustness.enabled()) {
                 new RobustPngWriter().write(rawOutput, canvas[0], canvas[1], logical,
-                        logicalLength);
+                        logicalLength, robustness);
             } else {
                 new PixelPngWriter().write(rawOutput, canvas[0], canvas[1], logical,
                         logicalLength);

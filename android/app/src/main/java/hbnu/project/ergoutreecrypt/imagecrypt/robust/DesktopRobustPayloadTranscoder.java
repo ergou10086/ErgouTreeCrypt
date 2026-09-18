@@ -23,7 +23,10 @@ import java.nio.file.StandardOpenOption;
 public final class DesktopRobustPayloadTranscoder {
 
     /** JPEG 尝试质量百分比。 */
-    private static final int[] QUALITIES = {92, 86, 78, 68, 58};
+    private static final int[] QUALITIES = {92, 86, 78, 68, 58, 48, 38};
+
+    /** 为极强档小容量恢复副本保留的最大缩放轮数。 */
+    private static final int SCALE_PASSES = 8;
 
     /** 工具类不允许实例化。 */
     private DesktopRobustPayloadTranscoder() {
@@ -49,7 +52,7 @@ public final class DesktopRobustPayloadTranscoder {
         Bitmap image = flatten(decoded);
         decoded.recycle();
         try {
-            for (int scalePass = 0; scalePass < 6; scalePass++) {
+            for (int scalePass = 0; scalePass < SCALE_PASSES; scalePass++) {
                 for (int quality : QUALITIES) {
                     writeJpeg(image, output, quality);
                     if (Files.size(output) <= maximumBytes) {

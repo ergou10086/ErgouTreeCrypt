@@ -76,7 +76,10 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
+fun SettingsScreen(
+    onOpenHistory: () -> Unit = {},
+    onOpenStorage: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = remember { AndroidSettings(context.applicationContext) }
@@ -180,7 +183,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "自动模式为推荐默认档，按设备当前可用内存自动选取能在堆内秒级派生的最大档位，避免离堆派生导致的卡顿与闪退。均衡 (256 MiB) 与省电 (64 MiB) 供手动指定。较低档位加密的文件仍可在桌面端解密（参数随文件存储）。",
+                text = "自动模式为推荐默认档，按设备当前可用内存自动选取能在堆内秒级派生的最大档位。均衡 (256 MiB) 与省电 (64 MiB) 供手动指定。较低档位加密的文件仍可在桌面端解密（参数随文件存储）。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -248,7 +251,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "切换后应用将自动重启以应用新语言。经典密码名称与描述随语言切换。",
+                text = "切换后应用将自动重启以应用新语言。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -287,7 +290,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "只保存新任务的默认选项，不保存密码。EGTC-IMG v1 始终固定使用 64 MiB / 3 / 4，不受上方全局档位影响。",
+                text = "只保存新任务的默认选项，不保存密码。图片加密固定使用独立参数，不受上方全局档位影响。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -325,7 +328,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
 
             SettingSwitch(
                 title = "内存指示器",
-                description = "在加密、解密、隐写与提取页面顶部显示低调的内存占用信息（系统空闲内存与应用堆占用）",
+                description = "在加密、解密、隐写与提取页面顶部显示内存占用信息",
                 checked = showMemoryIndicator,
                 onCheckedChange = { scope.launch { settings.setShowMemoryIndicator(it) } }
             )
@@ -485,7 +488,7 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (bgUri != null) {
-                        bgFileName ?: "已设置背景 ($bgUri 长度: ${bgUri!!.length})"
+                        bgFileName ?: "已设置背景图片"
                     } else {
                         "未设置背景图片"
                     },
@@ -574,13 +577,36 @@ fun SettingsScreen(onOpenHistory: () -> Unit = {}) {
             HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
 
+            // === 存储空间 ===
+            Text(
+                text = "存储空间",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = "查看本工具产生的缓存占用明细，并可一键清理全部缓存。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onOpenStorage,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
+                Text(" 查看占用并清理")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
             // === 关于信息 ===
             Text(
                 text = "关于",
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "ErgouTreeCrypt Android v${BuildConfig.APP_VERSION_NAME}\n\n基于 Kotlin + Jetpack Compose\n加密核心与桌面版 100% 共享源码",
+                text = "ErgouTreeCrypt Android v${BuildConfig.APP_VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

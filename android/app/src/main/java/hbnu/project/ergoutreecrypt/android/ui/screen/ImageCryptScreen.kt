@@ -645,7 +645,7 @@ private fun KdfSummary(state: ImageCryptUiState) {
     }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Text(
-            text = "EGTC-IMG v1 固定 Argon2id 65,536 KiB / 3 passes / 4 lanes\n$execution。此参数不受全局 Argon2 档位影响。",
+            text = "EGTC-IMG v1 使用固定的 Argon2id 参数\n$execution。此参数不受全局 Argon2 档位影响。",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(12.dp)
         )
@@ -738,7 +738,7 @@ private fun ImageCryptResultDialog(
                 Text(result.message)
                 if (result.sharePath != null) {
                     Text(
-                        "分享 MIME 固定为 image/png。请在接收应用中选择“作为文件发送”，不要压缩照片。",
+                        "请在接收应用中选择“作为文件发送”，不要压缩照片。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )

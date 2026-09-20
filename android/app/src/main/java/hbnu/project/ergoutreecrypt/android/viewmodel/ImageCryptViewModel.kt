@@ -825,6 +825,9 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         if (input == null) {
             return "请先选择图片文件"
         }
+        if (!input.file.exists()) {
+            return "所选图片的临时副本已被清理，请重新选择图片"
+        }
         val requiresPassword = if (state.direction == ImageCryptDirection.ENCRYPT) {
             state.mode == ImageCryptMode.PASSWORD
         } else {

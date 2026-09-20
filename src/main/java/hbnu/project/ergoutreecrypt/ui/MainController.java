@@ -79,6 +79,8 @@ public class MainController {
     private Menu historyMenu;
     @FXML
     private Menu logsMenu;
+    @FXML
+    private Menu storageMenu;
 
     /** 本次点击已由 MenuBar 拦截处理，避免 showing 回调再次触发。 */
     private final java.util.Set<Menu> menuClickHandled = new java.util.HashSet<>();
@@ -508,6 +510,7 @@ public class MainController {
 
         installMenuAsButton(historyMenu, this::onOpenHistory);
         installMenuAsButton(logsMenu, this::onToggleLogs);
+        installMenuAsButton(storageMenu, this::onOpenStorage);
 
         setupInfoTooltips();
         applyTexts();
@@ -751,6 +754,7 @@ public class MainController {
         aboutMenuItem.setText(Messages.get("menu.about"));
         historyMenu.setText(Messages.get("menu.history"));
         logsMenu.setText(Messages.get("menu.logs"));
+        storageMenu.setText(Messages.get("storage.menu"));
         LogCompanionWindow.applyTextsIfOpen();
         splitCheck.setText(Messages.get("options.split"));
         splitUnitLabel.setText(Messages.get("options.split.size"));
@@ -893,6 +897,16 @@ public class MainController {
     @FXML
     private void onOpenHistory() {
         HistoryDialog.show(stage());
+    }
+
+    /**
+     * 打开存储空间占用对话框：展示缓存明细并提供一键清理。
+     *
+     * <p>加解密任务运行期间只允许查看占用，清理按钮由对话框按 {@code running} 禁用。
+     */
+    @FXML
+    private void onOpenStorage() {
+        StorageDialog.show(stage(), running);
     }
 
     /**

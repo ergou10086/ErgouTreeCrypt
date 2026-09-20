@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.android.app
 import android.app.Application
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.platform.NotificationHelper
+import hbnu.project.ergoutreecrypt.android.platform.StorageUsage
 import hbnu.project.ergoutreecrypt.history.FileHistoryStore
 import hbnu.project.ergoutreecrypt.history.HistoryService
 import hbnu.project.ergoutreecrypt.i18n.Messages
@@ -121,6 +122,13 @@ class ErgouApp : Application() {
                     }
                 }
             }
+        }
+
+        // 6. 后台清扫上一进程遗留的临时产物（输入副本、暂存输出、密钥文件副本）。
+        //    进程刚启动时尚不存在进行中的操作与已选中的输入，因此可以无条件清空；
+        //    这是缓存不跨会话累积的关键：被系统杀进程时留下的暂存目录否则会一直残留。
+        appScope.launch(Dispatchers.IO) {
+            runCatching { StorageUsage(this@ErgouApp).sweepAtStartup() }
         }
     }
 

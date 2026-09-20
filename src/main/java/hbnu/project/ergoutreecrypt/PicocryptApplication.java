@@ -10,6 +10,7 @@ import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.MainController;
 import hbnu.project.ergoutreecrypt.ui.support.FileAssociation;
 import hbnu.project.ergoutreecrypt.ui.support.JvmLogSupport;
+import hbnu.project.ergoutreecrypt.ui.support.StorageUsage;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -100,9 +101,8 @@ public class PicocryptApplication extends Application {
     @Override
     public void start(Stage stage) throws IOException {
         // 注册操作历史与应用日志（用户主目录下的隐藏目录）
-        Path dataDir = Path.of(System.getProperty("user.home"), ".ergoutreecrypt");
-        HistoryService.register(new FileHistoryStore(dataDir));
-        Path logsDir = dataDir.resolve("logs");
+        HistoryService.register(new FileHistoryStore(StorageUsage.dataDir()));
+        Path logsDir = StorageUsage.logsDir();
         LogService.register(
                 new MemoryLogBuffer(),
                 new CompositeLogSink(new FileLogSink(logsDir), JvmLogSupport.bind(logsDir)));
@@ -141,5 +141,8 @@ public class PicocryptApplication extends Application {
 
         // 后台注册 .ergou 文件关联（HKCU，无需管理员权限）
         new Thread(FileAssociation::autoRegister, "file-assoc").start();
+
+        // 后台清扫陈旧的临时产物，避免缓存跨会话累积（只删 24 小时前的自有产物）
+        new Thread(StorageUsage::sweepStaleTempEntries, "storage-sweep").start();
     }
 }

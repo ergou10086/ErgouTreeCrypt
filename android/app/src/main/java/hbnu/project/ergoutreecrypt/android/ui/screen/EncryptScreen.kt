@@ -1084,7 +1084,7 @@ fun EncryptScreen(
                             onClick = { multiFilePicker.launch(arrayOf("*/*")) }
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("或选择多个文件（列表管理，可随时增删）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                Text("或选择多个文件", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                             }
                         }
                         Spacer(Modifier.height(8.dp))

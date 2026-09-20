@@ -49,6 +49,7 @@ import hbnu.project.ergoutreecrypt.android.ui.screen.ImageCryptScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.SettingsScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.StegoExtractScreen
 import hbnu.project.ergoutreecrypt.android.ui.screen.StegoScreen
+import hbnu.project.ergoutreecrypt.android.ui.screen.StorageScreen
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -125,6 +126,7 @@ fun ErgouNavGraph() {
     )
     val scope = rememberCoroutineScope()
     var showHistory by remember { mutableStateOf(false) }
+    var showStorage by remember { mutableStateOf(false) }
 
     LaunchedEffect(pagerState, bottomNavItems) {
         snapshotFlow { pagerState.settledPage }
@@ -191,7 +193,10 @@ fun ErgouNavGraph() {
                     Routes.TEXT_CRYPTO -> ClassicalScreen(onOpenHistory = { showHistory = true })
                     Routes.STEGO -> StegoScreen(onOpenHistory = { showHistory = true })
                     Routes.STEGO_EXTRACT -> StegoExtractScreen(onOpenHistory = { showHistory = true })
-                    Routes.SETTINGS -> SettingsScreen(onOpenHistory = { showHistory = true })
+                    Routes.SETTINGS -> SettingsScreen(
+                        onOpenHistory = { showHistory = true },
+                        onOpenStorage = { showStorage = true }
+                    )
                 }
             }
         }
@@ -207,6 +212,20 @@ fun ErgouNavGraph() {
                 color = MaterialTheme.colorScheme.background
             ) {
                 HistoryScreen(onBack = { showHistory = false })
+            }
+        }
+
+        if (showStorage) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { },
+                color = MaterialTheme.colorScheme.background
+            ) {
+                StorageScreen(onBack = { showStorage = false })
             }
         }
     }

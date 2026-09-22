@@ -91,7 +91,11 @@ class DecryptViewModel : ViewModel() {
                 }
                 success = true
                 _progress.update {
-                    it.copy(state = ProgressState.State.DONE, progress = 1f)
+                    it.copy(
+                        state = ProgressState.State.DONE,
+                        progress = 1f,
+                        allInputsSucceeded = true
+                    )
                 }
             } catch (e: CancellationException) {
                 cancelled = true
@@ -332,7 +336,9 @@ class DecryptViewModel : ViewModel() {
                         progress = 1f,
                         statusText = summary ?: it.statusText,
                         detail = detail,
-                        error = if (partial) summary else null
+                        error = if (partial) summary else null,
+                        allInputsSucceeded = batch == null || batch.hasSuccesses()
+                                && !batch.hasFailures() && batch.skippedCount() == 0
                     )
                 }
                 success = true

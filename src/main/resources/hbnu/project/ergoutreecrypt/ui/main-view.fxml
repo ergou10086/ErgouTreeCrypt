@@ -282,6 +282,10 @@
                                                 <CheckBox fx:id="recursiveExtractCheck" styleClass="check"/>
                                                 <Label fx:id="recursiveExtractInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="deleteSourceAfterDecryptCheck" styleClass="check"/>
+                                                <Label fx:id="deleteSourceAfterDecryptInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
                                         </VBox>
                                         <Separator/>
                                         <!-- 密钥文件 -->

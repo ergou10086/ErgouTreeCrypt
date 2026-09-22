@@ -190,7 +190,14 @@ class MediaCryptViewModel : ViewModel() {
 
                 codec.decrypt(inputPath, Paths.get(output), pwdBytes, progressCallback)
                 success = true
-                _progress.update { it.copy(state = ProgressState.State.DONE, progress = 1f, info = "") }
+                _progress.update {
+                    it.copy(
+                        state = ProgressState.State.DONE,
+                        progress = 1f,
+                        info = "",
+                        allInputsSucceeded = true
+                    )
+                }
             } catch (e: CancellationException) {
                 cancelled = true
                 _progress.update { it.copy(state = ProgressState.State.CANCELLED) }

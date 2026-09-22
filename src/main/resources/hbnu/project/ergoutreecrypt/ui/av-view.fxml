@@ -123,6 +123,10 @@
                         </HBox>
                         <CustomPasswordField fx:id="avDecompressPasswordField" styleClass="text-input"
                                       promptText="Archive password (optional)"/>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="avDeleteSourceCheck" styleClass="check"/>
+                            <Label fx:id="avDeleteSourceInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
                     </VBox>
                 </VBox>
             </HBox>

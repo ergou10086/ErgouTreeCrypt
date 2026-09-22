@@ -18,6 +18,8 @@ import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
 import hbnu.project.ergoutreecrypt.ui.support.BoundedImagePreviewLoader;
 import hbnu.project.ergoutreecrypt.ui.support.ImageCryptDesktopWorkflow;
+import hbnu.project.ergoutreecrypt.ui.support.MainViewSupport;
+import hbnu.project.ergoutreecrypt.ui.support.SourceDeletion;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
@@ -161,6 +163,14 @@ public final class ImageCryptController {
     private CheckBox imageBestEffortCheck;
     @FXML
     private Label imageBestEffortHint;
+    @FXML
+    private VBox imageDecryptOptionsCard;
+    @FXML
+    private Label imageDecryptOptionsTitle;
+    @FXML
+    private CheckBox imageDeleteSourceCheck;
+    @FXML
+    private Label imageDeleteSourceInfo;
     @FXML
     private VBox imagePublicWarningCard;
     @FXML
@@ -342,6 +352,10 @@ public final class ImageCryptController {
         updateRobustnessControls();
         imageBestEffortCheck.setText(Messages.get("imageCrypt.transport.bestEffort"));
         imageBestEffortHint.setText(Messages.get("imageCrypt.transport.bestEffort.hint"));
+        imageDecryptOptionsTitle.setText(Messages.get("options.title"));
+        imageDeleteSourceCheck.setText(Messages.get("options.deleteSourceAfterDecrypt"));
+        MainViewSupport.installTooltip(imageDeleteSourceInfo,
+                Messages.get("options.deleteSourceAfterDecrypt.tip"));
         imagePublicWarning.setText(Messages.get("imageCrypt.public.warning"));
         imageSendAsFileHint.setText(Messages.get("imageCrypt.sendAsFile.hint"));
 
@@ -388,6 +402,7 @@ public final class ImageCryptController {
         updateRobustnessControls();
         setVisible(imageBestEffortCheck, !encrypting);
         setVisible(imageBestEffortHint, !encrypting);
+        setVisible(imageDecryptOptionsCard, !encrypting);
         if (encrypting) {
             switchProtection(protectionMode);
         } else if (encryptedMetadata == null) {
@@ -910,6 +925,7 @@ public final class ImageCryptController {
         Path input = selectedInput;
         String password = imagePasswordField.getText();
         boolean bestEffort = imageBestEffortCheck.isSelected();
+        boolean deleteSource = imageDeleteSourceCheck.isSelected();
         AtomicReference<Path> restored = new AtomicReference<>();
         runCryptoTask("IMAGE_DECRYPT", progress -> {
             Path output = workflow.decrypt(input, outputDirectory, password,
@@ -917,6 +933,9 @@ public final class ImageCryptController {
             restored.set(output);
             HistoryService.record(OperationType.IMAGE_DECRYPT,
                     output.getFileName().toString(), output.toString(), null);
+            if (deleteSource) {
+                SourceDeletion.deleteAfterSuccess(input, output);
+            }
         }, () -> {
             Path output = restored.get();
             finishSuccess(Messages.format("imageCrypt.status.decryptSuccess",

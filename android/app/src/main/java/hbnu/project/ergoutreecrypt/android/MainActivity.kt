@@ -24,6 +24,9 @@ import hbnu.project.ergoutreecrypt.android.platform.PermissionManager
 import hbnu.project.ergoutreecrypt.android.ui.navigation.ErgouNavGraph
 import hbnu.project.ergoutreecrypt.android.ui.theme.ErgouTheme
 
+/** 判断两个刷新率可视为相同的误差范围。 */
+private const val REFRESH_RATE_EPSILON_HZ = 0.1f
+
 /**
  * 主 Activity — 应用唯一入口。
  *
@@ -43,9 +46,15 @@ import hbnu.project.ergoutreecrypt.android.ui.theme.ErgouTheme
  */
 class MainActivity : ComponentActivity() {
 
+    /**
+     * 创建应用界面并请求设备可用的最高刷新率。
+     *
+     * @param savedInstanceState Activity 恢复状态，可为 null
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestHighestRefreshRate()
 
         setContent {
             val settings = remember { AndroidSettings(applicationContext) }
@@ -113,5 +122,41 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Activity 回到前台时重新提交高刷新率请求。
+     */
+    override fun onResume() {
+        super.onResume()
+        requestHighestRefreshRate()
+    }
+
+    /**
+     * 在保持当前分辨率不变的前提下，请求系统采用可用的最高刷新模式。
+     *
+     * <p>该设置只是向 Android 和设备厂商的显示策略表达偏好，最终刷新率仍可能受
+     * 省电模式、温控、可变刷新率策略和用户系统设置影响。
+     */
+    @Suppress("DEPRECATION")
+    private fun requestHighestRefreshRate() {
+        val display = windowManager.defaultDisplay
+        val currentMode = display.mode
+        val preferredMode = display.supportedModes
+            .asSequence()
+            .filter {
+                it.physicalWidth == currentMode.physicalWidth &&
+                        it.physicalHeight == currentMode.physicalHeight
+            }
+            .maxByOrNull { it.refreshRate }
+            ?: return
+        if (preferredMode.refreshRate <= currentMode.refreshRate + REFRESH_RATE_EPSILON_HZ) {
+            return
+        }
+
+        val attributes = window.attributes
+        attributes.preferredDisplayModeId = preferredMode.modeId
+        attributes.preferredRefreshRate = preferredMode.refreshRate
+        window.attributes = attributes
     }
 }

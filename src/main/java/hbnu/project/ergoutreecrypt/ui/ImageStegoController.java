@@ -10,6 +10,7 @@ import hbnu.project.ergoutreecrypt.stego.ImageStegoCodec;
 import hbnu.project.ergoutreecrypt.stego.ImageStegoException;
 import hbnu.project.ergoutreecrypt.stego.StegoOptions;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
@@ -186,6 +187,8 @@ public class ImageStegoController {
     @FXML
     private void initialize() {
         toast = new Toast(stegoRoot);
+        PasswordBookMenus.install(stegoPasswordField, stegoPasswordVisibleField);
+        PasswordBookMenus.install(stegoChunkPasswordField, stegoChunkPasswordVisibleField);
         stegoLsbDepthCombo.getItems().addAll(1, 2, 3, 4);
         stegoLsbDepthCombo.getSelectionModel().select(0);
         stegoImageView.fitWidthProperty().bind(stegoImageStack.widthProperty().subtract(20));

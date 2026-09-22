@@ -11,6 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import hbnu.project.ergoutreecrypt.log.JvmDiagnostics
 import hbnu.project.ergoutreecrypt.log.LogLevel
 import hbnu.project.ergoutreecrypt.log.LogService
+import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookCsv
+import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry
 import hbnu.project.ergoutreecrypt.settings.SettingsManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -126,6 +128,13 @@ class AndroidSettings(context: Context) {
     /** EGTC-IMG 新任务的默认保护模式，不包含也不存储密码。 */
     val imageCryptDefaultMode: Flow<String> = dataStore.data.map {
         it[KEY_IMAGE_CRYPT_DEFAULT_MODE] ?: DEF_IMAGE_CRYPT_MODE
+    }
+
+    /** 密码本记录；DataStore 内使用与导入导出一致的 CSV 文本。 */
+    val passwordBookEntries: Flow<List<PasswordBookEntry>> = dataStore.data.map { preferences ->
+        runCatching {
+            PasswordBookCsv.decode(preferences[KEY_PASSWORD_BOOK] ?: "")
+        }.getOrDefault(emptyList())
     }
 
     // ==================== 初始化：将 DataStore 值同步到 SettingsManager ====================
@@ -253,6 +262,15 @@ class AndroidSettings(context: Context) {
         dataStore.edit { it[KEY_IMAGE_CRYPT_DEFAULT_MODE] = normalized }
     }
 
+    /**
+     * 保存密码本记录。
+     *
+     * @param entries 待保存的名称与密码记录
+     */
+    suspend fun setPasswordBookEntries(entries: List<PasswordBookEntry>) {
+        dataStore.edit { it[KEY_PASSWORD_BOOK] = PasswordBookCsv.encode(entries) }
+    }
+
     suspend fun setDefaultSplitSize(v: Int) {
         dataStore.edit { it[KEY_DEFAULT_SPLIT_SIZE] = v.coerceIn(1, 4096) }
         SettingsManager.setDefaultSplitSize(v)
@@ -346,6 +364,9 @@ class AndroidSettings(context: Context) {
 
         /** EGTC-IMG 新任务默认保护模式。 */
         private val KEY_IMAGE_CRYPT_DEFAULT_MODE = stringPreferencesKey("imageCrypt.default.mode")
+
+        /** 密码本 CSV 文本键。 */
+        private val KEY_PASSWORD_BOOK = stringPreferencesKey("password.book.csv")
 
         // --- 默认值 ---
         private const val DEF_AUTO_DECOMPRESS = true

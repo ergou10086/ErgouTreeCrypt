@@ -30,6 +30,7 @@ import hbnu.project.ergoutreecrypt.ui.support.LoggingMediaProgress;
 import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressReporter;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
 import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 import javafx.application.Platform;
@@ -210,6 +211,9 @@ public class MediaCryptController {
     @FXML
     private void initialize() {
         toast = new Toast(avRoot);
+        PasswordBookMenus.install(avPasswordField, avPasswordVisibleField);
+        PasswordBookMenus.install(avArchivePasswordField);
+        PasswordBookMenus.install(avDecompressPasswordField);
 
         avEncryptTab.setOnAction(e -> switchMode(Mode.ENCRYPT));
         avDecryptTab.setOnAction(e -> switchMode(Mode.DECRYPT));

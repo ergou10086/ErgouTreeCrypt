@@ -12,6 +12,8 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
+<?import org.controlsfx.control.textfield.CustomTextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
@@ -66,8 +68,8 @@
                     <VBox styleClass="card" spacing="10">
                         <Label fx:id="avPasswordTitle" styleClass="card-title"/>
                         <StackPane>
-                            <PasswordField fx:id="avPasswordField" styleClass="text-input"/>
-                            <TextField fx:id="avPasswordVisibleField" styleClass="text-input" managed="false" visible="false"/>
+                            <CustomPasswordField fx:id="avPasswordField" styleClass="text-input"/>
+                            <CustomTextField fx:id="avPasswordVisibleField" styleClass="text-input" managed="false" visible="false"/>
                         </StackPane>
                         <HBox spacing="8" alignment="CENTER_LEFT">
                             <Region HBox.hgrow="ALWAYS"/>
@@ -103,7 +105,7 @@
                         <ComboBox fx:id="avCompressFormatCombo" styleClass="text-input"
                                   prefWidth="140" managed="false" visible="false"
                                   maxWidth="Infinity"/>
-                        <PasswordField fx:id="avArchivePasswordField" styleClass="text-input"
+                        <CustomPasswordField fx:id="avArchivePasswordField" styleClass="text-input"
                                       managed="false" visible="false"
                                       promptText="Archive password (optional)"/>
                     </VBox>
@@ -119,7 +121,7 @@
                             <CheckBox fx:id="avDecompressAfterCheck" styleClass="check"/>
                             <Label fx:id="avDecompressAfterInfo" styleClass="info-icon" text="i"/>
                         </HBox>
-                        <PasswordField fx:id="avDecompressPasswordField" styleClass="text-input"
+                        <CustomPasswordField fx:id="avDecompressPasswordField" styleClass="text-input"
                                       promptText="Archive password (optional)"/>
                     </VBox>
                 </VBox>

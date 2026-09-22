@@ -226,7 +226,7 @@ public class MainController {
     @FXML
     private PasswordField fakePasswordField;
     @FXML
-    private PasswordField fakePasswordVisibleField;
+    private TextField fakePasswordVisibleField;
     @FXML
     private HBox fakePasswordConfirmRow;
     @FXML
@@ -362,6 +362,10 @@ public class MainController {
     @FXML
     private void initialize() {
         toast = new Toast(rootStack);
+        PasswordBookMenus.install(passwordField, passwordVisibleField);
+        PasswordBookMenus.install(fakePasswordField, fakePasswordVisibleField);
+        PasswordBookMenus.install(archivePasswordField);
+        PasswordBookMenus.install(decryptArchivePasswordField);
 
         // Spinner 范围：1..102400 MiB，允许手动输入数字
         splitSizeSpinner.setValueFactory(

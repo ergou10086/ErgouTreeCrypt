@@ -91,16 +91,11 @@ fun PasswordField(
                 imeAction = if (showConfirm) ImeAction.Next else ImeAction.Done
             ),
             trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) {
-                            Icons.Default.VisibilityOff
-                        } else {
-                            Icons.Default.Visibility
-                        },
-                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
-                    )
-                }
+                PasswordBookVisibilityIcons(
+                    passwordVisible = passwordVisible,
+                    onVisibilityChange = { passwordVisible = it },
+                    onPasswordSelected = onPasswordChange
+                )
             }
         )
 

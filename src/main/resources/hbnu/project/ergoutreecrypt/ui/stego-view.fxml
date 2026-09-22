@@ -11,6 +11,8 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
+<?import org.controlsfx.control.textfield.CustomTextField?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -83,9 +85,9 @@
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoPasswordLabel" styleClass="card-title"/>
                             <StackPane>
-                                <PasswordField fx:id="stegoPasswordField" styleClass="text-input"
+                                <CustomPasswordField fx:id="stegoPasswordField" styleClass="text-input"
                                                promptText="Enter a password (optional)"/>
-                                <TextField fx:id="stegoPasswordVisibleField" styleClass="text-input"
+                                <CustomTextField fx:id="stegoPasswordVisibleField" styleClass="text-input"
                                            managed="false" visible="false"/>
                             </StackPane>
                             <HBox spacing="8" alignment="CENTER_LEFT">
@@ -193,8 +195,8 @@
                         <VBox styleClass="card" spacing="10">
                             <Label fx:id="stegoChunkPasswordLabel" styleClass="card-title"/>
                             <StackPane>
-                                <PasswordField fx:id="stegoChunkPasswordField" styleClass="text-input"/>
-                                <TextField fx:id="stegoChunkPasswordVisibleField" styleClass="text-input"
+                                <CustomPasswordField fx:id="stegoChunkPasswordField" styleClass="text-input"/>
+                                <CustomTextField fx:id="stegoChunkPasswordVisibleField" styleClass="text-input"
                                            managed="false" visible="false"/>
                             </StackPane>
                             <HBox spacing="8" alignment="CENTER_LEFT">

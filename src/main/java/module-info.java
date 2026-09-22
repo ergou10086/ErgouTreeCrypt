@@ -37,6 +37,7 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.header;
     exports hbnu.project.ergoutreecrypt.keyfile;
     exports hbnu.project.ergoutreecrypt.password;
+    exports hbnu.project.ergoutreecrypt.passwordbook;
     exports hbnu.project.ergoutreecrypt.settings;
     exports hbnu.project.ergoutreecrypt.history;
     exports hbnu.project.ergoutreecrypt.log;

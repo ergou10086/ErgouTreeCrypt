@@ -12,6 +12,7 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
 
 <StackPane fx:id="ccRoot" xmlns:fx="http://javafx.com/fxml"
            fx:controller="hbnu.project.ergoutreecrypt.ui.ClassicalCryptController">
@@ -53,7 +54,7 @@
                         <!-- 密码口令（现代密码算法） -->
                         <VBox fx:id="ccPasswordBox" spacing="4" managed="false" visible="false">
                             <Label fx:id="ccPasswordLabel" styleClass="card-title"/>
-                            <PasswordField fx:id="ccPasswordField" styleClass="text-input"/>
+                            <CustomPasswordField fx:id="ccPasswordField" styleClass="text-input"/>
                         </VBox>
                     </VBox>
 

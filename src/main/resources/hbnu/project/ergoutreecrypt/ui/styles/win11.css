@@ -2416,3 +2416,17 @@
 /* ==========================================================================
  *                           END OF FILE
  * ========================================================================== */
+.password-book-menu {
+    -fx-padding: 0 3 0 3;
+    -fx-min-width: 28;
+    -fx-pref-width: 28;
+    -fx-background-color: transparent;
+}
+
+.password-book-menu > .label {
+    -fx-padding: 0;
+}
+
+.password-book-menu > .arrow-button {
+    -fx-padding: 0;
+}

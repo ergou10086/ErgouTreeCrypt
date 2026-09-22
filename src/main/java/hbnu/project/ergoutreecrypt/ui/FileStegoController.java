@@ -16,6 +16,7 @@ import hbnu.project.ergoutreecrypt.ui.support.FileSizes;
 import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressListener;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
 import javafx.beans.value.ChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
@@ -193,6 +194,7 @@ public class FileStegoController {
     @FXML
     private void initialize() {
         toast = new Toast(fsRoot);
+        PasswordBookMenus.install(fsPasswordField, fsPasswordVisibleField);
 
         fsModeGroup.selectedToggleProperty().addListener((obs, old, val) -> onModeChanged());
 

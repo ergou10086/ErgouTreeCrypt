@@ -5,6 +5,8 @@
 <?import javafx.scene.image.Image?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
+<?import org.controlsfx.control.textfield.CustomTextField?>
 <StackPane xmlns:fx="http://javafx.com/fxml" fx:id="rootStack"
            fx:controller="hbnu.project.ergoutreecrypt.ui.MainController"
            styleClass="light">
@@ -134,8 +136,8 @@
                                 <VBox styleClass="card" spacing="10">
                                     <Label fx:id="passwordCardTitle" styleClass="card-title"/>
                                     <StackPane>
-                                        <PasswordField fx:id="passwordField" styleClass="text-input"/>
-                                        <TextField fx:id="passwordVisibleField" styleClass="text-input" managed="false"
+                                        <CustomPasswordField fx:id="passwordField" styleClass="text-input"/>
+                                        <CustomTextField fx:id="passwordVisibleField" styleClass="text-input" managed="false"
                                                    visible="false"/>
                                     </StackPane>
                                     <HBox spacing="8" alignment="CENTER_LEFT">
@@ -195,9 +197,9 @@
                                             <!-- 双卷可否认加密：伪密码 -->
                                             <HBox fx:id="fakePasswordRow" alignment="CENTER_LEFT" spacing="4"
                                                   managed="false" visible="false">
-                                                <PasswordField fx:id="fakePasswordField"
+                                                <CustomPasswordField fx:id="fakePasswordField"
                                                                styleClass="text-input" HBox.hgrow="ALWAYS"/>
-                                                <PasswordField fx:id="fakePasswordVisibleField"
+                                                <CustomTextField fx:id="fakePasswordVisibleField"
                                                                styleClass="text-input" HBox.hgrow="ALWAYS"
                                                                managed="false" visible="false"/>
                                                 <Button fx:id="fakeShowToggle" text="👁"
@@ -235,7 +237,7 @@
                                             <ComboBox fx:id="compressFormatCombo" styleClass="text-input"
                                                       prefWidth="140" managed="false" visible="false"
                                                       maxWidth="Infinity"/>
-                                            <PasswordField fx:id="archivePasswordField" styleClass="text-input"
+                                            <CustomPasswordField fx:id="archivePasswordField" styleClass="text-input"
                                                           managed="false" visible="false"
                                                           promptText="Archive password (optional)"/>
                                             <HBox spacing="10" alignment="CENTER_LEFT">
@@ -270,7 +272,7 @@
                                                 <CheckBox fx:id="decryptThenExtractCheck" styleClass="check"/>
                                                 <Label fx:id="decryptThenExtractInfo" styleClass="info-icon" text="i"/>
                                             </HBox>
-                                            <PasswordField fx:id="decryptArchivePasswordField" styleClass="text-input"
+                                            <CustomPasswordField fx:id="decryptArchivePasswordField" styleClass="text-input"
                                                           managed="false" visible="false"/>
                                             <HBox alignment="CENTER_LEFT" spacing="2">
                                                 <CheckBox fx:id="verifyFirstCheck" styleClass="check"/>

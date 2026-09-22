@@ -64,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
+import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookVisibilityIcons
 import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptDirection
 import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptResultInfo
 import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptUiState
@@ -606,12 +607,11 @@ private fun PasswordFields(
         enabled = enabled,
         visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
-            IconButton(onClick = { visible = !visible }) {
-                Icon(
-                    if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    contentDescription = if (visible) "隐藏密码" else "显示密码"
-                )
-            }
+            PasswordBookVisibilityIcons(
+                passwordVisible = visible,
+                onVisibilityChange = { visible = it },
+                onPasswordSelected = onPassword
+            )
         },
         modifier = Modifier.fillMaxWidth()
     )

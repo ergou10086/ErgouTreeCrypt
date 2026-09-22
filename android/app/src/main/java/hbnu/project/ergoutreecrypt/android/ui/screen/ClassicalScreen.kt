@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookVisibilityIcons
 import hbnu.project.ergoutreecrypt.classical.CipherRegistry
 import hbnu.project.ergoutreecrypt.classical.ClassicalCipher
 import hbnu.project.ergoutreecrypt.classical.CipherInfo
@@ -261,16 +262,11 @@ private fun CipherCard(
                                     imeAction = ImeAction.Next
                                 ),
                                 trailingIcon = {
-                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                        Icon(
-                                            imageVector = if (passwordVisible) {
-                                                Icons.Default.VisibilityOff
-                                            } else {
-                                                Icons.Default.Visibility
-                                            },
-                                            contentDescription = "切换密码可见性"
-                                        )
-                                    }
+                                    PasswordBookVisibilityIcons(
+                                        passwordVisible = passwordVisible,
+                                        onVisibilityChange = { passwordVisible = it },
+                                        onPasswordSelected = { state.value = it }
+                                    )
                                 },
                                 textStyle = MaterialTheme.typography.bodyMedium
                             )

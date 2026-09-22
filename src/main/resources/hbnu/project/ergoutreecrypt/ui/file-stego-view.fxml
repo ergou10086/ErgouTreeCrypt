@@ -12,6 +12,8 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
+<?import org.controlsfx.control.textfield.CustomTextField?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
@@ -94,8 +96,8 @@
                     <VBox styleClass="card" spacing="10">
                         <Label fx:id="fsPasswordLabel" styleClass="card-title"/>
                         <StackPane>
-                            <PasswordField fx:id="fsPasswordField" styleClass="text-input"/>
-                            <TextField fx:id="fsPasswordVisibleField" styleClass="text-input"
+                            <CustomPasswordField fx:id="fsPasswordField" styleClass="text-input"/>
+                            <CustomTextField fx:id="fsPasswordVisibleField" styleClass="text-input"
                                        managed="false" visible="false"/>
                         </StackPane>
                         <HBox spacing="8" alignment="CENTER_LEFT">

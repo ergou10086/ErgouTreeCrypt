@@ -88,6 +88,8 @@ import hbnu.project.ergoutreecrypt.android.ui.component.MemoryIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.MultiFilePickerCard
 import hbnu.project.ergoutreecrypt.android.ui.component.OperationLogPanel
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
+import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookDropdownIcon
+import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookVisibilityIcons
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultDialog
 import hbnu.project.ergoutreecrypt.android.ui.component.ResultType
@@ -1028,7 +1030,8 @@ fun DecryptScreen(
                         onValueChange = { prompt.input = it },
                         label = { Text("压缩包密码") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation()
+                        visualTransformation = PasswordVisualTransformation(),
+                        trailingIcon = { PasswordBookDropdownIcon { prompt.input = it } }
                     )
                 }
             },
@@ -1271,12 +1274,11 @@ fun DecryptScreen(
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, imeAction = ImeAction.Done),
                 trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
-                        )
-                    }
+                    PasswordBookVisibilityIcons(
+                        passwordVisible = passwordVisible,
+                        onVisibilityChange = { passwordVisible = it },
+                        onPasswordSelected = { password = it }
+                    )
                 }
             )
 
@@ -1350,7 +1352,8 @@ fun DecryptScreen(
                         modifier = Modifier.fillMaxWidth().padding(start = 36.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
                         visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        trailingIcon = { PasswordBookDropdownIcon { archivePassword = it } }
                     )
                 }
 

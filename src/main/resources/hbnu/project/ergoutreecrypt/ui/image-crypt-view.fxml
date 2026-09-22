@@ -12,6 +12,8 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.ToggleGroup?>
+<?import org.controlsfx.control.textfield.CustomPasswordField?>
+<?import org.controlsfx.control.textfield.CustomTextField?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -77,8 +79,8 @@
                         <VBox fx:id="imagePasswordBox" spacing="8" managed="false" visible="false">
                             <Label fx:id="imagePasswordLabel" styleClass="field-label"/>
                             <StackPane>
-                                <PasswordField fx:id="imagePasswordField" styleClass="text-input"/>
-                                <TextField fx:id="imagePasswordVisibleField" styleClass="text-input"
+                                <CustomPasswordField fx:id="imagePasswordField" styleClass="text-input"/>
+                                <CustomTextField fx:id="imagePasswordVisibleField" styleClass="text-input"
                                            managed="false" visible="false"/>
                             </StackPane>
                             <HBox alignment="CENTER_RIGHT">

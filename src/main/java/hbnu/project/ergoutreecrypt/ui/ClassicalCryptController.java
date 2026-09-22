@@ -6,6 +6,7 @@ import hbnu.project.ergoutreecrypt.classical.ClassicalCipher;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -111,6 +112,7 @@ public class ClassicalCryptController {
     @FXML
     private void initialize() {
         toast = new Toast(ccRoot);
+        PasswordBookMenus.install(ccPasswordField);
         currentCipher = CipherRegistry.getDefault();
         populateAlgorithmCombo();
         ccAlgorithmCombo.getSelectionModel().selectFirst();

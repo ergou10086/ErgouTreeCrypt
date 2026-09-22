@@ -231,6 +231,15 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.logJvm.tip")), 2, row);
         row++;
 
+        // === 密码本 ===
+        grid.add(section(Messages.get("passwordBook.title")), 0, row++, 3, 1);
+        Button passwordBookButton = new Button(Messages.get("passwordBook.manage"));
+        passwordBookButton.getStyleClass().add("btn-secondary");
+        passwordBookButton.setOnAction(event -> PasswordBookDialog.show(owner));
+        grid.add(passwordBookButton, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("passwordBook.description")), 2, row);
+        row++;
+
         // === 系统集成 ===
         grid.add(section(Messages.get("settings.section.integration")), 0, row++, 3, 1);
 

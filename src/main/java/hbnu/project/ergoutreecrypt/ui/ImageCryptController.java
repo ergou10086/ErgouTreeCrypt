@@ -20,6 +20,7 @@ import hbnu.project.ergoutreecrypt.ui.support.BoundedImagePreviewLoader;
 import hbnu.project.ergoutreecrypt.ui.support.ImageCryptDesktopWorkflow;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
+import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
@@ -259,6 +260,7 @@ public final class ImageCryptController {
     @FXML
     private void initialize() {
         toast = new Toast(imageRoot);
+        PasswordBookMenus.install(imagePasswordField, imagePasswordVisibleField);
         imageEncryptTab.setOnAction(event -> switchOperation(OperationMode.ENCRYPT));
         imageDecryptTab.setOnAction(event -> switchOperation(OperationMode.DECRYPT));
         imagePublicModeBtn.setOnAction(event -> switchProtection(ImageCryptMode.PUBLIC_RECOVERY));

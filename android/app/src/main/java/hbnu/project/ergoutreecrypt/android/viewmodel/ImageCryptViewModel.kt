@@ -13,6 +13,9 @@ import hbnu.project.ergoutreecrypt.android.platform.MaterializedImageInput
 import hbnu.project.ergoutreecrypt.android.platform.MediaStoreCollection
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
+import hbnu.project.ergoutreecrypt.android.platform.QuickDecryptConfig
+import hbnu.project.ergoutreecrypt.android.platform.QuickDecryptReport
+import hbnu.project.ergoutreecrypt.android.platform.QuickImageDecryptor
 import hbnu.project.ergoutreecrypt.android.platform.errorKind
 import hbnu.project.ergoutreecrypt.android.platform.friendlyError
 import hbnu.project.ergoutreecrypt.android.platform.logElapsedMillis
@@ -95,6 +98,7 @@ data class ImageCryptResultInfo(
  * @property kdfAssessment 固定 64 MiB KDF 的设备资源快照
  * @property progress 任务进度
  * @property result 成功结果
+ * @property quickReport 快速解密完成报告
  * @property resultPreviewPath 最近一次当前方向处理结果的预览路径
  * @property resultPreviewTitle 结果预览标题
  * @property formError 表单或选择错误
@@ -119,6 +123,7 @@ data class ImageCryptUiState(
     val kdfAssessment: ImageKdfAssessment? = null,
     val progress: ProgressState = ProgressState(),
     val result: ImageCryptResultInfo? = null,
+    val quickReport: QuickDecryptReport? = null,
     val resultPreviewPath: String? = null,
     val resultPreviewTitle: String? = null,
     val formError: String? = null
@@ -213,6 +218,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                 confirmPassword = "",
                 formError = null,
                 result = null,
+                quickReport = null,
                 resultPreviewPath = null,
                 resultPreviewTitle = null
             )
@@ -523,6 +529,113 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun dismissResult() {
         _uiState.update { it.copy(result = null) }
+    }
+
+    /**
+     * 关闭快速解密报告。
+     */
+    fun dismissQuickReport() {
+        _uiState.update { it.copy(quickReport = null) }
+    }
+
+    /**
+     * 扫描设置中的相册并逐张还原公开恢复图片。
+     */
+    fun startQuickDecrypt() {
+        if (isRunning()) {
+            return
+        }
+        val token = OperationCoordinator.tryAcquire() ?: run {
+            _uiState.update { it.copy(formError = "已有其他加解密任务正在运行") }
+            return
+        }
+        operationToken = token
+        cancelRequested.set(false)
+        _uiState.update {
+            it.copy(
+                progress = ProgressState(
+                    statusText = "正在扫描相册…",
+                    state = ProgressState.State.RUNNING,
+                    canCancel = true
+                ),
+                quickReport = null,
+                result = null,
+                formError = null
+            )
+        }
+
+        currentJob = viewModelScope.launch(Dispatchers.IO) {
+            LogService.beginSession("IMAGE_QUICK_DECRYPT", "album")
+            val started = System.nanoTime()
+            var success = false
+            var cancelled = false
+            try {
+                val config = QuickDecryptConfig(
+                    albumTreeUri = settings.quickDecryptAlbumUri.first(),
+                    scanLimit = settings.quickDecryptScanLimit.first()
+                )
+                val report = QuickImageDecryptor(getApplication()).run(config) {
+                        processed, total, name ->
+                    _uiState.update { state ->
+                        state.copy(
+                            progress = state.progress.copy(
+                                statusText = "正在检查：$name",
+                                progress = if (total == 0) 1f
+                                    else processed.toFloat() / total.toFloat(),
+                                info = "$processed / $total"
+                            )
+                        )
+                    }
+                }
+                success = true
+                _uiState.update {
+                    it.copy(
+                        progress = it.progress.copy(
+                            statusText = "快速解密完成",
+                            progress = 1f,
+                            canCancel = false,
+                            state = ProgressState.State.DONE
+                        ),
+                        quickReport = report
+                    )
+                }
+            } catch (error: CancellationException) {
+                cancelled = true
+                _uiState.update {
+                    it.copy(
+                        progress = it.progress.copy(
+                            statusText = "已取消",
+                            canCancel = false,
+                            state = ProgressState.State.CANCELLED
+                        )
+                    )
+                }
+            } catch (error: Exception) {
+                LogService.error("IMAGE_QUICK_DECRYPT", "快速解密失败", error)
+                _uiState.update {
+                    it.copy(
+                        progress = it.progress.copy(
+                            statusText = "快速解密失败",
+                            canCancel = false,
+                            state = ProgressState.State.ERROR,
+                            error = friendlyError(error),
+                            kind = errorKind(error)
+                        )
+                    )
+                }
+            } finally {
+                OperationCoordinator.release(token)
+                operationToken = null
+                currentJob = null
+                val elapsed = logElapsedMillis(started)
+                when {
+                    cancelled -> LogService.endSessionCancelled(elapsed)
+                    success -> LogService.endSession(true, elapsed)
+                    else -> LogService.endSession(false, elapsed)
+                }
+            }
+        }
+        currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
 
     /**

@@ -31,7 +31,7 @@ import hbnu.project.ergoutreecrypt.android.ui.theme.ErgouTheme
  * 在 setContent 中装配主题与导航。主题模式由设置中的 DataStore 驱动。
  * 首次启动时按 Android 版本申请必要运行时权限：
  * <ul>
- *   <li>API 33+：通知权限（前台服务进度通知）</li>
+ *   <li>API 33+：通知权限与图片读取权限（前台服务及快速解密）</li>
  *   <li>API 26–28：读/写外部存储（旧版存储权限）</li>
  *   <li>API 29–32：读外部存储（可选，直接路径读取）</li>
  * </ul>
@@ -60,10 +60,17 @@ class MainActivity : ComponentActivity() {
             ) { /* 结果由 PermissionManager 实时查询，无需在此处理 */ }
             LaunchedEffect(Unit) {
                 val sdk = Build.VERSION.SDK_INT
-                // API 33+：通知权限（前台服务通知展示）
+                // API 33+：通知权限与快速解密所需的图片读取权限
                 if (sdk >= 33) {
-                    if (!PermissionManager.notificationsEnabled(applicationContext)) {
-                        singlePermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    val missing = listOf(
+                        Manifest.permission.POST_NOTIFICATIONS,
+                        Manifest.permission.READ_MEDIA_IMAGES
+                    ).filter {
+                        ContextCompat.checkSelfPermission(applicationContext, it) !=
+                                PackageManager.PERMISSION_GRANTED
+                    }
+                    if (missing.isNotEmpty()) {
+                        multiPermissionLauncher.launch(missing.toTypedArray())
                     }
                 }
                 // API 26–28：旧版存储权限（同一权限组，一次弹窗）

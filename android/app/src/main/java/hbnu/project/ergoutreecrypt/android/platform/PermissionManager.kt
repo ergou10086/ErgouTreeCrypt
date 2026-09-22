@@ -21,7 +21,7 @@ import androidx.core.content.ContextCompat
  *   <li>API 29–32：READ_EXTERNAL_STORAGE（可选，直接路径读取）</li>
  *   <li>API 30+：MANAGE_EXTERNAL_STORAGE（可选增强，仅经系统设置页跳转，
  *       未授予时应用自动降级为 SAF/MediaStore 流程，不影响使用）</li>
- *   <li>API 33+：POST_NOTIFICATIONS（前台服务进度通知，运行时申请）</li>
+ *   <li>API 33+：POST_NOTIFICATIONS 与 READ_MEDIA_IMAGES（通知及快速解密）</li>
  * </ul>
  *
  * @author ErgouTree

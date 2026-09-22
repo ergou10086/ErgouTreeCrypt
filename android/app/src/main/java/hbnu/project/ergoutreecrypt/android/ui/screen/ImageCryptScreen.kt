@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -129,6 +130,19 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
             result = result,
             onShare = { viewModel.shareResult() },
             onDismiss = { viewModel.dismissResult() }
+        )
+    }
+
+    state.quickReport?.let { report ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissQuickReport,
+            title = { Text("快速解密报告") },
+            text = { Text(report.summary()) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissQuickReport) {
+                    Text("确定")
+                }
+            }
         )
     }
 
@@ -266,6 +280,23 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(if (state.direction == ImageCryptDirection.ENCRYPT) "加密为 PNG" else "认证并还原")
+            }
+
+            if (state.direction == ImageCryptDirection.RESTORE) {
+                OutlinedButton(
+                    onClick = viewModel::startQuickDecrypt,
+                    enabled = !running && !globalBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.FlashOn, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("快速解密")
+                }
+                Text(
+                    "扫描设置中的相册，只还原公开恢复图片；密码保护图片会自动忽略。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))

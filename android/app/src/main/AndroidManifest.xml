@@ -12,6 +12,7 @@
     <!-- 读取外部存储（Android 10+ 由 SAF 授权替代，无需运行时申请） -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <!-- 写入外部存储（仅 Android 8.x 运行时申请） -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"

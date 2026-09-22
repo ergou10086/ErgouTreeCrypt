@@ -137,6 +137,17 @@ class AndroidSettings(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    /** 快速解密自定义相册目录 URI；null 表示使用系统 DCIM/Camera。 */
+    val quickDecryptAlbumUri: Flow<String?> = dataStore.data.map {
+        it[KEY_QUICK_DECRYPT_ALBUM_URI]
+    }
+
+    /** 快速解密单次扫描图片数量，默认 100。 */
+    val quickDecryptScanLimit: Flow<Int> = dataStore.data.map {
+        (it[KEY_QUICK_DECRYPT_SCAN_LIMIT] ?: DEF_QUICK_DECRYPT_SCAN_LIMIT)
+            .coerceIn(MIN_QUICK_DECRYPT_SCAN_LIMIT, MAX_QUICK_DECRYPT_SCAN_LIMIT)
+    }
+
     // ==================== 初始化：将 DataStore 值同步到 SettingsManager ====================
 
     /**
@@ -271,6 +282,35 @@ class AndroidSettings(context: Context) {
         dataStore.edit { it[KEY_PASSWORD_BOOK] = PasswordBookCsv.encode(entries) }
     }
 
+    /**
+     * 保存快速解密自定义相册目录。
+     *
+     * @param uri SAF 目录树 URI；null 表示恢复默认系统相册
+     */
+    suspend fun setQuickDecryptAlbumUri(uri: String?) {
+        dataStore.edit { preferences ->
+            if (uri == null) {
+                preferences.remove(KEY_QUICK_DECRYPT_ALBUM_URI)
+            } else {
+                preferences[KEY_QUICK_DECRYPT_ALBUM_URI] = uri
+            }
+        }
+    }
+
+    /**
+     * 保存快速解密扫描数量。
+     *
+     * @param limit 扫描数量，范围 1-1000
+     */
+    suspend fun setQuickDecryptScanLimit(limit: Int) {
+        dataStore.edit {
+            it[KEY_QUICK_DECRYPT_SCAN_LIMIT] = limit.coerceIn(
+                MIN_QUICK_DECRYPT_SCAN_LIMIT,
+                MAX_QUICK_DECRYPT_SCAN_LIMIT
+            )
+        }
+    }
+
     suspend fun setDefaultSplitSize(v: Int) {
         dataStore.edit { it[KEY_DEFAULT_SPLIT_SIZE] = v.coerceIn(1, 4096) }
         SettingsManager.setDefaultSplitSize(v)
@@ -368,6 +408,12 @@ class AndroidSettings(context: Context) {
         /** 密码本 CSV 文本键。 */
         private val KEY_PASSWORD_BOOK = stringPreferencesKey("password.book.csv")
 
+        /** 快速解密自定义相册目录 URI 键。 */
+        private val KEY_QUICK_DECRYPT_ALBUM_URI = stringPreferencesKey("quickDecrypt.album.uri")
+
+        /** 快速解密扫描数量键。 */
+        private val KEY_QUICK_DECRYPT_SCAN_LIMIT = intPreferencesKey("quickDecrypt.scan.limit")
+
         // --- 默认值 ---
         private const val DEF_AUTO_DECOMPRESS = true
         private const val DEF_CONFIRM_OVERWRITE = true
@@ -387,5 +433,8 @@ class AndroidSettings(context: Context) {
         private const val DEF_IMAGE_CRYPT_MODE = "PUBLIC_RECOVERY"
         private const val MIN_THREAD_COUNT = 1
         private const val MAX_THREAD_COUNT = 4
+        private const val DEF_QUICK_DECRYPT_SCAN_LIMIT = 100
+        private const val MIN_QUICK_DECRYPT_SCAN_LIMIT = 1
+        private const val MAX_QUICK_DECRYPT_SCAN_LIMIT = 1000
     }
 }

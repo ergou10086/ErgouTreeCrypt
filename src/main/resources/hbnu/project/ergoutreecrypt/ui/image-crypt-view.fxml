@@ -133,6 +133,15 @@
                         </HBox>
                     </VBox>
 
+                    <VBox fx:id="imageDecryptOptionsCard" styleClass="card" spacing="8"
+                          managed="false" visible="false">
+                        <Label fx:id="imageDecryptOptionsTitle" styleClass="card-title"/>
+                        <HBox alignment="CENTER_LEFT" spacing="2">
+                            <CheckBox fx:id="imageDeleteSourceCheck" styleClass="check"/>
+                            <Label fx:id="imageDeleteSourceInfo" styleClass="info-icon" text="i"/>
+                        </HBox>
+                    </VBox>
+
                     <VBox fx:id="imagePreviewCard" styleClass="card,image-preview-card" spacing="9"
                           managed="false" visible="false" alignment="CENTER">
                         <Label fx:id="imagePreviewTitle" styleClass="card-title"/>

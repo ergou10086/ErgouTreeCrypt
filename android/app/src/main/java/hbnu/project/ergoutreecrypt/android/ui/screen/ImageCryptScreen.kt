@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ForegroundServiceEffect
+import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.ProgressCard
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookVisibilityIcons
 import hbnu.project.ergoutreecrypt.android.viewmodel.ImageCryptDirection
@@ -211,6 +212,26 @@ fun ImageCryptScreen(onOpenHistory: () -> Unit = {}) {
                 onChoose = { outputPicker.launch(null) },
                 onReset = { viewModel.setOutputTree(null) }
             )
+
+            if (state.direction == ImageCryptDirection.RESTORE) {
+                ExpandableCard(title = "高级选项") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = state.deleteSourceAfterRestore,
+                            onCheckedChange = viewModel::setDeleteSourceAfterRestore,
+                            enabled = !running
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("解密后删除源文件")
+                            Text(
+                                "仅在还原图片成功保存后删除密文图片；失败或取消时保留。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
 
             state.formError?.let { error ->
                 Text(

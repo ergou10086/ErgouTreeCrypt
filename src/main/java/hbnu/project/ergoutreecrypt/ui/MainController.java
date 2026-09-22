@@ -294,6 +294,10 @@ public class MainController {
     @FXML
     private Label recursiveExtractInfo;
     @FXML
+    private CheckBox deleteSourceAfterDecryptCheck;
+    @FXML
+    private Label deleteSourceAfterDecryptInfo;
+    @FXML
     private Label keyfilesLabel;
     @FXML
     private CheckBox keyfileOrderedCheck;
@@ -769,6 +773,7 @@ public class MainController {
         decryptArchivePasswordField.setPromptText(Messages.get("options.decryptArchivePassword.placeholder"));
         verifyFirstCheck.setText(Messages.get("options.verifyFirst"));
         recursiveExtractCheck.setText(Messages.get("options.recursiveExtract"));
+        deleteSourceAfterDecryptCheck.setText(Messages.get("options.deleteSourceAfterDecrypt"));
         keyfilesLabel.setText(Messages.get("options.keyfiles"));
         keyfileOrderedCheck.setText(Messages.get("options.keyfiles.ordered"));
         addKeyfileBtn.setText(Messages.get("options.keyfiles.add"));
@@ -814,6 +819,8 @@ public class MainController {
         MainViewSupport.installTooltip(decryptThenExtractInfo, Messages.get("options.decryptThenExtract.tip"));
         MainViewSupport.installTooltip(verifyFirstInfo, Messages.get("options.verifyFirst.tip"));
         MainViewSupport.installTooltip(recursiveExtractInfo, Messages.get("options.recursiveExtract.tip"));
+        MainViewSupport.installTooltip(deleteSourceAfterDecryptInfo,
+                Messages.get("options.deleteSourceAfterDecrypt.tip"));
         MainViewSupport.installTooltip(keyfileOrderedInfo, Messages.get("options.keyfiles.ordered.tip"));
     }
 
@@ -1872,6 +1879,7 @@ public class MainController {
             return;
         }
         String in = selectedFile.getAbsolutePath();
+        boolean deleteSource = deleteSourceAfterDecryptCheck.isSelected();
 
         // 文件夹 / 压缩包 / 分卷碎片：自动识别并整体解密（含分卷碎片合并、递归解密）
         if (selectedFile.isDirectory()
@@ -1912,6 +1920,9 @@ public class MainController {
             Path finalOut = Path.of(req.getOutputFile());
             HistoryService.record(OperationType.GENERIC_DECRYPT,
                     finalOut.getFileName().toString(), finalOut.toString(), null);
+            if (deleteSource) {
+                SourceDeletion.deleteAfterSuccess(Path.of(in), finalOut);
+            }
         }, Messages.get("status.success.decrypt"));
     }
 
@@ -1928,6 +1939,7 @@ public class MainController {
         }
 
         FolderCrypt.DecryptOptions opts = buildAutoDecryptOptions(pwd);
+        boolean deleteSource = deleteSourceAfterDecryptCheck.isSelected();
 
         // 快速预检：若归档受密码保护，优先用解密密码作为归档密码（加密后压缩回退场景）；
         // 二者皆空时再弹窗询问。
@@ -1966,6 +1978,9 @@ public class MainController {
         // opts.archivePasswordProvider 处理，无需在此处捕获重试。
         taskRunner.submit("GENERIC_DECRYPT", input.getFileName().toString(), () -> {
             FolderCrypt.decryptAuto(input, finalOutDir, opts);
+            if (deleteSource && isFullySuccessful(opts.batchResult)) {
+                SourceDeletion.deleteAfterSuccess(input, finalOutDir);
+            }
         }, () -> {
             HistoryService.record(OperationType.GENERIC_DECRYPT,
                     input.getFileName().toString(), finalOutDir.toString(), null);
@@ -1985,15 +2000,22 @@ public class MainController {
         String outText = outputFileField.getText();
         String outDir = (outText == null || outText.isEmpty()) ? batchOutputDir() : outText;
         FolderCrypt.DecryptOptions opts = buildAutoDecryptOptions(pwd);
+        boolean deleteSource = deleteSourceAfterDecryptCheck.isSelected();
         ProgressReporter reporter = newReporter();
         opts.reporter = reporter;
 
         final String finalOutDir = outDir;
         final String name = batchName();
+        final List<Path> inputPaths = List.copyOf(toPaths(selectedFiles));
         runTask("GENERIC_DECRYPT", () -> {
-            FolderCrypt.decryptFiles(toPaths(selectedFiles),
+            FolderCrypt.decryptFiles(inputPaths,
                     Path.of(finalOutDir), opts);
             HistoryService.record(OperationType.GENERIC_DECRYPT, name, finalOutDir, null);
+            if (deleteSource && isFullySuccessful(opts.batchResult)) {
+                for (Path inputPath : inputPaths) {
+                    SourceDeletion.deleteAfterSuccess(inputPath, Path.of(finalOutDir));
+                }
+            }
         }, () -> showBatchOutcome(opts.batchResult, Messages.get("status.success.decrypt")),
             err -> showBatchError(opts.batchResult, err));
     }
@@ -2019,6 +2041,17 @@ public class MainController {
         }
         opts.threadCount = SettingsManager.getThreadCount();
         return opts;
+    }
+
+    /**
+     * 判断批处理是否全部成功，避免在部分失败时删除仍需重试的输入。
+     *
+     * @param result 批处理结果
+     * @return 至少一个成功且没有失败或跳过时返回 true
+     */
+    private static boolean isFullySuccessful(BatchResult result) {
+        return result == null || result.hasSuccesses()
+                && !result.hasFailures() && result.skippedCount() == 0;
     }
 
     /**

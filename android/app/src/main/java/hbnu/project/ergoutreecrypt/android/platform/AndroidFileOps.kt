@@ -181,6 +181,67 @@ class AndroidFileOps(private val context: Context) {
     }
 
     /**
+     * 删除用户选择的源文档或直连文件路径。
+     *
+     * <p>存在 SAF URI 时只删除 URI 指向的原始文档，不会误把应用内部物化副本当作原文件。
+     * URI 为空时才回退到直接路径删除。
+     *
+     * @param uri 用户选择器返回的文档 URI，可为 null
+     * @param directPath 没有 URI 时使用的直连文件或目录路径，可为 null
+     * @param outputUri 输出目录 URI，可为 null
+     * @param outputPath 输出目录或文件直连路径，可为 null
+     * @return 原始文档删除成功或已经不存在时返回 true
+     */
+    fun deleteSource(
+        uri: Uri?,
+        directPath: String?,
+        outputUri: Uri? = null,
+        outputPath: String? = null
+    ): Boolean {
+        return try {
+            if (uri != null) {
+                if (outputUri != null && uri == outputUri) {
+                    return false
+                }
+                if (uri.scheme == "file") {
+                    return deletePath(uri.path, outputPath)
+                }
+                val resolver = context.contentResolver
+                val deleted = runCatching {
+                    DocumentsContract.deleteDocument(resolver, uri)
+                }.getOrDefault(false)
+                deleted || runCatching { resolver.delete(uri, null, null) > 0 }.getOrDefault(false)
+            } else {
+                deletePath(directPath, outputPath)
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 删除直连文件或目录。
+     *
+     * @param path 文件系统路径，可为 null
+     * @param outputPath 输出路径，可为 null
+     * @return 删除成功或路径不存在时返回 true
+     */
+    private fun deletePath(path: String?, outputPath: String?): Boolean {
+        if (path.isNullOrBlank()) {
+            return false
+        }
+        val file = File(path)
+        if (!outputPath.isNullOrBlank()) {
+            val source = file.canonicalFile.toPath()
+            val output = File(outputPath).canonicalFile.toPath()
+            if (source == output || output.startsWith(source)) {
+                return false
+            }
+        }
+        return !file.exists() || if (file.isDirectory) file.deleteRecursively() else file.delete()
+    }
+
+    /**
      * 验证路径指向的文件是否真正可读（试打开输入流而非仅 exists()）。
      *
      * <p>Xiaomi/HyperOS 等魔改 MediaStore 实现返回的 {@code _data} 路径可能

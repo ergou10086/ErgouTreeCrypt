@@ -126,6 +126,7 @@ private val TIP_FORCE = "即使检测到数据损坏也强制解密，尽可能�
 private val TIP_AUTO_UNZIP = "输入为明文压缩包时，先解压再解密其中的加密文件，对分卷有效，最多处理 2 层嵌套。如果压缩包需要密码，请在下方输入。"
 private val TIP_DECRYPT_THEN_EXTRACT = "针对 zip.ergou / 7z.ergou 等加密归档：解密后保留明文压缩包，并解压到同名文件夹且保留内部目录结构。不会解密解压出来的 .ergou 文件。"
 private val TIP_VERIFY = "勾选后仅校验文件完整性，不进行解密。校验通过表示文件未被篡改。"
+private val TIP_DELETE_SOURCE = "仅在全部输入成功解密且结果保存完成后删除密文。失败、取消、跳过、仅校验或输出位于源目录内时保留源文件。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
 /**
@@ -323,6 +324,7 @@ fun DecryptScreen(
     var decryptThenExtract by remember { mutableStateOf(false) }
     var verifyOnly by remember { mutableStateOf(false) }
     var recombine by remember { mutableStateOf(false) }
+    var deleteSourceAfterDecrypt by remember { mutableStateOf(false) }
     var decryptSettingsLoaded by remember { mutableStateOf(false) }
 
     // 从 DataStore 加载默认设置（仅首次组合）
@@ -847,6 +849,26 @@ fun DecryptScreen(
         }
     }
 
+    /**
+     * 删除当前任务的全部源输入，并返回未能删除的数量。
+     *
+     * @return 删除失败或因输出保护而跳过的输入数量
+     */
+    suspend fun deleteCurrentSources(): Int {
+        val sources = if (selectedInputs.isNotEmpty()) {
+            selectedInputs
+        } else {
+            listOfNotNull(inPath?.let { path ->
+                BatchInput(inUri, path, inName ?: File(path).name, inSize, isFolder)
+            })
+        }
+        return withContext(Dispatchers.IO) {
+            sources.count { source ->
+                !fileOps.deleteSource(source.uri, source.path, outDirUri, outDir)
+            }
+        }
+    }
+
     // 监听解密完成/失败状态，触发结果弹窗
     // 终态分支先捕获所需数据并 reset() 消费，再执行挂起工作：
     // 切回 Tab 或页面重建不会重复弹窗/重复记录历史
@@ -869,6 +891,7 @@ fun DecryptScreen(
                     val batchSummary = progress.statusText
                     val batchDetail = progress.detail
                     val partial = !progress.detail.isNullOrBlank() && progress.error != null
+                    val allInputsSucceeded = progress.allInputsSucceeded
                     vm.reset()
                     // reset() 会改变 LaunchedEffect 的 key 并取消当前协程，挂起工作必须放到
                     // 独立协程里执行，否则 commitOutput / 历史记录 / 结果弹窗会被取消丢失
@@ -876,13 +899,20 @@ fun DecryptScreen(
                         val committed = commitOutput()
                         when (committed) {
                             null, true -> {
+                                val deletionFailures = if (deleteSourceAfterDecrypt
+                                    && allInputsSucceeded) deleteCurrentSources() else 0
                                 resultTitle = if (partial) "解密部分完成" else "解密完成"
                                 resultMessage = if (!batchSummary.isNullOrBlank() && (partial || batchDetail != null)) {
                                     batchSummary
                                 } else {
                                     buildSuccessMessage("解密", outNameNow)
                                 }
-                                resultDetail = batchDetail
+                                resultDetail = listOfNotNull(
+                                    batchDetail,
+                                    if (deletionFailures > 0) {
+                                        "$deletionFailures 个源文件未能删除或因输出路径保护而保留。"
+                                    } else null
+                                ).joinToString("\n").ifBlank { null }
                                 resultType = if (partial) ResultType.INFO else ResultType.SUCCESS
                                 // 记录操作历史：默认目录按权限能力解析，SAF 输出同时保存树 URI
                                 withContext(Dispatchers.IO) {
@@ -941,15 +971,20 @@ fun DecryptScreen(
                 val resolvedOutDir = OutputDirResolver.historyDir(
                     ctx, outDir, inPath?.let { File(it).parent })
                 val savedTreeUri = outDirUri?.toString()
+                val allInputsSucceeded = mediaProgress.allInputsSucceeded
                 mediaVm.reset()
                 // reset() 改变 LaunchedEffect key 会取消当前协程，挂起工作放到独立协程执行
                 scope.launch {
                     val committed = commitOutput()
                     when (committed) {
                         null, true -> {
+                            val deletionFailures = if (deleteSourceAfterDecrypt
+                                && allInputsSucceeded) deleteCurrentSources() else 0
                             resultTitle = "格式保持解密完成"
                             resultMessage = buildSuccessMessage("解密", outNameNow)
-                            resultDetail = null
+                            resultDetail = if (deletionFailures > 0) {
+                                "源文件未能删除或因输出路径保护而保留。"
+                            } else null
                             resultType = ResultType.SUCCESS
                             // 记录操作历史（格式保持解密）
                             withContext(Dispatchers.IO) {
@@ -1334,6 +1369,15 @@ fun DecryptScreen(
             // 三、高级选项（对齐桌面端 decryptOptions）
             // ============================================================
             ExpandableCard(title = "高级选项") {
+
+                OptionRow(
+                    "解密后删除源文件",
+                    deleteSourceAfterDecrypt,
+                    { deleteSourceAfterDecrypt = it },
+                    TIP_DELETE_SOURCE,
+                    enabled = !verifyOnly
+                )
+                Spacer(Modifier.height(6.dp))
 
                 // ---- 强制解密 ----
                 OptionRow("强制解密（忽略损坏）", force, { force = it }, TIP_FORCE, enabled = !mediaDecryptMode)

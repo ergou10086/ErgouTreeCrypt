@@ -83,6 +83,7 @@ data class ImageCryptResultInfo(
  * @property errorCorrection 是否使用抗图片重编码纠错载体
  * @property robustness 抗图片重编码强度
  * @property bestEffort 是否允许提交认证失败的有损恢复结果
+ * @property deleteSourceAfterRestore 还原成功后是否删除密文图片
  * @property inputName 输入显示名
  * @property inputBytes 输入字节数
  * @property inputDescription 格式、尺寸或协议元数据描述
@@ -106,6 +107,7 @@ data class ImageCryptUiState(
     val errorCorrection: Boolean = false,
     val robustness: ImageCryptRobustness = ImageCryptRobustness.BALANCED,
     val bestEffort: Boolean = false,
+    val deleteSourceAfterRestore: Boolean = false,
     val inputName: String? = null,
     val inputBytes: Long = 0L,
     val inputDescription: String = "",
@@ -151,6 +153,9 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
 
     /** 当前物化输入，生命周期由本 ViewModel 精确管理。 */
     private var selectedInput: MaterializedImageInput? = null
+
+    /** 当前物化输入对应的原始 SAF URI。 */
+    private var selectedInputUri: Uri? = null
 
     /** 当前工作协程。 */
     private var currentJob: Job? = null
@@ -285,6 +290,17 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * 设置图片还原成功后是否删除密文图片。
+     *
+     * @param enabled true 表示最终输出提交成功后删除源图片
+     */
+    fun setDeleteSourceAfterRestore(enabled: Boolean) {
+        if (!isRunning()) {
+            _uiState.update { it.copy(deleteSourceAfterRestore = enabled) }
+        }
+    }
+
+    /**
      * 从 {@code OpenDocument} URI 流式物化并预检输入。
      *
      * <p>加密方向使用 {@link ImageProbe} 二次验证真实魔数；还原方向读取有界 EGTC-IMG 元数据。
@@ -353,6 +369,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
 
                 val previous = selectedInput
                 selectedInput = candidate
+                selectedInputUri = uri
                 candidate = null
                 fileOps.cleanupImageInput(previous)
                 _uiState.update {
@@ -441,6 +458,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         }
         val snapshot = _uiState.value
         val input = selectedInput
+        val inputUri = selectedInputUri
         val validation = validate(snapshot, input)
         if (validation != null) {
             _uiState.update { it.copy(formError = validation) }
@@ -469,7 +487,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         currentJob = viewModelScope.launch(Dispatchers.IO) {
-            execute(snapshot, requireNotNull(input), token)
+            execute(snapshot, requireNotNull(input), inputUri, token)
         }
         currentJob?.invokeOnCompletion { OperationCoordinator.release(token) }
     }
@@ -512,11 +530,13 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
      *
      * @param snapshot 启动瞬间冻结的表单状态
      * @param input 已物化输入
+     * @param inputUri 原始输入 URI，可为 null
      * @param token 全局操作令牌
      */
     private suspend fun execute(
         snapshot: ImageCryptUiState,
         input: MaterializedImageInput,
+        inputUri: Uri?,
         token: Long
     ) {
         val operationName = if (snapshot.direction == ImageCryptDirection.ENCRYPT) {
@@ -586,6 +606,18 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
             }
             HistoryService.record(type, outputName, publicPath, plan.outputTreeUri)
 
+            val sourceDeleted = if (snapshot.direction == ImageCryptDirection.RESTORE
+                && snapshot.deleteSourceAfterRestore) {
+                fileOps.deleteSource(
+                    inputUri,
+                    null,
+                    snapshot.outputTreeUri?.let(Uri::parse),
+                    publicPath
+                )
+            } else {
+                true
+            }
+
             if (plan.pending != null) {
                 retainedResultDir = plan.pending.tempDir
             }
@@ -611,7 +643,12 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
                         } else {
                             "图片还原完成"
                         },
-                        message = "已保存到 ${plan.historyDirectory}\n输出文件：$outputName",
+                        message = buildString {
+                            append("已保存到 ${plan.historyDirectory}\n输出文件：$outputName")
+                            if (!sourceDeleted) {
+                                append("\n源图片未能删除，请检查存储权限或手动删除。")
+                            }
+                        },
                         outputName = outputName,
                         sharePath = sharePath
                     ),
@@ -874,6 +911,7 @@ class ImageCryptViewModel(application: Application) : AndroidViewModel(applicati
     private fun cleanupSelectedInput() {
         val input = selectedInput
         selectedInput = null
+        selectedInputUri = null
         fileOps.cleanupImageInput(input)
     }
 

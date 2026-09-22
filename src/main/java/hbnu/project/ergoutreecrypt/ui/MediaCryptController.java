@@ -31,6 +31,8 @@ import hbnu.project.ergoutreecrypt.ui.support.LoggingProgressReporter;
 import hbnu.project.ergoutreecrypt.ui.support.TaskRunner;
 import hbnu.project.ergoutreecrypt.ui.support.Toast;
 import hbnu.project.ergoutreecrypt.ui.support.PasswordBookMenus;
+import hbnu.project.ergoutreecrypt.ui.support.MainViewSupport;
+import hbnu.project.ergoutreecrypt.ui.support.SourceDeletion;
 import hbnu.project.ergoutreecrypt.volume.ProgressPhase;
 import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
 import javafx.application.Platform;
@@ -167,6 +169,10 @@ public class MediaCryptController {
     private Label avDecompressAfterInfo;
     @FXML
     private PasswordField avDecompressPasswordField;
+    @FXML
+    private CheckBox avDeleteSourceCheck;
+    @FXML
+    private Label avDeleteSourceInfo;
 
     // ---- 底部 ----
     @FXML
@@ -281,6 +287,9 @@ public class MediaCryptController {
 
         avDecompressAfterCheck.setText(Messages.get("av.option.decompressAfter"));
         avDecompressPasswordField.setPromptText(Messages.get("av.decompress.password"));
+        avDeleteSourceCheck.setText(Messages.get("options.deleteSourceAfterDecrypt"));
+        MainViewSupport.installTooltip(avDeleteSourceInfo,
+                Messages.get("options.deleteSourceAfterDecrypt.tip"));
 
         avCompressAfterCheck.setText(Messages.get("options.compressAfter"));
         avCompressFormatCombo.setValue(SettingsManager.getDefaultCompressFormat());
@@ -714,6 +723,8 @@ public class MediaCryptController {
 
         byte[] pwdBytes = pwd.getBytes(StandardCharsets.UTF_8);
         boolean noiseMode = avNoiseDecryptCheck.isSelected();
+        boolean deleteSource = avDeleteSourceCheck.isSelected();
+        String decompressPassword = avDecompressPasswordField.getText();
         runTask("FPE_DECRYPT", progress -> {
             Path actualInput = input;
             Path tempDir = null;
@@ -728,7 +739,7 @@ public class MediaCryptController {
                         avProgressInfo.setText("");
                     });
                     tempDir = Files.createTempDirectory("ergou-av-extract-");
-                    String archPwd = avDecompressPasswordField.getText();
+                    String archPwd = decompressPassword;
                     String effectiveArchPwd = (archPwd == null || archPwd.isEmpty())
                             ? null : archPwd;
                     try {
@@ -793,6 +804,9 @@ public class MediaCryptController {
                 // 格式保持解密成功后记录历史
                 HistoryService.record(OperationType.FPE_DECRYPT,
                         output.getFileName().toString(), output.toString(), null);
+                if (deleteSource) {
+                    SourceDeletion.deleteAfterSuccess(input, output);
+                }
             } finally {
                 if (tempDir != null) {
                     deleteRecursively(tempDir);

@@ -56,6 +56,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.PermissionSection
 import hbnu.project.ergoutreecrypt.android.ui.component.PasswordBookSettings
+import hbnu.project.ergoutreecrypt.android.ui.component.QuickDecryptSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.i18n.Messages
@@ -321,6 +322,9 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(18.dp))
 
             PasswordBookSettings()
+            Spacer(modifier = Modifier.height(18.dp))
+
+            QuickDecryptSettings()
             Spacer(modifier = Modifier.height(18.dp))
 
             SettingSwitch(

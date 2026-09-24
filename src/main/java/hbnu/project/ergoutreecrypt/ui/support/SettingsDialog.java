@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
+import hbnu.project.ergoutreecrypt.PicocryptApplication;
 import hbnu.project.ergoutreecrypt.log.LogLevel;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
@@ -11,7 +12,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+import javafx.stage.Window;
 import javafx.util.Duration;
 
 /**
@@ -33,41 +38,40 @@ public final class SettingsDialog {
      * @param owner        父窗口
      * @param themeManager 主题管理器，用于实时响应主题模式变更
      */
-    public static void show(javafx.stage.Window owner, ThemeManager themeManager) {
+    public static void show(Window owner, ThemeManager themeManager) {
+        createDialog(owner, themeManager).showAndWait();
+    }
+
+    /**
+     * 创建带滚动内容和固定底部按钮的设置窗口。
+     *
+     * @param owner 父窗口
+     * @param themeManager 当前主题管理器
+     * @return 尚未显示的设置窗口
+     */
+    static Dialog<Void> createDialog(Window owner, ThemeManager themeManager) {
         Dialog<Void> dialog = new Dialog<>();
-        dialog.initOwner(owner);
         dialog.setTitle(Messages.get("settings.title"));
         dialog.setHeaderText(null);
 
         DialogPane pane = dialog.getDialogPane();
 
         // ---- 继承主窗口主题：CSS 变量定义在 .root.light / .root.dark 上 ----
-        pane.getStyleClass().add("root");
-        if (owner != null && owner.getScene() != null) {
-            javafx.scene.Scene ownerScene = owner.getScene();
-            for (String cls : ownerScene.getRoot().getStyleClass()) {
-                if ("light".equals(cls) || "dark".equals(cls)) {
-                    pane.getStyleClass().add(cls);
-                    break;
-                }
-            }
-            if (!pane.getStyleClass().contains("light") && !pane.getStyleClass().contains("dark")) {
-                pane.getStyleClass().add("light");
-            }
-        } else {
-            pane.getStyleClass().add("light");
-        }
-
         // 加载样式表
-        pane.getStylesheets().add(
-                SettingsDialog.class.getResource(
-                        "/hbnu/project/ergoutreecrypt/ui/styles/win11.css").toExternalForm());
+        DialogSupport.configure(dialog, owner, PicocryptApplication.DEFAULT_WINDOW_WIDTH,
+                PicocryptApplication.DEFAULT_WINDOW_HEIGHT);
+        pane.getStyleClass().add("settings-dialog");
 
         // ---- 内容区 ----
         GridPane grid = new GridPane();
         grid.setHgap(16);
         grid.setVgap(12);
-        grid.setPadding(new Insets(20, 24, 12, 24));
+        grid.setPadding(new Insets(16));
+        grid.setMinWidth(0);
+        ColumnConstraints contentColumn = new ColumnConstraints();
+        contentColumn.setHgrow(Priority.ALWAYS);
+        contentColumn.setMinWidth(0);
+        grid.getColumnConstraints().addAll(contentColumn, new ColumnConstraints(), new ColumnConstraints(16));
 
         int row = 0;
 
@@ -80,7 +84,7 @@ public final class SettingsDialog {
                 Messages.get("theme.light"),
                 Messages.get("theme.dark"));
         themeCombo.setPrefWidth(160);
-        HBox themeBox = new HBox(8,
+        FlowPane themeBox = new FlowPane(8, 8,
                 new Label(Messages.get("theme.mode") + ":"), themeCombo);
         themeBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(themeBox, 0, row++, 3, 1);
@@ -118,7 +122,7 @@ public final class SettingsDialog {
                 Messages.get(Argon2DesktopMode.STRONG.getLabelKey()),
                 Messages.get(Argon2DesktopMode.PARANOID.getLabelKey()));
         kdfTierCombo.setPrefWidth(230);
-        HBox kdfTierBox = new HBox(8,
+        FlowPane kdfTierBox = new FlowPane(8, 8,
                 new Label(Messages.get("settings.kdfTier")), kdfTierCombo);
         kdfTierBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(kdfTierBox, 0, row, 2, 1);
@@ -134,7 +138,7 @@ public final class SettingsDialog {
         ComboBox<String> defaultFormat = new ComboBox<>();
         defaultFormat.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         defaultFormat.setPrefWidth(120);
-        HBox fmtBox = new HBox(8,
+        FlowPane fmtBox = new FlowPane(8, 8,
                 new Label(Messages.get("settings.defaultFormat")), defaultFormat);
         fmtBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(fmtBox, 0, row, 2, 1);
@@ -145,7 +149,7 @@ public final class SettingsDialog {
         Spinner<Integer> defaultSplitSize = new Spinner<>(1, 102400, 100);
         defaultSplitSize.setPrefWidth(110);
         defaultSplitSize.setEditable(true);
-        HBox splitBox = new HBox(6,
+        FlowPane splitBox = new FlowPane(6, 8,
                 new Label(Messages.get("settings.defaultSplitSize")),
                 defaultSplitSize,
                 new Label("MiB"));
@@ -181,7 +185,7 @@ public final class SettingsDialog {
         Spinner<Integer> threadCountSpinner = new Spinner<>(1, 16, 4);
         threadCountSpinner.setPrefWidth(90);
         threadCountSpinner.setEditable(true);
-        HBox threadBox = new HBox(6,
+        FlowPane threadBox = new FlowPane(6, 8,
                 new Label(Messages.get("settings.threadCount")),
                 threadCountSpinner);
         threadBox.setAlignment(Pos.CENTER_LEFT);
@@ -192,7 +196,7 @@ public final class SettingsDialog {
         Spinner<Integer> batchSerialSpinner = new Spinner<>(1, 100, 10);
         batchSerialSpinner.setPrefWidth(90);
         batchSerialSpinner.setEditable(true);
-        HBox batchSerialBox = new HBox(6,
+        FlowPane batchSerialBox = new FlowPane(6, 8,
                 new Label(Messages.get("settings.batchSerialThreshold")),
                 batchSerialSpinner);
         batchSerialBox.setAlignment(Pos.CENTER_LEFT);
@@ -208,7 +212,7 @@ public final class SettingsDialog {
                 Messages.get("settings.logLevel.info"),
                 Messages.get("settings.logLevel.trace"));
         logLevelCombo.setPrefWidth(180);
-        HBox logLevelBox = new HBox(8,
+        FlowPane logLevelBox = new FlowPane(8, 8,
                 new Label(Messages.get("settings.logLevel")), logLevelCombo);
         logLevelBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(logLevelBox, 0, row, 2, 1);
@@ -220,7 +224,7 @@ public final class SettingsDialog {
                 Messages.get("settings.logRefresh.clear"),
                 Messages.get("settings.logRefresh.keep"));
         logRefreshCombo.setPrefWidth(180);
-        HBox logRefreshBox = new HBox(8,
+        FlowPane logRefreshBox = new FlowPane(8, 8,
                 new Label(Messages.get("settings.logRefresh")), logRefreshCombo);
         logRefreshBox.setAlignment(Pos.CENTER_LEFT);
         grid.add(logRefreshBox, 0, row, 2, 1);
@@ -236,7 +240,7 @@ public final class SettingsDialog {
         grid.add(section(Messages.get("passwordBook.title")), 0, row++, 3, 1);
         Button passwordBookButton = new Button(Messages.get("passwordBook.manage"));
         passwordBookButton.getStyleClass().add("btn-secondary");
-        passwordBookButton.setOnAction(event -> PasswordBookDialog.show(owner));
+        passwordBookButton.setOnAction(event -> PasswordBookDialog.show(pane.getScene().getWindow()));
         grid.add(passwordBookButton, 0, row, 2, 1);
         grid.add(infoIcon(Messages.get("passwordBook.description")), 2, row);
         row++;
@@ -249,7 +253,7 @@ public final class SettingsDialog {
         shellMenuBtn.setMinWidth(96);
         Label shellMenuStatus = new Label();
         shellMenuStatus.getStyleClass().add("field-hint");
-        HBox shellMenuBox = new HBox(10,
+        FlowPane shellMenuBox = new FlowPane(10, 8,
                 new Label(Messages.get("settings.shellMenu") + ":"),
                 shellMenuBtn,
                 shellMenuStatus);
@@ -382,13 +386,27 @@ public final class SettingsDialog {
             JvmLogSupport.apply(b);
         });
 
-        pane.setContent(grid);
+        for (var child : grid.getChildren()) {
+            if (child instanceof FlowPane flow) {
+                flow.setMinWidth(0);
+                GridPane.setHgrow(flow, Priority.ALWAYS);
+            }
+        }
+        ScrollPane scroll = new ScrollPane(grid);
+        scroll.getStyleClass().add("settings-scroll");
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.setMinSize(0, 0);
+        scroll.setPrefViewportWidth(460);
+        scroll.setPrefViewportHeight(560);
+        pane.setContent(scroll);
 
         // ---- 按钮 ----
         pane.getButtonTypes().add(
                 new ButtonType(Messages.get("dialog.close"), ButtonBar.ButtonData.OK_DONE));
 
-        dialog.showAndWait();
+        return dialog;
     }
 
     /**
@@ -445,16 +463,27 @@ public final class SettingsDialog {
         worker.start();
     }
 
-    private static Label section(String text) {
-        Label l = new Label(text);
-        l.getStyleClass().add("card-title");
-        l.setPadding(new Insets(6, 0, 2, 0));
-        return l;
+    /**
+     * 创建带主题分割线的设置分组标题。
+     *
+     * @param text 分组名称
+     * @return 分割线和标题容器
+     */
+    private static VBox section(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("card-title");
+        Separator separator = new Separator();
+        separator.getStyleClass().add("settings-divider");
+        VBox section = new VBox(10, separator, label);
+        section.setPadding(new Insets(10, 0, 2, 0));
+        return section;
     }
 
     private static CheckBox checkBox(String text) {
         CheckBox cb = new CheckBox(text);
         cb.getStyleClass().add("check");
+        cb.setWrapText(true);
+        cb.setMinWidth(0);
         return cb;
     }
 

@@ -2434,6 +2434,122 @@
     -fx-padding: 0;
 }
 
+/* 原生标题栏对话框不再叠加透明圆角和外阴影。 */
+.dialog-pane.desktop-dialog {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-effect: null;
+}
+
+.settings-scroll,
+.settings-scroll > .viewport {
+    -fx-background-color: -bg-card;
+    -fx-padding: 0;
+}
+
+.settings-divider:horizontal .line {
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* 恢复被全局重置清除的表头、行边界、选中色和文本色。 */
+.password-book-table {
+    -fx-background-color: -bg-card;
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 1;
+}
+
+.password-book-table .column-header-background,
+.password-book-table .column-header,
+.password-book-table .filler {
+    -fx-background-color: -bg-subtle;
+}
+
+.password-book-table .column-header {
+    -fx-border-color: transparent -border-soft -border-strong transparent;
+    -fx-border-width: 0 1 1 0;
+    -fx-padding: 10 8;
+}
+
+.password-book-table .column-header .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-weight: bold;
+    -fx-alignment: center-left;
+}
+
+.password-book-table .table-row-cell {
+    -fx-background-color: -bg-card;
+    -fx-background-insets: 0;
+}
+
+.password-book-table .table-row-cell:odd {
+    -fx-background-color: -bg-subtle;
+}
+
+.password-book-table .table-row-cell:empty {
+    -fx-background-color: -bg-card;
+}
+
+.password-book-table .table-row-cell:empty .table-cell {
+    -fx-border-color: transparent;
+}
+
+.password-book-table .table-row-cell:filled:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-border-color: -accent;
+    -fx-border-width: 0 0 0 3;
+}
+
+.password-book-table .table-cell {
+    -fx-text-fill: -text-primary;
+    -fx-padding: 6 8;
+    -fx-alignment: center-left;
+    -fx-border-color: transparent -border-soft -border-soft transparent;
+    -fx-border-width: 0 1 1 0;
+}
+
+.password-book-table .table-cell .text-field {
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-secondary;
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-padding: 6 8;
+}
+
+.password-book-table .table-cell .text-field:focused {
+    -fx-border-color: -accent;
+}
+
+.password-book-table .placeholder .label {
+    -fx-text-fill: -text-secondary;
+    -fx-wrap-text: true;
+    -fx-padding: 16;
+}
+
+.password-book-dialog .password-book-error {
+    -fx-text-fill: -danger;
+}
+
+.desktop-dialog .button.btn-secondary {
+    -fx-background-color: -bg-subtle;
+    -fx-text-fill: -text-primary;
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1;
+    -fx-padding: 8 12;
+}
+
+.desktop-dialog .button.btn-secondary:hover {
+    -fx-background-color: -bg-input-hover;
+}
+
+.desktop-dialog .button.btn-secondary:pressed {
+    -fx-background-color: -accent-subtle;
+}
+
 /* ==========================================================================
  *                           END OF FILE
  * ========================================================================== */

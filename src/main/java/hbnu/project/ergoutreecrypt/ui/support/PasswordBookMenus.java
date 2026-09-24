@@ -1,6 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
 import hbnu.project.ergoutreecrypt.passwordbook.DesktopPasswordBookStore;
+import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -8,6 +9,7 @@ import javafx.scene.control.TextInputControl;
 import org.controlsfx.control.textfield.CustomPasswordField;
 import org.controlsfx.control.textfield.CustomTextField;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -62,9 +64,17 @@ public final class PasswordBookMenus {
     private static void refresh(MenuButton menu, TextInputControl primary,
                                 TextInputControl alternate) {
         menu.getItems().clear();
-        List<PasswordBookEntry> entries = DesktopPasswordBookStore.load();
+        List<PasswordBookEntry> entries;
+        try {
+            entries = DesktopPasswordBookStore.load();
+        } catch (IOException | SecurityException exception) {
+            MenuItem error = new MenuItem(Messages.get("passwordBook.error"));
+            error.setDisable(true);
+            menu.getItems().add(error);
+            return;
+        }
         if (entries.isEmpty()) {
-            MenuItem empty = new MenuItem("密码本为空");
+            MenuItem empty = new MenuItem(Messages.get("passwordBook.empty"));
             empty.setDisable(true);
             menu.getItems().add(empty);
             return;

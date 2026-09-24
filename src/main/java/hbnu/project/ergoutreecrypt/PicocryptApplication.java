@@ -41,6 +41,12 @@ import java.util.List;
  */
 public class PicocryptApplication extends Application {
 
+    /** 桌面主页与设置窗口共用的默认宽度。 */
+    public static final double DEFAULT_WINDOW_WIDTH = 520;
+
+    /** 桌面主页与设置窗口共用的默认高度。 */
+    public static final double DEFAULT_WINDOW_HEIGHT = 720;
+
     static {
         // 注册 BouncyCastle，作为 Argon2id / Serpent / BLAKE2b / SHA3 等算法的来源。
         if (Security.getProvider("BC") == null) {
@@ -115,7 +121,7 @@ public class PicocryptApplication extends Application {
         Parent root = fxmlLoader.load();
         MainController controller = fxmlLoader.getController();
 
-        Scene scene = new Scene(root, 520, 720);
+        Scene scene = new Scene(root, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
         scene.setFill(Color.TRANSPARENT);
 
         // 无边框窗口 + 自定义标题栏，贴近 Win11 视觉。

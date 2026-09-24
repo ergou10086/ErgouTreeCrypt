@@ -1,0 +1,248 @@
+/* ==========================================================================
+ * SECTION 28 — 对话框 (Dialog / Alert / DialogPane)
+ *    覆盖 Modena 默认对话框样式，用于 SettingsDialog 和 About Alert
+ * ========================================================================== */
+
+.dialog-pane {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-card;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 0;
+    -fx-effect: dropshadow(gaussian, -shadow-strong, 24, 0, 0, 6);
+}
+
+.dialog-pane > .content.label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-padding: 16 24 16 24;
+}
+
+.dialog-pane > .header-panel {
+    -fx-background-color: transparent;
+    -fx-padding: 20 24 8 24;
+}
+
+.dialog-pane > .header-panel > .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 18px;
+    -fx-font-weight: 700;
+}
+
+.dialog-pane > .button-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 12 24 20 24;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-spacing: 8;
+}
+
+/* 对话框中的按钮使用统一的 Win11 风格 */
+/* Alert 确认按钮自动获得 default 样式类 */
+.dialog-pane .button {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-background-radius: 4;
+    -fx-padding: 8 20 8 20;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.dialog-pane .button:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.dialog-pane .button:pressed {
+    -fx-background-color: -accent-press;
+}
+
+/* 非 default 按钮用次要样式 */
+.dialog-pane .button:cancel {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1;
+    -fx-font-weight: 400;
+}
+
+.dialog-pane .button:cancel:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* 设置对话框 */
+.settings-dialog {
+    -fx-background-color: -bg-card;
+}
+
+.settings-dialog .dialog-pane {
+    -fx-background-color: -bg-card;
+}
+
+.settings-grid {
+    -fx-background-color: -bg-card;
+    -fx-hgap: 16;
+    -fx-vgap: 12;
+    -fx-padding: 20 24 12 24;
+}
+
+/* ==========================================================================
+ * SECTION 29 — 文本输入对话框 (TextInputDialog)
+ *    用于归档密码弹窗等
+ * ========================================================================== */
+
+.text-input-dialog {
+    -fx-background-color: -bg-card;
+}
+
+.text-input-dialog .dialog-pane {
+    -fx-background-color: -bg-card;
+}
+
+.text-input-dialog .content {
+    -fx-padding: 8 24 16 24;
+}
+
+.text-input-dialog .text-field {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 12 9 12;
+    -fx-text-fill: -text-primary;
+}
+
+.text-input-dialog .text-field:focused {
+    -fx-border-color: -accent;
+}
+
+/* ==========================================================================
+ * SECTION 30 — 文件选择器按钮 (已包含在 .btn-ghost 中，此处留空)
+ * ========================================================================== */
+
+/* ==========================================================================
+ * SECTION 31 — TableView / ListView / TreeView (前瞻性设计)
+ *    若将来使用这些控件，确保已有 Win11 风格
+ * ========================================================================== */
+
+/* ---- ListView ---- */
+.list-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+}
+
+.list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 14 8 14;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.list-view .list-cell:filled:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.list-view .list-cell:filled:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.list-view .list-cell:filled:selected:hover {
+    -fx-background-color: derive(-accent-subtle, -5%);
+}
+
+/* ---- TableView ---- */
+.table-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 8 8 0 0;
+}
+
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent -border-soft transparent transparent;
+    -fx-border-width: 0 1 0 0;
+    -fx-padding: 4 12 4 12;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+
+.table-view .column-header:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.table-view .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 2;
+}
+
+.table-view .table-row-cell:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.table-view .table-row-cell:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+}
+
+/* ---- TreeView ---- */
+.tree-view {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+}
+
+.tree-view .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 6 8 6 8;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.tree-view .tree-cell:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+.tree-view .tree-cell:selected {
+    -fx-background-color: -accent-subtle;
+    -fx-text-fill: -text-primary;
+}
+
+.tree-view .arrow {
+    -fx-background-color: -text-secondary;
+}
+

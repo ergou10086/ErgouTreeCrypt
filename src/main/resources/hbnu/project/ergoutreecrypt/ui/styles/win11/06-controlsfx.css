@@ -1,0 +1,118 @@
+/* ==========================================================================
+ * SECTION 26 — ControlsFX ToggleSwitch (Win11 风格开关)
+ *    对应 ControlsFX 的 .toggle-switch 样式类
+ *    实现 Win11 风格的椭圆形轨道和圆形滑块
+ *    使用方法见文件末尾 Java 代码示例
+ * ========================================================================== */
+
+.toggle-switch {
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* 滑块区域（轨道） */
+.toggle-switch .thumb-area {
+    -fx-background-color: -border-strong;
+    -fx-background-radius: 12;
+    -fx-pref-width: 40;
+    -fx-pref-height: 20;
+    -fx-min-width: 40;
+    -fx-min-height: 20;
+    -fx-max-width: 40;
+    -fx-max-height: 20;
+}
+
+/* 未选中时的滑块（圆形） */
+.toggle-switch .thumb {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 16;
+    -fx-pref-height: 16;
+    -fx-min-width: 16;
+    -fx-min-height: 16;
+    -fx-max-width: 16;
+    -fx-max-height: 16;
+    -fx-translate-x: 2;
+    -fx-translate-y: 2;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 4, 0, 0, 1.5);
+}
+
+/* 未选中时悬浮 */
+.toggle-switch:hover .thumb-area {
+    -fx-background-color: -text-tertiary;
+}
+
+.toggle-switch:hover .thumb {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 6, 0, 0, 2);
+}
+
+/* 选中状态：轨道变强调色 */
+.toggle-switch:selected .thumb-area {
+    -fx-background-color: -accent;
+}
+
+.toggle-switch:selected:hover .thumb-area {
+    -fx-background-color: -accent-hover;
+}
+
+/* 选中时滑块滑到右侧 */
+.toggle-switch:selected .thumb {
+    -fx-translate-x: 22;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+/* 按下状态 */
+.toggle-switch:pressed .thumb-area {
+    -fx-background-color: -text-secondary;
+}
+
+.toggle-switch:selected:pressed .thumb-area {
+    -fx-background-color: -accent-press;
+}
+
+/* 禁用状态 */
+.toggle-switch:disabled {
+    -fx-opacity: 0.4;
+    -fx-cursor: default;
+}
+
+/* ==========================================================================
+ * SECTION 27 — ControlsFX RangeSlider
+ *    覆盖默认样式为 Win11 风格
+ * ========================================================================== */
+
+.range-slider {
+    -fx-padding: 0;
+}
+
+.range-slider .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 2;
+    -fx-pref-height: 4;
+}
+
+.range-slider .range-bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 2;
+}
+
+.range-slider .thumb {
+    -fx-background-color: -bg-card;
+    -fx-border-color: -accent;
+    -fx-border-radius: 50%;
+    -fx-background-radius: 50%;
+    -fx-border-width: 2;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+.range-slider .thumb:hover {
+    -fx-background-color: -accent-subtle;
+    -fx-border-color: -accent-hover;
+}
+
+.range-slider .thumb:pressed {
+    -fx-background-color: -accent;
+}
+

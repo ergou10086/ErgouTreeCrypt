@@ -1,0 +1,351 @@
+/* ==========================================================================
+ * SECTION 2 — 窗口根节点 (Window Root)
+ * ========================================================================== */
+
+/* 透明窗口根：圆角 + 细描边 + 投影，模拟 Win11 窗口 */
+.app-root {
+    -fx-background-color: -bg-window;
+    -fx-background-radius: 8;
+    -fx-border-color: -window-border;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, -shadow-strong, 24, 0, 0, 6);
+}
+
+/* 最大化时去除圆角和边框，以无缝贴合屏幕 */
+.app-root.maximized {
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-width: 0;
+    -fx-effect: null;
+}
+
+/* StackPane 最外层透明，留出阴影空间 */
+.root {
+    -fx-padding: 0;
+}
+
+/* ==========================================================================
+ * SECTION 3 — 标题栏 (Title Bar)
+ *    对应 FXML 中的 .title-bar, .title-logo, .title-text, .title-tool, .title-win
+ * ========================================================================== */
+
+.title-bar {
+    -fx-background-color: -titlebar;
+    -fx-background-radius: 8 8 0 0;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+}
+
+/* 最大化时标题栏也去除顶部圆角 */
+.app-root.maximized .title-bar {
+    -fx-background-radius: 0;
+}
+
+.title-logo {
+    -fx-fit-width: 24;
+    -fx-fit-height: 24;
+}
+
+.title-text {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -text-primary;
+}
+
+/* 标题旁的版本号：小一档且更浅，避免与标题争夺注意力 */
+.title-version {
+    -fx-font-size: 11px;
+    -fx-text-fill: -text-tertiary;
+}
+
+/* 标题栏工具按钮（语言切换、主题切换） */
+.title-tool {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 6;
+    -fx-padding: 4 10 4 10;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+    -fx-min-height: 28;
+}
+
+.title-tool:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-text-fill: -text-primary;
+}
+
+.title-tool:pressed {
+    -fx-background-color: -bg-subtle;
+}
+
+/* 标题栏窗口控制按钮（最小化、关闭） */
+.title-win {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 0;
+    -fx-min-width: 46;
+    -fx-pref-width: 46;
+    -fx-min-height: 32;
+    -fx-padding: 4 0 4 0;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+}
+
+.win-min:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-text-fill: -text-primary;
+}
+
+.win-min:pressed {
+    -fx-background-color: -bg-subtle;
+}
+
+.win-close {
+    -fx-background-radius: 0 8 0 0;
+}
+
+.win-close:hover {
+    -fx-background-color: #c42b1c;
+    -fx-text-fill: #ffffff;
+}
+
+.win-close:pressed {
+    -fx-background-color: #a02018;
+    -fx-text-fill: #ffffff;
+}
+
+.app-root.maximized .win-close {
+    -fx-background-radius: 0;
+}
+
+/* ==========================================================================
+ * SECTION 4 — 菜单栏 (Menu Bar)
+ *    对应 FXML 中的 .app-menu (MenuBar)
+ *    覆盖 JavaFX Modena 默认菜单样式
+ * ========================================================================== */
+
+.app-menu {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 0;
+    -fx-min-height: 30;
+}
+
+.app-menu > .menu-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 顶层菜单 */
+.app-menu .menu {
+    -fx-padding: 4 10 4 10;
+    -fx-background-radius: 4;
+}
+
+.app-menu .menu .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+.app-menu .menu:hover,
+.app-menu .menu:showing {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* 下拉菜单容器 (ContextMenu) */
+/* 注意：弹出菜单属于独立 Popup，有独立 Scene。
+   但若该 Scene 的根继承了 window 的样式类，则 looked-up color 可用。
+   为安全起见，此处同时提供硬编码后备，并通过 .root.dark 祖先选择器覆盖深色。 */
+
+.app-menu .context-menu,
+.context-menu {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-color: #e8e8e8;
+    -fx-border-radius: 8;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 12, 0, 0, 4);
+    -fx-min-width: 180;
+}
+
+.root.dark .app-menu .context-menu,
+.root.dark .context-menu {
+    -fx-background-color: #2c2c2c;
+    -fx-border-color: #3a3a3a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+/* 菜单项 */
+.app-menu .menu-item,
+.context-menu .menu-item {
+    -fx-padding: 8 12 8 12;
+    -fx-background-radius: 6;
+    -fx-background-color: transparent;
+}
+
+.app-menu .menu-item .label,
+.context-menu .menu-item .label {
+    -fx-text-fill: #1a1a1a;
+    -fx-font-size: 12px;
+}
+
+.root.dark .app-menu .menu-item .label,
+.root.dark .context-menu .menu-item .label {
+    -fx-text-fill: #f2f2f2;
+}
+
+.app-menu .menu-item:hover,
+.context-menu .menu-item:hover {
+    -fx-background-color: #f0f0f0;
+}
+
+.root.dark .app-menu .menu-item:hover,
+.root.dark .context-menu .menu-item:hover {
+    -fx-background-color: #3a3a3a;
+}
+
+.app-menu .menu-item:pressed,
+.context-menu .menu-item:pressed {
+    -fx-background-color: #e0e0e0;
+}
+
+.root.dark .app-menu .menu-item:pressed,
+.root.dark .context-menu .menu-item:pressed {
+    -fx-background-color: #4a4a4a;
+}
+
+/* 菜单分割线 */
+.app-menu .separator .line,
+.context-menu .separator .line {
+    -fx-border-color: #e8e8e8;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 2 6 2 6;
+}
+
+.root.dark .app-menu .separator .line,
+.root.dark .context-menu .separator .line {
+    -fx-border-color: #3a3a3a;
+}
+
+/* 加速键文本 */
+.app-menu .menu-item .accelerator-text,
+.context-menu .menu-item .accelerator-text {
+    -fx-text-fill: -text-tertiary;
+    -fx-font-size: 11px;
+}
+
+/* ==========================================================================
+ * SECTION 5 — 标签页 (TabPane)
+ *    对应 .tab-strip：主窗口顶部标签条与「关于」对话框共用同一套外观
+ *    (TabPane, tabClosingPolicy="UNAVAILABLE")
+ *    覆盖 Modena 默认标签样式
+ * ========================================================================== */
+
+.tab-strip {
+    -fx-background-color: transparent;
+    -fx-tab-min-height: 36;
+    -fx-tab-max-height: 36;
+    -fx-open-tab-animation: none;
+    -fx-close-tab-animation: none;
+}
+
+/* 标签头部区域背景透明 */
+.tab-strip > .tab-header-area {
+    -fx-padding: 0 12 0 12;
+}
+
+.tab-strip > .tab-header-area > .tab-header-background {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent -border-soft transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* 溢出控件：标签多到一行放不下时，TabPane 会自动显示出这个下箭头按钮，
+   点开即列出全部标签（原生 ContextMenu，已由 SECTION 4 统一配色）。
+   它平时完全不占位、不可见，只在需要时出现，因此不必占用常驻界面空间。 */
+.tab-strip > .tab-header-area > .control-buttons-tab {
+    -fx-padding: 0 0 0 2;
+}
+
+.tab-strip > .tab-header-area > .control-buttons-tab > .container {
+    -fx-padding: 4 0 0 0;
+}
+
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+    -fx-padding: 5 5 5 5;
+    -fx-cursor: hand;
+}
+
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button:hover {
+    -fx-background-color: -bg-card-hover;
+}
+
+/* SECTION 0 把 -fx-mark-color 置为 transparent，箭头填充色必须在此重新给出，
+   否则溢出按钮可见但箭头不可见 */
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button > .arrow {
+    -fx-background-color: -text-secondary;
+    -fx-padding: 3 4 3 4;
+}
+
+/* 注意：选择器不能折行书写 —— JavaFX 的 CSS 解析器把换行视为选择器结束，
+   折行会直接报 "Expected LBRACE" 并丢弃整条规则 */
+.tab-strip > .tab-header-area > .control-buttons-tab > .container > .tab-down-button:hover > .arrow {
+    -fx-background-color: -accent;
+}
+
+/* 单个标签：内边距收紧，使全部标签在默认 520px 宽的窗口里也能一行排下 */
+.tab-strip .tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-padding: 8 12 8 12;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.tab-strip .tab .tab-label {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+}
+
+.tab-strip .tab:hover .tab-label {
+    -fx-text-fill: -text-primary;
+}
+
+/* 选中标签：底部 2px 强调色下划线指示器 */
+.tab-strip .tab:selected {
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-background-color: transparent;
+}
+
+.tab-strip .tab:selected .tab-label {
+    -fx-text-fill: -accent;
+}
+
+/* 去除选中标签的默认虚线焦点 */
+.tab-strip .tab:focused {
+    -fx-background-insets: 0;
+}
+
+.tab-strip > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+/* 标签内容区域 */
+.tab-strip .tab-content-area {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 标签体 */
+.tab-body {
+    -fx-background-color: transparent;
+}
+

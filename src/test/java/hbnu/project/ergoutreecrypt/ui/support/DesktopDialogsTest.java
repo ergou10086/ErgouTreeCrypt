@@ -3,11 +3,13 @@ package hbnu.project.ergoutreecrypt.ui.support;
 import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry;
 import hbnu.project.ergoutreecrypt.version.AppVersion;
 import javafx.application.Platform;
+import javafx.css.PseudoClass;
 import javafx.geometry.Orientation;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.WritableImage;
+import javafx.scene.layout.BorderStrokeStyle;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Screen;
@@ -26,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
@@ -174,6 +177,52 @@ class DesktopDialogsTest {
             assertEquals("first-updated", saved.get().getFirst().getPassword());
             assertEquals("last-updated", saved.get().getLast().getPassword());
             assertEquals(new PasswordBookEntry("测试2", "value2"), saved.get().get(1));
+            return null;
+        });
+    }
+
+    /** 拆分后的样式保留自定义虚线节距、悬停及拖入效果，并支持原地切换明暗主题。 */
+    @Test
+    void dropZoneKeepsDashPatternAndThemeStates() throws Exception {
+        onFx(() -> {
+            StackPane dropZone = new StackPane(new Label("测试拖放区域"));
+            dropZone.getStyleClass().add("drop-zone");
+            StackPane root = new StackPane(dropZone);
+            Scene scene = new Scene(root, 360, 240);
+            scene.getStylesheets().add(Objects.requireNonNull(getClass().getResource(
+                    "/hbnu/project/ergoutreecrypt/ui/styles/win11.css")).toExternalForm());
+            Stage stage = new Stage();
+            stage.setScene(scene);
+            for (String theme : List.of("light", "dark")) {
+                root.getStyleClass().removeAll("light", "dark");
+                root.getStyleClass().add(theme);
+                stage.show();
+                root.applyCss();
+                root.layout();
+                var stroke = dropZone.getBorder().getStrokes().getFirst();
+                assertEquals(List.of(7.0, 5.0, 7.0, 5.0), stroke.getTopStyle().getDashArray());
+                assertEquals(stroke.getTopStyle(), stroke.getRightStyle());
+                assertEquals(stroke.getTopStyle(), stroke.getBottomStyle());
+                assertEquals(stroke.getTopStyle(), stroke.getLeftStyle());
+                assertEquals(2, stroke.getWidths().getTop());
+                assertEquals(Color.web(theme.equals("dark") ? "#4a4a4a" : "#d2d2d2"), stroke.getTopStroke());
+                assertEquals(Color.web(theme.equals("dark") ? "#2c2c2c" : "#ffffff"),
+                        dropZone.getBackground().getFills().getFirst().getFill());
+                dropZone.pseudoClassStateChanged(PseudoClass.getPseudoClass("hover"), true);
+                root.applyCss();
+                assertEquals(Color.web(theme.equals("dark") ? "#343434" : "#f7f9fc"),
+                        dropZone.getBackground().getFills().getFirst().getFill());
+                assertEquals(List.of(7.0, 5.0, 7.0, 5.0),
+                        dropZone.getBorder().getStrokes().getFirst().getTopStyle().getDashArray());
+                dropZone.getStyleClass().add("drag-over");
+                root.applyCss();
+                stroke = dropZone.getBorder().getStrokes().getFirst();
+                assertEquals(BorderStrokeStyle.SOLID, stroke.getTopStyle());
+                assertEquals(Color.web(theme.equals("dark") ? "#4cc2ff" : "#0067c0"), stroke.getTopStroke());
+                dropZone.getStyleClass().remove("drag-over");
+                dropZone.pseudoClassStateChanged(PseudoClass.getPseudoClass("hover"), false);
+            }
+            stage.close();
             return null;
         });
     }

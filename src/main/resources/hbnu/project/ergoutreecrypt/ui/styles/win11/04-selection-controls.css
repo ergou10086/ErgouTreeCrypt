@@ -1,0 +1,207 @@
+/* ==========================================================================
+ * SECTION 16 — 下拉框 (ComboBox)
+ *    对应 FXML 中 styleClass="text-input" 的 ComboBox
+ *    覆盖 Modena 默认下拉框 + 弹出列表样式
+ * ========================================================================== */
+
+.combo-box {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-font-size: 13px;
+}
+
+.combo-box:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.combo-box:focused {
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.combo-box:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* 下拉框的列表单元格 */
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+}
+
+/* 下拉箭头区域 */
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 8 0 0;
+}
+
+.combo-box .arrow {
+    -fx-background-color: -text-secondary;
+    -fx-shape: "M0,0 L3,3 L6,0 Z";
+    -fx-scale-x: 0.9;
+    -fx-scale-y: 0.9;
+}
+
+/* ---- 弹出列表 (Popup，独立的 Scene) ---- */
+/* 必须同时使用硬编码颜色（Popup 可能不继承 looked-up 变量）和 .root.dark 后备 */
+
+.combo-box-popup {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-color: #e8e8e8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 12, 0, 0, 4);
+}
+
+.root.dark .combo-box-popup .list-view {
+    -fx-background-color: #2c2c2c;
+    -fx-border-color: #3a3a3a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1a1a1a;
+    -fx-padding: 8 14 8 14;
+    -fx-background-radius: 4;
+    -fx-font-size: 13px;
+}
+
+.root.dark .combo-box-popup .list-cell {
+    -fx-text-fill: #f2f2f2;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #f0f0f0;
+}
+.root.dark .combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #3a3a3a;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #cce5ff;
+    -fx-text-fill: #1a1a1a;
+}
+.root.dark .combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #1a3a5c;
+    -fx-text-fill: #f2f2f2;
+}
+
+/* 滚动条在弹出列表中的样式 */
+.combo-box-popup .list-view .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(0, 0, 0, 0.20);
+}
+
+.root.dark .combo-box-popup .list-view .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(255, 255, 255, 0.20);
+}
+
+/* ==========================================================================
+ * SECTION 17 — 微调器 (Spinner)
+ *    对应 FXML 中的 .spinner (splitSizeSpinner)
+ *    覆盖 Modena 默认 Spinner 样式，支持可编辑模式下手动输入数字
+ * ========================================================================== */
+
+.spinner {
+    -fx-background-color: -bg-input;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+}
+
+.spinner:hover {
+    -fx-border-color: -text-tertiary;
+}
+
+.spinner:focused {
+    -fx-border-color: -accent;
+}
+
+/* 可编辑 Spinner 内部的输入框 */
+.spinner .text-field {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 8 10 8 10;
+    -fx-background-radius: 4 0 0 4;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.spinner .text-field:focused {
+    -fx-background-color: rgba(0, 103, 192, 0.06);
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.spinner:focused .text-field {
+    -fx-background-color: rgba(0, 103, 192, 0.04);
+}
+
+.root.dark .spinner .text-field:focused {
+    -fx-background-color: rgba(76, 194, 255, 0.08);
+}
+
+.root.dark .spinner:focused .text-field {
+    -fx-background-color: rgba(76, 194, 255, 0.05);
+}
+
+/* 确保聚焦环传递给 Spinner 整体 */
+.spinner:focused > .text-field,
+.spinner > .text-field:focused {
+    -fx-border-color: transparent;
+}
+
+.spinner .increment-arrow-button,
+.spinner .decrement-arrow-button {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 6 8 6 8;
+}
+
+.spinner .increment-arrow-button:hover,
+.spinner .decrement-arrow-button:hover {
+     -fx-background-color: -bg-subtle;
+     -fx-background-radius: 0 4 4 0;
+}
+
+.spinner .decrement-arrow-button:hover {
+    -fx-background-radius: 4 0 0 4;
+}
+
+.spinner .increment-arrow,
+.spinner .decrement-arrow {
+    -fx-background-color: -text-secondary;
+    -fx-scale-x: 0.8;
+    -fx-scale-y: 0.8;
+}
+
+.spinner .increment-arrow-button:pressed .increment-arrow,
+.spinner .decrement-arrow-button:pressed .decrement-arrow {
+    -fx-background-color: -text-primary;
+}
+
+.spinner:disabled {
+    -fx-opacity: 0.5;
+}
+
+.spinner:disabled .text-field {
+    -fx-text-fill: -text-disabled;
+}
+

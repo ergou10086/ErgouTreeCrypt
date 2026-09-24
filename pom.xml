@@ -6,7 +6,7 @@
 
     <groupId>hbnu.project</groupId>
     <artifactId>ErgouTreeCrypt</artifactId>
-    <version>2.9.0</version>
+    <version>2.9.5</version>
     <name>ErgouTreeCrypt</name>
 
     <properties>
@@ -100,6 +100,26 @@
     </dependencies>
 
     <build>
+        <!--
+            资源过滤：仅 version.properties 参与变量替换，把 <version> 注入为运行时版本号。
+            其余资源（图片、压缩包样例等二进制）必须保持 filtering=false，否则会被破坏。
+        -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>hbnu/project/ergoutreecrypt/version.properties</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>hbnu/project/ergoutreecrypt/version.properties</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -118,7 +138,7 @@
                     </mainClass>
                     <launcher>ErgouTreeCrypt</launcher>
                     <jlinkImageName>ErgouTreeCrypt</jlinkImageName>
-                    <jlinkZipName>ErgouTreeCrypt-v2.9.0</jlinkZipName>
+                    <jlinkZipName>ErgouTreeCrypt-v${project.version}</jlinkZipName>
                     <noManPages>true</noManPages>
                     <noHeaderFiles>true</noHeaderFiles>
                     <stripDebug>true</stripDebug>

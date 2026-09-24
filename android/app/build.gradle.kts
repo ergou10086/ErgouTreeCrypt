@@ -20,6 +20,8 @@ val syncCoreLibs by tasks.registering(Copy::class) {
             "hbnu/project/ergoutreecrypt/PicocryptApplication.java",
             // 桌面 java.util.prefs 设置
             "hbnu/project/ergoutreecrypt/settings/SettingsManager.java",
+            // 桌面端专属版本号解析：依赖 JPMS 模块资源读取，Android 统一用 BuildConfig.APP_VERSION_NAME
+            "hbnu/project/ergoutreecrypt/version/**",
             // 图像隐写 — 依赖 java.awt.BufferedImage / javax.imageio（Android 不可用）
             "hbnu/project/ergoutreecrypt/stego/**",
             // 桌面 ImageIO/AWT 桥；Android 端后续由平台 Bitmap 桥实现
@@ -49,10 +51,32 @@ val syncInteropCorpus by tasks.registering(Copy::class) {
 }
 
 // ============================================================
-// 版本号：文件级变量，供 android 块和 APK 重命名任务共用
+// 版本号：唯一真源是桌面端 pom.xml 的 <version>，在此构建时解析读取，
+// 从而无需每次发版在 pom 与 gradle 之间手动同步。
+// 文件级变量，供 android 块和 APK 重命名任务共用。
 // ============================================================
-val appVersionName = "2.9.0"
-val appVersionCode = 20900
+val appVersionName: String = run {
+    val pomFile = file("../../pom.xml")
+    val match = Regex("<artifactId>ErgouTreeCrypt</artifactId>\\s*<version>([^<]+)</version>")
+        .find(pomFile.readText())
+    match?.groupValues?.get(1)?.trim()
+        ?: throw GradleException(
+            "无法从 ${pomFile.absolutePath} 解析 <version>，请确认 pom.xml 中声明了 ErgouTreeCrypt 的版本"
+        )
+}
+
+// versionCode 由版本号推导：major*10000 + minor*100 + patch，随版本号自动递增。
+// 因此 minor 与 patch 均不得超过 99，否则会与更高位串号，这里直接报错而不是静默降级。
+val appVersionCode: Int = run {
+    val parts = appVersionName.substringBefore('-').split('.')
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    if (minor > 99 || patch > 99) {
+        throw GradleException("版本号 $appVersionName 的 minor/patch 超过 99，无法推导 versionCode")
+    }
+    major * 10000 + minor * 100 + patch
+}
 
 // ============================================================
 // 签名配置：从 keystore.properties 读取（该文件已加入 .gitignore，不提交到仓库）
@@ -165,7 +189,7 @@ tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }
     .configureEach { dependsOn(syncInteropCorpus) }
 
 // ============================================================
-// 自定义 APK 输出文件名：ErgouTreeCrypt-v2.9.0-release.apk
+// 自定义 APK 输出文件名：ErgouTreeCrypt-v<版本号>-release.apk
 // 原理：在所有 assemble 任务完成后，扫描 outputs/apk 目录并复制一份重命名后的 APK
 // ============================================================
 val renameApks by tasks.registering {

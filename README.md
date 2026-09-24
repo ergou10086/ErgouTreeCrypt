@@ -47,7 +47,7 @@
 全部保留），支持 PNG/APNG、JPEG、GIF、BMP、WebP 输入，提供「公开恢复」与「密码保护」两种模式。
 
 **当前状态：共享核心、真实双端互操作、共享业务接入、桌面 JavaFX 与 Android Compose 页面
-均已完成。2.9.0 开发构建的两端都具备独立“图片加密”入口；Android 同时启用了最多显示六项的
+均已完成。2.9.5 开发构建的两端都具备独立“图片加密”入口；Android 同时启用了最多显示六项的
 滑动动态底栏、私有暂存后提交与文件分享提示。稳定发布仍需通过 Phase 8 发布闸门。**
 
 这是有意的顺序——双端互操作硬闸门（真实 Desktop JVM 与 Android ART 之间交换产物）是发布阻断项，
@@ -72,6 +72,8 @@
 
 协议规范见 [docs/EGTC-IMG-v1协议规范.md](docs/EGTC-IMG-v1协议规范.md)，
 实施计划与阶段状态见 [docs/图片加密双端实现详细计划.md](docs/图片加密双端实现详细计划.md)。
+后续双端能力、协议演进与 Apple/Web 端路线见
+[docs/产品能力增强与Web端演进设计.md](docs/产品能力增强与Web端演进设计.md)。
 
 ---
 
@@ -624,5 +626,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt Desktop v2.9.0 · Android v2.9.0 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.9.5 · Android v2.9.5 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

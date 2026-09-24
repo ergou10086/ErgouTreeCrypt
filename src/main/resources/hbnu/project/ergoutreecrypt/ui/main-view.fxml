@@ -22,6 +22,8 @@
                 <Image url="@img/logo.png"/>
             </ImageView>
             <Label fx:id="appTitleLabel" styleClass="title-text" text="ErgouTreeCrypt" mouseTransparent="true"/>
+            <!-- 版本号紧跟标题，文案由控制器在 applyTexts() 中注入 -->
+            <Label fx:id="appVersionLabel" styleClass="title-version" mouseTransparent="true"/>
             <Region HBox.hgrow="ALWAYS" mouseTransparent="true"/>
             <Button fx:id="langButton" styleClass="title-tool" onAction="#onToggleLang"/>
             <Button fx:id="themeButton" styleClass="title-tool" text="☽" onAction="#onToggleTheme"/>

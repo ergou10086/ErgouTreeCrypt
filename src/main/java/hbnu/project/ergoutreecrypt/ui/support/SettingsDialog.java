@@ -5,6 +5,7 @@ import hbnu.project.ergoutreecrypt.log.LogLevel;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.version.AppVersion;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -256,6 +257,12 @@ public final class SettingsDialog {
         grid.add(shellMenuBox, 0, row, 2, 1);
         grid.add(infoIcon(Messages.get("settings.shellMenu.tip")), 2, row);
         row++;
+
+        // === 版本号（页面最下方的小字） ===
+        Label versionLabel = new Label(Messages.format("app.version", AppVersion.get()));
+        versionLabel.getStyleClass().add("field-hint");
+        versionLabel.setPadding(new Insets(8, 0, 0, 0));
+        grid.add(versionLabel, 0, row, 3, 1);
 
         shellMenuBtn.setOnAction(e -> toggleShellContextMenu(shellMenuBtn, shellMenuStatus));
 

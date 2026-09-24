@@ -29,7 +29,10 @@ android/.externalNativeBuild/
 android/.cxx/
 
 # --- Docs ---
-docs
+# 历史临时文档默认忽略，仅跟踪明确列出的正式设计文档。
+!docs/
+docs/*
+!docs/产品能力增强与Web端演进设计.md
 CLAUDE.md
 "*.apk" 
 "**/build/" 

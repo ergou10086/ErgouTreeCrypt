@@ -16,6 +16,7 @@
       <excludeFolder url="file://$MODULE_DIR$/.idea/.cache" />
       <excludeFolder url="file://$MODULE_DIR$/android/app/src/androidTest/assets/imagecrypt" />
       <excludeFolder url="file://$MODULE_DIR$/src/test/resources/imagecrypt/test_picture" />
+      <excludeFolder url="file://$MODULE_DIR$/android/app/.cxx" />
     </content>
   </component>
 </module>

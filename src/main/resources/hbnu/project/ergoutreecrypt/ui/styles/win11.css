@@ -302,6 +302,12 @@
     -fx-text-fill: -text-primary;
 }
 
+/* 标题旁的版本号：小一档且更浅，避免与标题争夺注意力 */
+.title-version {
+    -fx-font-size: 11px;
+    -fx-text-fill: -text-tertiary;
+}
+
 /* 标题栏工具按钮（语言切换、主题切换） */
 .title-tool {
     -fx-background-color: transparent;
@@ -2382,8 +2388,8 @@
 }
 
 .about-version {
-    -fx-font-size: 13px;
-    -fx-text-fill: -text-secondary;
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
 }
 
 .about-author {
@@ -2413,9 +2419,6 @@
     -fx-border-width: 0;
 }
 
-/* ==========================================================================
- *                           END OF FILE
- * ========================================================================== */
 .password-book-menu {
     -fx-padding: 0 3 0 3;
     -fx-min-width: 28;
@@ -2430,3 +2433,7 @@
 .password-book-menu > .arrow-button {
     -fx-padding: 0;
 }
+
+/* ==========================================================================
+ *                           END OF FILE
+ * ========================================================================== */

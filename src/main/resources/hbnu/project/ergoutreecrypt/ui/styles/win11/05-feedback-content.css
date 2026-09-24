@@ -1,0 +1,322 @@
+/* ==========================================================================
+ * SECTION 18 — 进度条 (ProgressBar)
+ *    对应 FXML 中的 .progress (ProgressBar)
+ *    覆盖 Modena 默认进度条样式
+ * ========================================================================== */
+
+.progress-bar {
+    -fx-pref-height: 6;
+    -fx-min-height: 6;
+    -fx-max-height: 6;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+}
+
+.progress-bar > .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+}
+
+.progress-bar > .bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+.progress-bar:indeterminate > .bar {
+    -fx-background-color: linear-gradient(to right, transparent, -accent, transparent);
+}
+
+/* 兼容 .progress 类 */
+.progress {
+    -fx-pref-height: 6;
+}
+
+.progress > .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 3;
+}
+
+.progress > .bar {
+    -fx-background-color: -accent;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+/* 压缩/解压独立进度条：使用 warning 色，与加解密 accent 色区分 */
+.progress-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -text-secondary;
+}
+
+.progress-archive > .bar {
+    -fx-background-color: -warning;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+    -fx-padding: 3;
+}
+
+.progress-archive:indeterminate > .bar {
+    -fx-background-color: linear-gradient(to right, transparent, -warning, transparent);
+}
+
+/* 图片加密公开模式安全说明：始终显示，不依赖当前保护模式。 */
+.image-warning-card {
+    -fx-background-color: derive(-warning, 88%);
+    -fx-background-radius: 10;
+    -fx-border-color: derive(-warning, 25%);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 14;
+}
+
+.image-warning-text {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.warning-text {
+    -fx-text-fill: -warning;
+    -fx-font-size: 12px;
+}
+
+.image-preview-card {
+    -fx-alignment: center;
+}
+
+.image-preview-card .image-view {
+    -fx-effect: dropshadow(gaussian, -shadow, 12, 0.1, 0, 3);
+}
+
+.image-result-card {
+    -fx-border-color: derive(-success, 30%);
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+}
+
+/* ==========================================================================
+ * SECTION 19 — 提示框 (Tooltip)
+ *    对应 FXML 中的 .tooltip, .info-tooltip
+ *    覆盖 Modena 默认气泡提示样式
+ * ========================================================================== */
+
+.tooltip {
+    -fx-font-size: 12px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    -fx-background-color: rgba(38, 38, 38, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-background-radius: 6;
+    -fx-padding: 9 13 9 13;
+    -fx-max-width: 320;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 12, 0, 0, 4);
+    -fx-show-delay: 120ms;
+    -fx-show-duration: 20s;
+    -fx-hide-delay: 120ms;
+}
+
+/* 浅色模式下的 tooltip 也可以是深色（Windows 默认行为） */
+.root.dark .tooltip {
+    -fx-background-color: rgba(50, 50, 50, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0, 0, 4);
+}
+
+.info-tooltip {
+    -fx-font-size: 12px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    -fx-background-color: rgba(38, 38, 38, 0.96);
+    -fx-text-fill: #f0f0f0;
+    -fx-background-radius: 6;
+    -fx-padding: 9 13 9 13;
+    -fx-max-width: 320;
+    -fx-wrap-text: true;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 12, 0, 0, 4);
+}
+
+/* ==========================================================================
+ * SECTION 20 — 信息图标 (Info Icon)
+ *    对应 FXML 中的 .info-icon (圆形 "i" 徽标)
+ * ========================================================================== */
+
+.info-icon {
+    -fx-font-size: 7px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -accent-fg;
+    -fx-background-color: -text-tertiary;
+    -fx-background-radius: 50%;
+    -fx-min-width: 11px;
+    -fx-min-height: 11px;
+    -fx-pref-width: 11px;
+    -fx-pref-height: 11px;
+    -fx-max-width: 11px;
+    -fx-max-height: 11px;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+    -fx-padding: 0;
+    -fx-content-display: center;
+    -fx-opacity: 0.65;
+}
+
+.info-icon:hover {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-opacity: 1.0;
+}
+
+/* ==========================================================================
+ * SECTION 21 — 折叠头 (Options Header / Collapsible Section)
+ *    对应 FXML 中的 .options-header, .chevron
+ * ========================================================================== */
+
+.options-header {
+    -fx-cursor: hand;
+    -fx-padding: 4 0 4 0;
+}
+
+.options-header:hover .chevron {
+    -fx-text-fill: -accent;
+}
+
+.chevron {
+    -fx-font-size: 16px;
+    -fx-text-fill: -text-secondary;
+}
+
+.options-body {
+    -fx-padding: 4 0 0 0;
+}
+
+/* ==========================================================================
+ * SECTION 22 — 密钥文件列表 (Keyfile List)
+ *    对应 FXML 中的 .keyfile-list, .keyfile-row
+ * ========================================================================== */
+
+.keyfile-list {
+    -fx-padding: 2 0 2 0;
+    -fx-spacing: 4;
+}
+
+/* ==========================================================================
+ * SECTION 22b — 通用加解密的多文件列表 (Multi-file List)
+ *    对应 FXML 中的 .file-list-scroll, .file-list, .file-list-row
+ *    文件多时由 ScrollPane 提供竖向滚动条，行高固定以便列表整齐
+ * ========================================================================== */
+
+.file-list-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.file-list-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.file-list-scroll .scroll-bar:vertical {
+    -fx-pref-width: 10;
+}
+
+.file-list {
+    -fx-padding: 2 6 2 0;
+    -fx-spacing: 4;
+}
+
+.file-list-row {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 6;
+    -fx-padding: 5 10 5 10;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.file-list-row .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+.file-list-row .file-list-size {
+    -fx-text-fill: -text-secondary;
+    -fx-font-size: 11px;
+}
+
+.keyfile-row {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10 6 10;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.keyfile-row .label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 12px;
+}
+
+/* ==========================================================================
+ * SECTION 23 — 底部操作栏 (Footer)
+ *    对应 FXML 中的 .footer
+ * ========================================================================== */
+
+.footer {
+    -fx-background-color: -titlebar;
+    -fx-background-radius: 0 0 8 8;
+    -fx-border-color: -border-soft transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* 最大化时底部也去除圆角 */
+.app-root.maximized .footer {
+    -fx-background-radius: 0;
+}
+
+/* ==========================================================================
+ * SECTION 24 — Toast 通知 (Toast Notification)
+ *    Java 代码创建的 .toast, .toast-info, .toast-success, .toast-error
+ * ========================================================================== */
+
+.toast {
+    -fx-background-radius: 8;
+    -fx-padding: 10 18 10 18;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 14, 0, 0, 4);
+}
+
+.toast-info {
+    -fx-background-color: #323232;
+}
+
+.toast-success {
+    -fx-background-color: #0f7b0f;
+}
+
+.toast-error {
+    -fx-background-color: #c42b1c;
+}
+
+/* ==========================================================================
+ * SECTION 25 — 分割线 (Separator)
+ *    对应 FXML 中的 Separator
+ * ========================================================================== */
+
+.separator .line {
+    -fx-border-color: -border-soft;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 1 0 0 0;
+}
+
+.separator:horizontal .line {
+    -fx-border-color: -border-soft;
+}
+
+.separator:vertical .line {
+    -fx-border-color: transparent -border-soft transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+

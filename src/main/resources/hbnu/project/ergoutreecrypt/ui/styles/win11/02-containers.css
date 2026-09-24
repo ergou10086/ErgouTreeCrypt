@@ -1,0 +1,274 @@
+/* ==========================================================================
+ * SECTION 6 — 内容区域 & 滚动条 (Scroll Pane & Scroll Bar)
+ *    对应 FXML 中的 .content-scroll, .content
+ *    覆盖 Modena 默认滚动条样式
+ * ========================================================================== */
+
+.content-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+    -fx-fit-to-width: true;
+}
+
+.content-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* 移除 ScrollPane 默认边框 */
+.content-scroll,
+.content-scroll:focused {
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+/* 垂直滚动条 */
+.content-scroll .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12;
+    -fx-padding: 2;
+}
+
+.content-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-width: 8;
+}
+
+.content-scroll .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.content-scroll .scroll-bar:vertical .thumb:pressed {
+    -fx-background-color: -text-tertiary;
+}
+
+/* 水平滚动条 */
+.content-scroll .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-height: 12;
+    -fx-padding: 2;
+}
+
+.content-scroll .scroll-bar:horizontal .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-height: 8;
+}
+
+.content-scroll .scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+/* 隐藏滚动条箭头按钮和轨道 */
+.content-scroll .scroll-bar .increment-arrow,
+.content-scroll .scroll-bar .decrement-arrow,
+.content-scroll .scroll-bar .increment-button,
+.content-scroll .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-opacity: 0;
+}
+
+.content-scroll .scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+/* 全局滚动条样式（覆盖所有 ScrollPane） */
+.scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12;
+    -fx-padding: 2;
+}
+
+.scroll-bar:vertical .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-width: 8;
+}
+
+.scroll-bar:vertical .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-height: 12;
+    -fx-padding: 2;
+}
+
+.scroll-bar:horizontal .thumb {
+    -fx-background-color: -scrollbar-thumb;
+    -fx-background-radius: 6;
+    -fx-pref-height: 8;
+}
+
+.scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: -scrollbar-thumb-hover;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow,
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-opacity: 0;
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+.content {
+    -fx-background-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 7 — 卡片容器 (Card Container)
+ *    对应 FXML 中的 .card，用于密码区、输出路径区、高级选项区等
+ * ========================================================================== */
+
+.card {
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -border-card;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 16;
+    -fx-effect: dropshadow(gaussian, -shadow, 10, 0, 0, 2);
+}
+
+.card-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+/* ==========================================================================
+ * SECTION 8 — 分段控件 (Segmented Control / ToggleButton as Tab)
+ *    对应 FXML 中的 .segmented, .seg-btn (ToggleButton 用作加解密切换)
+ *    覆盖 Modena ToggleButton 默认样式
+ * ========================================================================== */
+
+.segmented {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 3;
+    -fx-border-color: -border-soft;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.seg-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text-secondary;
+    -fx-background-radius: 6;
+    -fx-padding: 8 36 8 36;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    /* 清除 ToggleButton 默认选中样式 */
+    -fx-background-insets: 0;
+}
+
+.seg-btn:hover {
+    -fx-text-fill: -text-primary;
+    -fx-background-color: transparent;
+}
+
+.seg-btn:selected {
+    -fx-background-color: -bg-card;
+    -fx-text-fill: -accent;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.06), 4, 0, 0, 1.5);
+}
+
+.seg-btn:focused {
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+}
+
+/* ==========================================================================
+ * SECTION 9 — 拖放区域 (Drop Zone)
+ *    对应 FXML 中的 .drop-zone, .drag-over, .drop-icon, .drop-hint, .drop-sub
+ * ========================================================================== */
+
+/* segments 是 JavaFX 的合法虚线语法，保留原始节距，仅抑制此规则的通用 CSS 误报。 */
+/*noinspection CssInvalidFunction*/
+.drop-zone {
+    -fx-border-color: -border-strong;
+    -fx-border-style: segments(7, 5, 7, 5);
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-color: -bg-card;
+    -fx-background-radius: 8;
+    -fx-padding: 32 24 32 24;
+    -fx-cursor: hand;
+}
+
+.drop-zone:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+/* 拖拽悬停高亮：边框变强调色，背景变强调色浅色 */
+.drop-zone.drag-over {
+    -fx-border-color: -accent;
+    -fx-border-style: solid;
+    -fx-background-color: -accent-subtle;
+}
+
+.drop-icon {
+    -fx-font-size: 32px;
+    -fx-text-fill: -accent;
+    -fx-opacity: 0.8;
+}
+
+.drop-hint {
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+.drop-sub {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+}
+
+/* ==========================================================================
+ * SECTION 10 — 文件信息卡片 (File Card)
+ *    对应 FXML 中的 .file-card, .file-icon, .file-name, .file-meta
+ *    以及 MediaCrypt 中的 .av-file-card, .av-output-card
+ * ========================================================================== */
+
+.file-card {
+    /* 继承 .card 样式，额外微调 */
+}
+
+.av-file-card {
+    /* 继承 .card 样式 */
+}
+
+.av-output-card {
+    /* 继承 .card 样式 */
+}
+
+.file-icon {
+    -fx-font-size: 24px;
+    -fx-text-fill: -accent;
+}
+
+.file-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-primary;
+}
+
+.file-meta {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+

@@ -1,0 +1,163 @@
+/* ==========================================================================
+ * SECTION 32 — Ikonli 图标字体 (FontIcon)
+ *    确保 .font-icon 和 .ikonli-font-icon 颜色继承主题
+ * ========================================================================== */
+
+.font-icon,
+.ikonli-font-icon,
+.glyph-icon {
+    -fx-icon-color: -icon-color;
+    -fx-fill: -icon-color;
+}
+
+.font-icon:hover,
+.ikonli-font-icon:hover {
+    -fx-icon-color: -icon-accent;
+    -fx-fill: -icon-accent;
+}
+
+/* ==========================================================================
+ * SECTION 33 — 辅助类 (Utilities)
+ * ========================================================================== */
+
+/* 禁用状态的通用透明度 */
+.disabled {
+    -fx-opacity: 0.5;
+}
+
+/* 光标样式辅助 */
+.clickable {
+    -fx-cursor: hand;
+}
+
+/* ==========================================================================
+ * SECTION 34 — 滑块控件 (Slider) 基础样式
+ * ========================================================================== */
+
+.slider {
+    -fx-padding: 0;
+}
+
+.slider .track {
+    -fx-background-color: -bg-subtle;
+    -fx-background-radius: 2;
+    -fx-pref-height: 4;
+}
+
+.slider .thumb {
+    -fx-background-color: -accent;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 4, 0, 0, 1);
+}
+
+.slider .thumb:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.slider .thumb:pressed {
+    -fx-background-color: -accent-press;
+}
+
+/* ==========================================================================
+ *                           使 用 方 法
+ * ==========================================================================
+ *
+ * 一、CSS 加载与主题切换 (ThemeManager.java)
+ * --------------------------------------------------------------------------
+ *
+ * ThemeManager 负责加载 win11.css 并通过根节点的 .light / .dark 样式类切换主题。
+ * 支持三种模式：
+ *   - LIGHT：始终浅色
+ *   - DARK：始终深色
+ *   - SYSTEM：跟随 Windows 系统主题，通过定时检测注册表自动切换
+ *
+ * 二、跟随系统主题 (System Theme Detection)
+ * --------------------------------------------------------------------------
+ *
+ * Windows 深浅色模式通过注册表键检测：
+ *   HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme
+ *   值为 0 = 深色模式，1 = 浅色模式
+ *
+ * 通过在后台线程中定时轮询此注册表值来检测系统主题变化。
+ * 若设置中选择 "跟随系统"，则自动切换。
+ *
+ * 三、窗口最大化/还原监听 (.maximized 类)
+ * --------------------------------------------------------------------------
+ *
+ * 通过监听 Stage.maximizedProperty()，当窗口最大化时给 .app-root 添加 .maximized 类，
+ * 去除窗口圆角和阴影。还原时移除该类。
+ *
+ * 四、FXML 注意事项
+ * --------------------------------------------------------------------------
+ *
+ * 1. FXML 根节点 StackPane 需要设置 styleClass="light" 作为默认值，
+ *    或者由 ThemeManager 在 attach 时设置。
+ *
+ * 2. 控件通过 styleClass 引用本样式表中的类名，例如：
+ *      <Button styleClass="btn-accent" text="Encrypt"/>
+ *      <TextField styleClass="text-input"/>
+ *      <CheckBox styleClass="check"/>
+ *
+ * 3. 对于 ControlsFX ToggleSwitch，在 FXML 中无法直接使用，
+ *    需要在 Java 代码中创建并添加到布局中。
+ *
+ * 五、Java 代码示例
+ * ==========================================================================
+ *
+ * // ---- 1. 加载样式表并设置主题 (在 Application.start 中) ----
+ * Scene scene = new Scene(root);
+ * scene.setFill(Color.TRANSPARENT);
+ *
+ * ThemeManager themeManager = new ThemeManager();
+ * themeManager.attach(scene);  // 加载 win11.css + 应用主题
+ *
+ * // ---- 2. 监听窗口最大化 (在 Application.start 中) ----
+ * Stage stage = ...;
+ * stage.maximizedProperty().addListener((obs, oldVal, newVal) -> {
+ *     if (stage.getScene() != null && stage.getScene().getRoot() != null) {
+ *         Node appRoot = stage.getScene().getRoot().lookup(".app-root");
+ *         if (appRoot != null) {
+ *             if (newVal) {
+ *                 appRoot.getStyleClass().add("maximized");
+ *             } else {
+ *                 appRoot.getStyleClass().remove("maximized");
+ *             }
+ *         }
+ *     }
+ * });
+ *
+ * // ---- 3. 切换主题 ----
+ * themeManager.toggle();           // 在浅色/深色之间手动切换
+ * themeManager.setTheme(Theme.DARK);  // 显式设置
+ * themeManager.setFollowSystem(true); // 跟随系统
+ *
+ * // ---- 4. 使用 ControlsFX ToggleSwitch ----
+ * import org.controlsfx.control.ToggleSwitch;
+ *
+ * ToggleSwitch toggleSwitch = new ToggleSwitch();
+ * toggleSwitch.getStyleClass().add("toggle-switch");  // 应用 Win11 样式
+ * toggleSwitch.setSelected(true);
+ * toggleSwitch.selectedProperty().addListener((obs, oldVal, newVal) -> {
+ *     System.out.println("Switch toggled: " + newVal);
+ * });
+ * someContainer.getChildren().add(toggleSwitch);
+ *
+ * // ---- 5. 在设置中持久化主题偏好 ----
+ * SettingsManager.setThemeMode("SYSTEM");  // 或 "LIGHT" / "DARK"
+ * String mode = SettingsManager.getThemeMode();
+ *
+ * // ---- 6. 复杂动画的替代方案 (Java Animation) ----
+ * // CSS 不支持 -fx-transition，如需渐变动画，使用 JavaFX Timeline：
+ * //
+ * // Timeline fadeIn = new Timeline(
+ * //     new KeyFrame(Duration.ZERO, new KeyValue(node.opacityProperty(), 0.0)),
+ * //     new KeyFrame(Duration.millis(200), new KeyValue(node.opacityProperty(), 1.0))
+ * // );
+ * // fadeIn.play();
+ *
+ * ==========================================================================
+ *                           END OF USAGE NOTES
+ * ========================================================================== */
+

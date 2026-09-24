@@ -1,0 +1,105 @@
+/* ==========================================================================
+ * SECTION — 日志伴生窗 (Log Companion)
+ * ========================================================================== */
+
+.log-body {
+    -fx-padding: 8 14 14 14;
+    -fx-spacing: 8;
+}
+
+.log-footer {
+    -fx-padding: 4 0 0 0;
+}
+
+/* 日志列表：沿用 SECTION 31 的 .list-view 卡片外观，仅收紧行距 */
+.log-list {
+    -fx-padding: 2;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+}
+
+.log-list .list-cell {
+    -fx-padding: 3 8 3 8;
+    -fx-background-radius: 3;
+}
+
+/* 单行日志：文本颜色由级别样式类通过 -fx-text-fill 指定 */
+.log-line {
+    -fx-font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    -fx-font-size: 11px;
+}
+
+.log-line-error {
+    -fx-text-fill: -log-error;
+}
+
+.log-line-warn {
+    -fx-text-fill: -log-warn;
+}
+
+.log-line-info {
+    -fx-text-fill: -log-info;
+}
+
+.log-line-trace {
+    -fx-text-fill: -log-trace;
+}
+
+/* 暂无日志时的占位提示 */
+.log-hint {
+    -fx-text-fill: -text-tertiary;
+    -fx-font-size: 12px;
+}
+
+/* ==========================================================================
+ * SECTION — 关于对话框 (About Dialog)
+ *    概览页用标签排版，许可证 / 使用规约 / 致谢页用只读文本域承载长文本
+ * ========================================================================== */
+
+.about-overview {
+    -fx-background-color: transparent;
+}
+
+.about-name {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -text-primary;
+}
+
+.about-tagline {
+    -fx-font-size: 12px;
+    -fx-text-fill: -accent;
+}
+
+.about-version {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+}
+
+.about-author {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+    -fx-padding: 8 0 0 0;
+}
+
+.about-desc {
+    -fx-font-size: 13px;
+    -fx-text-fill: -text-secondary;
+}
+
+/* 长文本页：去掉输入框外观，只保留可滚动、可复制的正文 */
+.about-text {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 12 14 12 14;
+    -fx-font-size: 12px;
+}
+
+.about-text:hover,
+.about-text:focused {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+

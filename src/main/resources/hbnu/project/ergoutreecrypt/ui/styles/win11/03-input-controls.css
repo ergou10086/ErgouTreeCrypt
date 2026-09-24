@@ -1,0 +1,386 @@
+/* ==========================================================================
+ * SECTION 11 — 文本输入控件 (TextField, PasswordField, TextArea)
+ *    对应 FXML 中的 .text-input, .text-area
+ *    覆盖 Modena 所有默认输入框样式
+ * ========================================================================== */
+
+.text-input,
+.text-field,
+.password-field {
+    -fx-background-color: -bg-input;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 12 9 12;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.text-input:hover,
+.text-field:hover,
+.password-field:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.text-input:focused,
+.text-field:focused,
+.password-field:focused {
+    -fx-background-color: -bg-input;
+    /* 底部 2px 强调色底线 (Win11 风格) */
+    -fx-border-color: transparent transparent -accent transparent;
+    -fx-border-width: 0 0 2 0;
+}
+
+.text-input:disabled,
+.text-field:disabled,
+.password-field:disabled {
+    -fx-opacity: 0.5;
+    -fx-background-color: -bg-subtle;
+    -fx-border-color: -border-soft;
+    -fx-text-fill: -text-disabled;
+}
+
+/* TextArea */
+.text-area {
+    -fx-background-color: -bg-input;
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: -text-tertiary;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 13px;
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.text-area:hover {
+    -fx-background-color: -bg-input-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.text-area:focused {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.text-area:disabled {
+    -fx-opacity: 0.5;
+}
+
+.text-area .content {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.text-area .scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.text-area .scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+/* 选中文本高亮
+   JavaFX 默认取 -fx-accent 作为高亮色，而 SECTION 0 已把 -fx-accent 置为 transparent，
+   导致选中区域要么不可见、要么落到 Modena 的白色默认值上（浅色下白底白字）。
+   此处显式指定高亮底色与选中文字色，并覆盖 ComboBox / Spinner 内嵌的文本编辑器。 */
+.text-input,
+.text-field,
+.password-field,
+.text-area,
+.combo-box .text-input,
+.spinner .text-field {
+    -fx-highlight-fill: -selection-bg;
+    -fx-highlight-text-fill: -selection-fg;
+}
+
+/* 选中且失焦时（例如点开右键菜单）同样保持可见 */
+.text-input:focused,
+.text-field:focused,
+.password-field:focused,
+.text-area:focused {
+    -fx-highlight-fill: -selection-bg;
+    -fx-highlight-text-fill: -selection-fg;
+}
+
+/* ==========================================================================
+ * SECTION 12 — 标签 & 文本 (Labels)
+ *    对应 FXML 中的 .field-label, .field-hint, .strength-label, .error-text,
+ *    .status-text, .status-info
+ * ========================================================================== */
+
+/* 通用 Label 颜色 */
+.label {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+}
+
+.field-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -text-secondary;
+}
+
+.field-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-tertiary;
+}
+
+.strength-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+
+.error-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: -danger;
+    -fx-font-weight: 600;
+}
+
+.status-text {
+    -fx-font-size: 13px;
+    -fx-text-fill: -text-primary;
+}
+
+.status-info {
+    -fx-font-size: 12px;
+    -fx-text-fill: -text-secondary;
+}
+
+/* ==========================================================================
+ * SECTION 13 — 按钮 (Buttons)
+ *    主操作按钮 .btn-accent、次按钮 .btn-secondary、幽灵按钮 .btn-ghost
+ *    全局 Button 重置 + 覆盖 Modena + BootstrapFX 默认样式
+ * ========================================================================== */
+
+/* 彻底重置所有按钮的默认外观 */
+.button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* ---- .btn-accent：强调按钮 (主操作) ---- */
+.btn-accent {
+    -fx-background-color: -accent;
+    -fx-text-fill: -accent-fg;
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-background-radius: 4;
+    -fx-padding: 9 28 9 28;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.btn-accent:hover {
+    -fx-background-color: -accent-hover;
+}
+
+.btn-accent:pressed {
+    -fx-background-color: -accent-press;
+}
+
+.btn-accent:disabled {
+    -fx-opacity: 0.5;
+    -fx-cursor: default;
+}
+
+/* ---- .btn-secondary：次要按钮 (取消、设置等) ---- */
+.btn-secondary {
+    -fx-background-color: -bg-card;
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-background-radius: 4;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-padding: 9 22 9 22;
+    -fx-cursor: hand;
+}
+
+.btn-secondary:hover {
+    -fx-background-color: -bg-card-hover;
+    -fx-border-color: -text-tertiary;
+}
+
+.btn-secondary:pressed {
+    -fx-background-color: -bg-subtle;
+    -fx-border-color: -text-secondary;
+}
+
+.btn-secondary:disabled {
+    -fx-opacity: 0.5;
+    -fx-border-color: -border-soft;
+    -fx-cursor: default;
+}
+
+/* ---- .btn-ghost：幽灵按钮 (清空、添加、浏览等小操作) ---- */
+.btn-ghost {
+    -fx-background-color: transparent;
+    -fx-text-fill: -accent;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-background-radius: 4;
+    -fx-padding: 5 12 5 12;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+}
+
+.btn-ghost:hover {
+    -fx-background-color: -accent-subtle;
+}
+
+.btn-ghost:pressed {
+    -fx-background-color: derive(-accent, 80%);
+}
+
+.btn-ghost:disabled {
+    -fx-opacity: 0.5;
+    -fx-text-fill: -text-disabled;
+    -fx-cursor: default;
+}
+
+/* ==========================================================================
+ * SECTION 14 — 复选框 (CheckBox)
+ *    对应 FXML 中的 .check
+ *    完整覆盖 Modena 默认复选框样式
+ * ========================================================================== */
+
+.check-box {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    /* 半个汉字宽度 (约 0.5em) 的间距 */
+    -fx-label-padding: 0 0 0 6;
+}
+
+.check-box > .box {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-max-width: 18;
+    -fx-max-height: 18;
+    -fx-padding: 2;
+}
+
+.check-box:hover > .box {
+    -fx-border-color: -text-tertiary;
+}
+
+.check-box:selected > .box {
+    -fx-background-color: -accent;
+    -fx-border-color: -accent;
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: -accent-fg;
+    -fx-shape: "M2,5.5 L5,9 L10,2.5";
+    -fx-stroke: -accent-fg;
+    -fx-stroke-width: 2;
+    -fx-scale-x: 0.7;
+    -fx-scale-y: 0.7;
+    -fx-padding: 0 0 0 0;
+}
+
+.check-box:focused > .box {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.check-box:disabled {
+    -fx-opacity: 0.5;
+    -fx-text-fill: -text-disabled;
+}
+
+/* BootstrapFX .check 兼容别名 */
+.check {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-label-padding: 0 0 0 6;
+}
+
+.check .box {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 3;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+}
+
+.check:hover .box {
+    -fx-border-color: -accent;
+}
+
+.check:selected .box {
+    -fx-background-color: -accent;
+    -fx-border-color: -accent;
+}
+
+.check:selected .mark {
+    -fx-background-color: -accent-fg;
+}
+
+/* ==========================================================================
+ * SECTION 15 — 单选框 (RadioButton)
+ *    覆盖 Modena 默认样式
+ * ========================================================================== */
+
+.radio-button {
+    -fx-text-fill: -text-primary;
+    -fx-font-size: 13px;
+    -fx-label-padding: 0 0 0 6;
+}
+
+.radio-button > .radio {
+    -fx-background-color: -bg-input;
+    -fx-border-color: -border-strong;
+    -fx-border-radius: 50%;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 18;
+    -fx-pref-height: 18;
+    -fx-padding: 3;
+}
+
+.radio-button:hover > .radio {
+    -fx-border-color: -text-tertiary;
+}
+
+.radio-button:selected > .radio {
+    -fx-border-color: -accent;
+}
+
+.radio-button:selected > .radio > .dot {
+    -fx-background-color: -accent;
+    -fx-background-radius: 50%;
+    -fx-padding: 4;
+}
+
+.radio-button:focused > .radio {
+    -fx-border-color: -accent;
+    -fx-border-width: 2;
+}
+
+.radio-button:disabled {
+    -fx-opacity: 0.5;
+}
+

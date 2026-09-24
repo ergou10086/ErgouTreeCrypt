@@ -1,0 +1,249 @@
+/* ======================================================================================
+ * ErgouTreeCrypt — Windows 11 Fluent Design 风格样式表
+ *
+ * 设计规范来源：
+ *   Microsoft Fluent Design System — Windows 11 / WinUI 3
+ *   https://learn.microsoft.com/en-us/windows/apps/design/
+ *
+ * 颜色令牌 (Design Tokens)
+ *   浅色 (.root.light)：窗口背景 #f3f3f3，卡片 #ffffff，主文字 #1a1a1a，强调色 #0067c0
+ *   深色 (.root.dark)：窗口背景 #202020，卡片 #2c2c2c，主文字 #f2f2f2，强调色 #4cc2ff
+ *
+ * 圆角体系 (Corner Radius)
+ *   窗口/对话框/弹出菜单：8px  — 最大化时通过 .maximized 类自动去除顶部圆角
+ *   卡片/按钮/输入框等页面内控件：4px (部分 8px 以获得更柔和外观)
+ *
+ * 阴影体系 (Elevation / Shadow)
+ *   窗口：dropshadow(gaussian, rgba(0,0,0,0.14), 24, 0, 0, 6)
+ *   卡片：dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2)
+ *   菜单：dropshadow(gaussian, rgba(0,0,0,0.12), 12, 0, 0, 4)
+ *
+ * 字体 (Typography)
+ *   全局："Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif
+ *   正文：13px，标题：14–16px，辅助文本：12px
+ *
+ * 切换方式：
+ *   通过给 Scene 根节点添加/移除 .light 或 .dark 样式类来驱动 CSS 变量。
+ *   设置中提供 "跟随系统" 选项，自动检测 Windows 深浅色模式并切换。
+ *
+ * 覆盖说明：
+ *   本样式表完全覆盖 JavaFX Modena 默认样式及 BootstrapFX 0.4.0 的所有样式。
+ *   所有控件均从零开始重新设计，不留任何残留渐变、内阴影或默认图标背景。
+ * ====================================================================================== */
+
+/* ==========================================================================
+ * SECTION 0 — BootstrapFX & Modena 全局重置
+ * ========================================================================== */
+
+/* 彻底清除所有可能从 BootstrapFX 泄露的样式 */
+.root,
+.dialog-pane,
+.alert,
+.button,
+.toggle-button,
+.check-box,
+.radio-button,
+.combo-box,
+.text-field,
+.text-area,
+.password-field,
+.spinner,
+.progress-bar,
+.scroll-bar,
+.scroll-pane,
+.tooltip,
+.menu-bar,
+.menu,
+.menu-item,
+.context-menu,
+.tab-pane,
+.list-view,
+.table-view,
+.tree-view,
+.label,
+.separator,
+.titled-pane,
+.split-pane,
+.slider {
+
+    /* 重置 BootstrapFX 常见的渐变和阴影 */
+    -fx-background-insets: 0;
+    -fx-background-radius: 0;
+    /* 覆盖 BootstrapFX 的默认按钮渐变 */
+    -fx-body-color: transparent;
+    -fx-body-color-up: transparent;
+    -fx-body-color-mid: transparent;
+    -fx-outer-border: transparent;
+    -fx-inner-border: transparent;
+    -fx-inner-border-horizontal: transparent;
+    -fx-inner-border-bottomup: transparent;
+    -fx-shadow-highlight-color: transparent;
+    -fx-text-box-border: transparent;
+    -fx-text-base-color: transparent;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+    -fx-selection-bar: transparent;
+    -fx-selection-bar-non-focused: transparent;
+    -fx-cell-focus-inner-border: transparent;
+    -fx-cell-hover-color: transparent;
+    -fx-cell-selection-color: transparent;
+    -fx-focused-text-base-color: transparent;
+    -fx-accent: transparent;
+    -fx-control-inner-background: transparent;
+    -fx-control-inner-background-alt: transparent;
+    -fx-mark-color: transparent;
+    -fx-mark-highlight-color: transparent;
+
+    /* 重置 Modena 的默认内边距 */
+    -fx-padding: 0;
+}
+
+/* 全局字体 */
+.root {
+    -fx-font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ==========================================================================
+ * SECTION 1 — CSS 变量系统 (Design Tokens)
+ * ========================================================================== */
+
+/* ---------- 浅色主题 ---------- */
+.root.light {
+    /* 背景 */
+    -bg-window:           rgba(243, 243, 243, 0.85);   /* Mica 仿云母效果 (SolidBackgroundFillColorBase) */
+    -bg-window-solid:     #f3f3f3;
+    -bg-card:             #ffffff;                        /* SolidBackgroundFillColorSecondary */
+    -bg-card-hover:       #f7f9fc;
+    -bg-input:            #fbfbfb;
+    -bg-input-hover:      #f6f6f6;
+    -bg-subtle:           #f0f0f0;                        /* SubtleFillColorTransparent */
+    -bg-overlay:          rgba(0, 0, 0, 0.04);
+
+    /* 边框 */
+    -border-soft:         #e8e8e8;                        /* SurfaceStrokeColorDefault */
+    -border-strong:       #d2d2d2;
+    -border-card:         rgba(0, 0, 0, 0.06);
+    -border-focus:        #0067c0;
+
+    /* 文字 */
+    -text-primary:        #1a1a1a;                        /* TextFillColorPrimary */
+    -text-secondary:      #5f6368;                        /* TextFillColorSecondary */
+    -text-tertiary:       #9aa0a6;                        /* TextFillColorTertiary */
+    -text-disabled:       #bdbdbd;
+
+    /* 强调色 */
+    -accent:              #0067c0;                        /* AccentFillColorDefault */
+    -accent-hover:        #1976d2;
+    -accent-press:        #005ba1;
+    -accent-fg:           #ffffff;                        /* 强调色上的文字 */
+    -accent-subtle:       rgba(0, 103, 192, 0.08);
+
+    /* 功能色 */
+    -danger:              #c42b1c;
+    -danger-hover:        #d83b2b;
+    -danger-fg:           #ffffff;
+    -success:             #0f7b0f;
+    -success-fg:          #ffffff;
+    -warning:             #e87800;
+
+    /* 阴影 (阴影色) */
+    -shadow:              rgba(0, 0, 0, 0.08);
+    -shadow-strong:       rgba(0, 0, 0, 0.14);
+    -shadow-menu:         rgba(0, 0, 0, 0.12);
+
+    /* 标题栏 / 窗口边框 */
+    -titlebar:            rgba(238, 238, 238, 0.0);
+    -window-border:       rgba(0, 0, 0, 0.10);
+
+    /* 滚动条 */
+    -scrollbar-thumb:     rgba(0, 0, 0, 0.20);
+    -scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+
+    /* 图标色 (Ikonli font-icon) */
+    -icon-color:          #5f6368;
+    -icon-accent:         #0067c0;
+
+    /* 文本选中高亮 (Selection)
+       浅色下若沿用默认白色高亮，白底白字几乎不可见，故改用中灰底 + 深色字 */
+    -selection-bg:        #b6bac0;
+    -selection-fg:        #1a1a1a;
+
+    /* 日志级别配色 (Log Level)
+       ERROR/WARN 用功能色，INFO 用主文字色，TRACE 用三级灰以退到背景层 */
+    -log-error:           #c42b1c;
+    -log-warn:            #a15c00;
+    -log-info:            #1a1a1a;
+    -log-trace:           #8d9299;
+}
+
+/* ---------- 深色主题 ---------- */
+.root.dark {
+    /* 背景 */
+    -bg-window:           rgba(32, 32, 32, 0.85);        /* Mica 仿云母效果 */
+    -bg-window-solid:     #202020;
+    -bg-card:             #2c2c2c;
+    -bg-card-hover:       #343434;
+    -bg-input:            #303030;
+    -bg-input-hover:      #3a3a3a;
+    -bg-subtle:           #262626;
+    -bg-overlay:          rgba(255, 255, 255, 0.04);
+
+    /* 边框 */
+    -border-soft:         #3a3a3a;
+    -border-strong:       #4a4a4a;
+    -border-card:         rgba(255, 255, 255, 0.07);
+    -border-focus:        #4cc2ff;
+
+    /* 文字 */
+    -text-primary:        #f2f2f2;
+    -text-secondary:      #cacaca;
+    -text-tertiary:       #8d8d8d;
+    -text-disabled:       #5a5a5a;
+
+    /* 强调色 */
+    -accent:              #4cc2ff;
+    -accent-hover:        #62cbff;
+    -accent-press:        #3aa8e0;
+    -accent-fg:           #1c1c1c;
+    -accent-subtle:       rgba(76, 194, 255, 0.12);
+
+    /* 功能色 */
+    -danger:              #ff99a4;
+    -danger-hover:        #ffb3bb;
+    -danger-fg:           #1c1c1c;
+    -success:             #6ccb5f;
+    -success-fg:          #1c1c1c;
+    -warning:             #ffb74d;
+
+    /* 阴影 (深色下阴影更重) */
+    -shadow:              rgba(0, 0, 0, 0.35);
+    -shadow-strong:       rgba(0, 0, 0, 0.50);
+    -shadow-menu:         rgba(0, 0, 0, 0.40);
+
+    /* 标题栏 / 窗口边框 */
+    -titlebar:            rgba(26, 26, 26, 0.0);
+    -window-border:       rgba(255, 255, 255, 0.08);
+
+    /* 滚动条 */
+    -scrollbar-thumb:     rgba(255, 255, 255, 0.20);
+    -scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+
+    /* 图标色 */
+    -icon-color:          #cacaca;
+    -icon-accent:         #4cc2ff;
+
+    /* 文本选中高亮 (Selection)
+       深色下使用白底 + 深色字，避免浅字配浅底看不出来 */
+    -selection-bg:        #ffffff;
+    -selection-fg:        #1a1a1a;
+
+    /* 日志级别配色 (Log Level) */
+    -log-error:           #ff8a80;
+    -log-warn:            #ffcc80;
+    -log-info:            #f2f2f2;
+    -log-trace:           #7f7f7f;
+}
+

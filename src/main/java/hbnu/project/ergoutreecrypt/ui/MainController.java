@@ -15,6 +15,7 @@ import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
 import hbnu.project.ergoutreecrypt.ui.support.*;
+import hbnu.project.ergoutreecrypt.version.AppVersion;
 import hbnu.project.ergoutreecrypt.volume.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -61,6 +62,8 @@ public class MainController {
     private HBox titleBar;
     @FXML
     private Label appTitleLabel;
+    @FXML
+    private Label appVersionLabel;
     @FXML
     private Button langButton;
     @FXML
@@ -683,6 +686,8 @@ public class MainController {
     // ================================================================
     private void applyTexts() {
         appTitleLabel.setText("ErgouTreeCrypt");
+        // 版本号语言无关，直接用 v 前缀，便于与英文/中文界面保持一致
+        appVersionLabel.setText("v" + AppVersion.get());
         langButton.setText(Messages.get("lang.toggle"));
         encryptTab.setText(Messages.get("nav.encrypt"));
         decryptTab.setText(Messages.get("nav.decrypt"));
@@ -1029,7 +1034,7 @@ public class MainController {
         name.getStyleClass().add("about-name");
         Label tagline = new Label(Messages.get("about.tagline"));
         tagline.getStyleClass().add("about-tagline");
-        Label version = new Label(Messages.get("about.version"));
+        Label version = new Label(Messages.format("app.version", AppVersion.get()));
         version.getStyleClass().add("about-version");
         Label author = new Label(Messages.get("about.author"));
         author.getStyleClass().add("about-author");

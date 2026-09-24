@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
@@ -28,15 +30,33 @@ public final class DesktopPasswordBookStore {
     /**
      * 读取当前用户密码本。
      *
-     * @return 密码记录；文件不存在或损坏时返回空列表
+     * @return 密码记录；仅文件不存在时返回空列表
+     * @throws IOException 文件无法读取或内容损坏时抛出
      */
-    public static synchronized List<PasswordBookEntry> load() {
-        if (!Files.isRegularFile(STORE_PATH)) {
-            return List.of();
-        }
-        try (Reader reader = Files.newBufferedReader(STORE_PATH, StandardCharsets.UTF_8)) {
+    public static synchronized List<PasswordBookEntry> load() throws IOException {
+        return load(STORE_PATH);
+    }
+
+    /**
+     * 获取当前用户密码本的实际保存位置，不依赖程序安装目录。
+     *
+     * @return 本地 CSV 文件路径
+     */
+    public static Path getStorePath() {
+        return STORE_PATH;
+    }
+
+    /**
+     * 读取指定密码本，不把权限错误或损坏文件伪装为空密码本。
+     *
+     * @param path 密码本路径
+     * @return 密码记录
+     * @throws IOException 读取或解析失败时抛出
+     */
+    static List<PasswordBookEntry> load(Path path) throws IOException {
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return PasswordBookCsv.read(reader);
-        } catch (IOException ignored) {
+        } catch (NoSuchFileException missing) {
             return List.of();
         }
     }
@@ -48,16 +68,32 @@ public final class DesktopPasswordBookStore {
      * @throws IOException 创建目录或写入失败时抛出
      */
     public static synchronized void save(List<PasswordBookEntry> entries) throws IOException {
-        Files.createDirectories(STORE_PATH.getParent());
-        Path temporary = STORE_PATH.resolveSibling(STORE_PATH.getFileName() + ".tmp");
-        try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-            PasswordBookCsv.write(entries, writer);
-        }
+        save(STORE_PATH, entries);
+    }
+
+    /**
+     * 在同目录临时文件写入完成后替换目标文件，失败时清理临时密码副本。
+     *
+     * @param path 密码本路径
+     * @param entries 待保存记录
+     * @throws IOException 创建目录或写入失败时抛出
+     */
+    static void save(Path path, List<PasswordBookEntry> entries) throws IOException {
+        Path target = path.toAbsolutePath();
+        Files.createDirectories(target.getParent());
+        Path temporary = Files.createTempFile(target.getParent(), "password-book-", ".tmp");
         try {
-            Files.move(temporary, STORE_PATH,
-                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException atomicMoveFailure) {
-            Files.move(temporary, STORE_PATH, StandardCopyOption.REPLACE_EXISTING);
+            try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+                PasswordBookCsv.write(entries, writer);
+            }
+            try {
+                Files.move(temporary, target,
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 
@@ -84,8 +120,7 @@ public final class DesktopPasswordBookStore {
      * @throws IOException 写入失败时抛出
      */
     public static synchronized void exportCsv(Path target) throws IOException {
-        try (Writer writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            PasswordBookCsv.write(load(), writer);
-        }
+        List<PasswordBookEntry> entries = load();
+        save(target, entries);
     }
 }

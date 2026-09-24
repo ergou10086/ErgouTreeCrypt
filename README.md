@@ -626,5 +626,5 @@ ErgouTreeCrypt/
 ---
 
 <p align="center">
-  <sub>ErgouTreeCrypt Desktop v2.9.5 · Android v2.9.5 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
+  <sub>ErgouTreeCrypt Desktop v2.9.6 · Android v2.9.6 · Built with ❤️ by ErgouTree · JDK 21 + JavaFX</sub>
 </p>

@@ -318,15 +318,21 @@ public final class PasswordBookDialog {
         @Override
         protected void updateItem(String value, boolean empty) {
             super.updateItem(value, empty);
+            setText(null);
+            SimpleStringProperty nextProperty = null;
+            if (!empty && getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
+                nextProperty = property.apply(getTableView().getItems().get(getIndex()));
+            }
+            if (boundProperty == nextProperty) {
+                return;
+            }
             if (boundProperty != null) {
                 editor.textProperty().unbindBidirectional(boundProperty);
-                boundProperty = null;
             }
-            setText(null);
-            if (empty || getIndex() < 0 || getIndex() >= getTableView().getItems().size()) {
+            boundProperty = nextProperty;
+            if (boundProperty == null) {
                 setGraphic(null);
             } else {
-                boundProperty = property.apply(getTableView().getItems().get(getIndex()));
                 editor.setText(boundProperty.get());
                 editor.textProperty().bindBidirectional(boundProperty);
                 setGraphic(editor);

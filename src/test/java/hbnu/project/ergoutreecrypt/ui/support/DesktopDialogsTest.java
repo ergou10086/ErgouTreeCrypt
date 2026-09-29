@@ -104,6 +104,26 @@ class DesktopDialogsTest {
         });
     }
 
+    /** 在文本中间连续输入时保留插入光标位置，不因数据同步跳回文本开头。 */
+    @Test
+    void keepsCaretPositionWhileTyping() throws Exception {
+        onFx(() -> {
+            Dialog<ButtonType> dialog = PasswordBookDialog.createDialog(owner("light"),
+                    List.of(new PasswordBookEntry("ac", "sample")), entries -> {
+                    });
+            dialog.show();
+            layout(dialog);
+            TextField name = editor(table(dialog), 0, 0);
+            name.requestFocus();
+            name.positionCaret(1);
+            name.replaceSelection("b");
+            assertEquals("abc", name.getText());
+            assertEquals(2, name.getCaretPosition());
+            dialog.close();
+            return null;
+        });
+    }
+
     /** 保存失败后保留窗口和输入，支持在同一窗口重试。 */
     @Test
     void keepsDraftAfterSaveFailureAndRetries() throws Exception {

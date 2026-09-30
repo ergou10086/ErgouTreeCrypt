@@ -125,10 +125,8 @@ class DesktopStegoInteropTest {
     }
 
     /**
-     * 桌面端「加密前压缩」产物：移动端侧的预检应识别 `compressed == true`（S2 生效证据）。
-     *
-     * <p>移动端 `KdfPreflight.peekStego` 据此在点提取按钮前拒绝，避免落到解压阶段
-     * 因 zstd-jni 无 Android ABI 崩溃。
+     * 桌面端「加密前压缩」产物：移动端预检应识别 `compressed == true`。
+     * Android 端通过同版本的 Zstd AAR 提供解压能力。
      */
     @Test
     fun desktopCompressedArtifact_preflightDetectsCompressed() {

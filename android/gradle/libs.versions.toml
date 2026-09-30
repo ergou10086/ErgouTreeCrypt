@@ -21,7 +21,7 @@ bouncycastle = "1.78.1"
 commons-compress = "1.27.1"
 zip4j = "2.11.5"
 tukaani-xz = "1.10"
-zstd-jni = "1.5.6-9"
+zstd-jni = "1.5.7-12"
 
 # --- Testing ---
 junit = "4.13.2"

@@ -77,6 +77,7 @@ import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
 import hbnu.project.ergoutreecrypt.android.ui.component.ExpandableCard
 import hbnu.project.ergoutreecrypt.android.ui.component.FileActionRow
@@ -258,7 +259,7 @@ fun DecryptScreen(
     // 桌面端/高内存档单文件的 KDF 预检提示（null 表示无需提示）
     var kdfWarning by remember { mutableStateOf<String?>(null) }
 
-    // 使用了「加密前压缩」的文件：移动端无 native 库无法解压，直接拒绝（null 表示可解密）
+    // 仅在当前设备的 Zstd native 库不可用时阻止压缩文件解密。
     var compressedNotice by remember { mutableStateOf<String?>(null) }
 
     // 格式保持解密文件的 KDF 预检提示（null 表示无需提示；仅媒体文件）
@@ -286,9 +287,8 @@ fun DecryptScreen(
         if (!(lower.endsWith(".ergou") || lower.endsWith(".pcv"))) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             val path = File(p).toPath()
-            // 加密前压缩（Zstandard）：移动端无 native 库无法解压，直接拒绝
-            if (KdfPreflight.peekCompressed(path) == true) {
-                compressedNotice = "该文件使用了「加密前压缩」（Zstandard），移动端无法解密，请在桌面端解密。"
+            if (KdfPreflight.peekCompressed(path) == true && !ZstdCompressor.isAvailable()) {
+                compressedNotice = "当前设备无法加载 Zstandard 原生库，暂时不能解密此文件。"
                 return@withContext
             }
             val memKib = KdfPreflight.peekArgon2MemoryKib(path)
@@ -1353,7 +1353,7 @@ fun DecryptScreen(
                 )
             }
 
-            // 加密前压缩：移动端无法解密，直接拒绝
+            // 仅在 Zstd native 库不可用时显示错误。
             if (compressedNotice != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(

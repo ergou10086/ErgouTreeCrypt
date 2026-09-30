@@ -125,7 +125,8 @@
                             <Label fx:id="fsCompressLevelLabel" styleClass="field-label"
                                    text="压缩级别"/>
                             <Slider fx:id="fsCompressLevelSlider" min="1.0" max="22.0"
-                                    value="3.0" blockIncrement="1.0" snapToTicks="true"
+                                    value="3.0" blockIncrement="1.0" majorTickUnit="1.0"
+                                    minorTickCount="0" snapToTicks="true"
                                     prefWidth="220"/>
                             <Label fx:id="fsCompressLevelValueLabel" styleClass="field-hint"
                                    text="3"/>

@@ -63,6 +63,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import hbnu.project.ergoutreecrypt.android.platform.AndroidFileOps
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
 import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
+import hbnu.project.ergoutreecrypt.compress.ZstdCompressor
 import hbnu.project.ergoutreecrypt.android.platform.OutputDirResolver
 import hbnu.project.ergoutreecrypt.android.platform.PendingOutput
 import hbnu.project.ergoutreecrypt.android.ui.component.CompactTopBar
@@ -140,7 +141,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
     var stegoSize by remember { mutableStateOf<Long?>(null) }
 
     // ---- 隐写预检结果（KDF 档位 / 加密前压缩） ----
-    var stegoCompressed by remember { mutableStateOf(false) }
+    var stegoCompressionUnavailable by remember { mutableStateOf(false) }
     var stegoSlowKdf by remember { mutableStateOf(false) }
 
     // ---- 隐写文件选择加载状态 ----
@@ -196,11 +197,12 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     stegoName = name
                     stegoPath = path
                     stegoSize = size
-                    // 只读预检：识别桌面端 1 GiB 档（较慢）与「加密前压缩」（移动端无法解压）
+                    // 只读预检：识别桌面端 1 GiB 档与压缩文件所需的 native 库。
                     val preflight = withContext(Dispatchers.IO) {
                         KdfPreflight.peekStego(Paths.get(path))
                     }
-                    stegoCompressed = preflight?.compressed == true
+                    stegoCompressionUnavailable = preflight?.compressed == true &&
+                            !ZstdCompressor.isAvailable()
                     stegoSlowKdf = preflight != null &&
                             (preflight.argon2MemoryKib == null ||
                                     preflight.argon2MemoryKib!! > (256 shl 10))
@@ -255,7 +257,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
 
     val hasFile = stegoPath != null
     val canStart = hasFile && !isRunning && !stegoLoading && !busy
-            && !stegoCompressed
+            && !stegoCompressionUnavailable
 
     // ---- 开始提取 ----
     fun doExtract() {
@@ -515,13 +517,13 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                     onRemove = {
                         stegoUri = null; stegoPath = null
                         stegoName = null; stegoSize = null
-                        stegoCompressed = false; stegoSlowKdf = false
+                        stegoCompressionUnavailable = false; stegoSlowKdf = false
                     }
                 )
             }
 
-            // 预检警告：加密前压缩（移动端无法解压，禁用提取）/ 1 GiB 档（较慢）
-            if (stegoCompressed) {
+            // 预检警告：native 库不可用时禁用压缩文件提取；高内存 KDF 仅提示。
+            if (stegoCompressionUnavailable) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -538,7 +540,7 @@ fun StegoExtractScreen(onOpenHistory: () -> Unit = {}) {
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "该文件使用了「加密前压缩」（Zstandard），移动端无法提取，请在桌面端提取。",
+                            "当前设备无法加载 Zstandard 原生库，暂时不能提取此文件。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

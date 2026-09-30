@@ -7,8 +7,8 @@ package hbnu.project.ergoutreecrypt.filestego.api;
  * §14.9）：提取前读取载体元数据与 Payload 头，识别两类不可/较难处理的情况：
  * <ul>
  *   <li>{@code argon2MemoryKib == null}——旧文件回落默认 1 GiB，提取较慢，提示即可；</li>
- *   <li>{@code compressed == true}——使用了「加密前压缩」（zstd-jni 无 Android ABI），
- *       移动端无法解压，应直接拒绝。</li>
+ *   <li>{@code compressed == true}——使用了「加密前压缩」（Zstandard），
+ *       可在提取前检查当前设备的 Zstd native 库是否可用。</li>
  * </ul>
  *
  * @param argon2MemoryKib Argon2 内存参数（KiB）；{@code null} 表示旧文件（回落默认

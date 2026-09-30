@@ -207,6 +207,7 @@ private val TIP_RS = "使用 Reed-Solomon 纠错码，可在文件部分损坏�
 private val TIP_DENIABILITY = "创建包含两份内容的加密容器：真密码解密真实文件，伪密码（钓鱼密码）解密无害的伪装文件。即使被胁迫，也可安全交出伪密码。"
 private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护；7Z 不支持密码保护。"
 private val TIP_COMPRESS_BEFORE = "加密前把所选内容按下方格式打成「一个」压缩包，再对压缩包整体加密；归档内保留原有目录结构，ZIP 可设置 AES-256 密码。与「加密后压缩」互斥。"
+private val TIP_ZSTD = "加密前使用 Zstandard 压缩文件内容。桌面端和 Android 端可互相解压。"
 private val TIP_SPLIT = "将加密输出切分为多个指定大小的分卷文件，便于传输和存储。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
 
@@ -321,6 +322,8 @@ fun EncryptScreen(
     var deniability by remember { mutableStateOf(false) }
     var compressBefore by remember { mutableStateOf(false) }
     var compressAfter by remember { mutableStateOf(false) }
+    var zstdBefore by remember { mutableStateOf(false) }
+    var zstdLevel by remember { mutableStateOf(3) }
     var split by remember { mutableStateOf(false) }
     var argon2Mode by remember { mutableStateOf(Argon2MobileMode.AUTO) }
     var settingsLoaded by remember { mutableStateOf(false) }
@@ -661,8 +664,8 @@ fun EncryptScreen(
                     argon2MemoryKib = tier.memoryKiB,
                     argon2Passes = tier.passes,
                     argon2Threads = tier.threads,
-                    compress = false,
-                    compressionLevel = 3
+                    compress = zstdBefore,
+                    compressionLevel = zstdLevel
                 )
                 pendingBatchResult = batch
                 pendingBatchName = batchNameFor(selectedInputs)
@@ -698,7 +701,9 @@ fun EncryptScreen(
                     argon2Passes = tier.passes,
                     argon2Threads = tier.threads,
                     preArchiveFormat = if (compressBefore) archiveFmt.ifEmpty { null } else null,
-                    preArchivePassword = if (compressBefore) archPwd else null
+                    preArchivePassword = if (compressBefore) archPwd else null,
+                    compress = zstdBefore,
+                    compressionLevel = zstdLevel
                 )
                 return@launch
             }
@@ -716,6 +721,8 @@ fun EncryptScreen(
             req.outputFile = outFile
             req.password = password
             req.setReedSolomon(reedSolomon)
+            req.setCompress(zstdBefore)
+            req.setCompressionLevel(zstdLevel)
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
@@ -1312,6 +1319,7 @@ fun EncryptScreen(
                 OptionRow("压缩后加密", compressBefore, {
                     compressBefore = it
                     if (it) {
+                        zstdBefore = false
                         compressAfter = false
                         // 勾选却仍停留在「不归档」会静默什么都不做，这里补一个默认格式
                         if (archiveFmt.isEmpty()) archiveFmt = "ZIP"
@@ -1324,6 +1332,20 @@ fun EncryptScreen(
                         if (archiveFmt.isEmpty()) archiveFmt = "ZIP"
                     }
                 }, TIP_COMPRESS_AFTER)
+                OptionRow("Zstandard 加密前压缩", zstdBefore, {
+                    zstdBefore = it
+                    if (it) compressBefore = false
+                }, TIP_ZSTD, enabled = !mediaMode)
+                if (zstdBefore && !mediaMode) {
+                    Text("Zstandard 档位：$zstdLevel", modifier = Modifier.padding(start = 36.dp))
+                    Slider(
+                        value = zstdLevel.toFloat(),
+                        onValueChange = { zstdLevel = it.toInt().coerceIn(1, 22) },
+                        valueRange = 1f..22f,
+                        steps = 20,
+                        modifier = Modifier.fillMaxWidth().padding(start = 36.dp)
+                    )
+                }
                 if (compressAfter || compressBefore) {
                     Spacer(Modifier.height(4.dp))
                     Row(modifier = Modifier.padding(start = 36.dp), verticalAlignment = Alignment.CenterVertically) {

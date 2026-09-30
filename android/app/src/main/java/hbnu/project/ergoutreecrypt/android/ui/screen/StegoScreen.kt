@@ -42,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -117,6 +118,7 @@ import java.io.File
 private val TIP_STEGO_INTEGRITY = "存储原文的完整性校验码（MAC），提取后自动验证文件是否被篡改。"
 private val TIP_STEGO_STEALTH = "使用 HMAC 派生魔数替代固定魔数，避免通过魔数字符串检测隐写数据。"
 private val TIP_STEGO_OBFUSCATE = "在输出文件末尾追加随机字节，使文件大小达到指定目标，增加检测难度。"
+private val TIP_STEGO_ZSTD = "在隐写加密前使用 Zstandard 压缩原文件；桌面端和 Android 端均可提取。"
 
 // ============================================================
 // StegoScreen — 统一隐写（隐藏）页面
@@ -190,6 +192,8 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
     var storeIntegrity by remember { mutableStateOf(true) }
     var stealth by remember { mutableStateOf(false) }
     var obfuscateSize by remember { mutableStateOf(false) }
+    var zstdCompress by remember { mutableStateOf(false) }
+    var zstdLevel by remember { mutableStateOf(3) }
     var targetSizeMB by remember { mutableStateOf(10) }
 
     // Argon2 移动模式档位（复用全局设置，映射为隐写 KDF 覆写参数）
@@ -401,6 +405,8 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
                 .storeIntegrity(storeIntegrity)
                 .stealth(stealth)
                 .obfuscateSize(obfuscateSize)
+                .compressed(zstdCompress)
+                .compressionLevel(zstdLevel)
                 .targetSizeBytes(if (obfuscateSize) targetSizeMB * 1024L * 1024L else 0)
                 // 移动端不开放嵌入方式选择：PNG 载体默认 stEG chunk（更隐蔽），
                 // 其他载体默认末尾追加（其余适配器本就忽略 preferChunk）。
@@ -938,6 +944,19 @@ fun StegoScreen(onOpenHistory: () -> Unit = {}) {
 
                 // ---- 隐蔽模式 ----
                 OptionRow("隐蔽模式（HMAC 派生魔数）", stealth, { stealth = it }, TIP_STEGO_STEALTH)
+
+                Spacer(Modifier.height(6.dp))
+                OptionRow("Zstandard 加密前压缩", zstdCompress, { zstdCompress = it }, TIP_STEGO_ZSTD)
+                if (zstdCompress) {
+                    Text("Zstandard 档位：$zstdLevel", modifier = Modifier.padding(start = 36.dp))
+                    Slider(
+                        value = zstdLevel.toFloat(),
+                        onValueChange = { zstdLevel = it.toInt().coerceIn(1, 22) },
+                        valueRange = 1f..22f,
+                        steps = 20,
+                        modifier = Modifier.fillMaxWidth().padding(start = 36.dp)
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 

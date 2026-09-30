@@ -41,9 +41,7 @@ import java.util.zip.ZipOutputStream;
  *   <li>普通载体（非隐写）：预检返回 {@link StegoPreflight#UNKNOWN}。</li>
  * </ol>
  *
- * <p>另验证桌面端压缩往返不劣化：桌面端 zstd-jni native 可用时，「加密前压缩」
- * 文件仍可正常提取；移动端（native 不可用）会经 {@code PayloadCodec} 的兜底抛出
- * 友好错误，见移动端侧的 {@code DesktopStegoInteropTest}。
+ * <p>另验证桌面端压缩往返不劣化；Android 端通过同版本的 Zstd AAR 提供解压能力。
  *
  * @author ErgouTree
  * @since 2026/8/31

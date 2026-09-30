@@ -224,6 +224,7 @@
                                                 <Slider fx:id="compressLevelSlider" min="1.0"
                                                         max="22.0" value="3.0"
                                                         blockIncrement="1.0"
+                                                        majorTickUnit="1.0" minorTickCount="0"
                                                         snapToTicks="true" prefWidth="220"/>
                                                 <Label fx:id="compressLevelValueLabel"
                                                        styleClass="field-hint" text="3"/>

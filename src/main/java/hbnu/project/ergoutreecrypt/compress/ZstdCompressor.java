@@ -14,7 +14,7 @@ import java.io.OutputStream;
  *
  * <p>Zstandard 支持 1–22 档位（数值越大压缩率越高、速度越慢），本类将档位限制在 {@link #MIN_LEVEL}–{@link #MAX_LEVEL} 区间，越界值自动收敛到边界。解压侧通过帧头自动识别原始大小，无需在调用方保存/传递档位或长度信息。
  *
- * <p>注意：zstd-jni 仅提供桌面端 native（无 Android ABI），故「加密前压缩」产生的文件在移动端无法解压；移动端解密侧在预检阶段会直接拒绝此类文件，本类实际仅桌面端调用压缩/解压。
+ * <p>桌面端使用 zstd-jni JAR，Android 使用同版本 AAR；两端共享此类和标准 Zstandard 帧格式。
  *
  * <p>提供字节数组与流式两套 API：字节数组用于内存内小载荷（隐写 payload），流式用于大文件（通用文件加密与隐写的文件级路径），内存占用恒定。
  *
@@ -51,12 +51,9 @@ public final class ZstdCompressor {
     /**
      * 探测 zstd-jni 的 native 库是否可用。
      *
-     * <p>zstd-jni 仅提供桌面端 native（无 Android ABI），在移动端加载
-     * {@code libzstd-jni-*.so} 会抛 {@link UnsatisfiedLinkError}。本方法通过一次
-     * 微小的压缩/解压往返判定 native 是否可用，结果缓存复用；移动端可据此在
-     * 预检阶段拒绝「加密前压缩」的文件，避免解压阶段崩溃。
+     * <p>本方法通过一次微小的压缩/解压往返判定 native 是否可用，结果缓存复用。
      *
-     * @return true 表示 native 可用（桌面端）；false 表示不可用（移动端）
+     * @return true 表示当前运行环境中的 native 库可用
      */
     public static boolean isAvailable() {
         Boolean a = available;

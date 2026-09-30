@@ -375,7 +375,9 @@ class EncryptViewModel : ViewModel() {
         argon2Passes: Int,
         argon2Threads: Int,
         preArchiveFormat: String? = null,
-        preArchivePassword: String? = null
+        preArchivePassword: String? = null,
+        compress: Boolean = false,
+        compressionLevel: Int = 3
     ): BatchResult {
         val opts = buildFolderOptions(
             outputDir = outputDir,
@@ -393,7 +395,9 @@ class EncryptViewModel : ViewModel() {
             keyfileOrdered = keyfileOrdered,
             argon2MemoryKib = argon2MemoryKib,
             argon2Passes = argon2Passes,
-            argon2Threads = argon2Threads
+            argon2Threads = argon2Threads,
+            compress = compress,
+            compressionLevel = compressionLevel
         )
         val root = Paths.get(inputDir)
         val folderName = FileNameSanitizer.sanitize(root.fileName?.toString() ?: "folder")
@@ -436,7 +440,8 @@ class EncryptViewModel : ViewModel() {
                     req.password = password
                     req.setReedSolomon(reedSolomon)
                     req.setDeniability(deniability)
-                    req.setCompress(false)
+                    req.setCompress(compress)
+                    req.setCompressionLevel(compressionLevel)
                     req.setSplit(split)
                     req.chunkSize = chunkSize
                     req.comments = comments
@@ -490,7 +495,8 @@ class EncryptViewModel : ViewModel() {
                 req.password = password
                 req.setReedSolomon(reedSolomon)
                 req.setDeniability(deniability)
-                req.setCompress(false)
+                req.setCompress(compress)
+                req.setCompressionLevel(compressionLevel)
                 req.setSplit(split)
                 req.chunkSize = chunkSize
                 req.comments = comments

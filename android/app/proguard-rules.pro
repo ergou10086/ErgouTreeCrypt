@@ -24,6 +24,9 @@
     native <methods>;
 }
 
+# zstd-jni JNI links by original Java class and method names.
+-keep class com.github.luben.zstd.** { *; }
+
 # ============================================================
 
 # 纠错载体的 Android 像素桥由共享核心通过固定类名和方法名反射调用。

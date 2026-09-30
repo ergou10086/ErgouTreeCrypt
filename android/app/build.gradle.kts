@@ -218,7 +218,11 @@ dependencies {
     implementation(libs.commons.compress)
     implementation(libs.zip4j)
     implementation(libs.tukaani.xz)
-    implementation(libs.zstd.jni)
+    // Android needs the AAR with ABI-specific .so files. The plain JAR embeds
+    // desktop binaries and cannot be loaded by Android's linker.
+    implementation("com.github.luben:zstd-jni:${libs.versions.zstd.jni.get()}@aar")
+    // Local JVM tests run on the host and therefore need the desktop JAR.
+    testImplementation(libs.zstd.jni)
 
     // ============================================================
     // AndroidX 基础

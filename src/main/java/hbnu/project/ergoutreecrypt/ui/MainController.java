@@ -391,18 +391,6 @@ public class MainController {
         compressLevelSlider.valueProperty().addListener((o, a, b) ->
                 compressLevelValueLabel.setText(String.valueOf(currentCompressLevel())));
 
-        // 加密前压缩：Zstandard 压缩的内容移动端无法解密，勾选时弹出提示
-        compressCheck.selectedProperty().addListener((o, wasSelected, isSelected) -> {
-            if (isSelected) {
-                Alert alert = new Alert(Alert.AlertType.WARNING);
-                alert.initOwner(stage());
-                alert.setTitle(Messages.get("options.compress"));
-                alert.setHeaderText(Messages.get("options.compress.mobile.warning.header"));
-                alert.setContentText(Messages.get("options.compress.mobile.warning"));
-                alert.showAndWait();
-            }
-        });
-
         // 压缩后加密 / 加密后压缩：共用同一组归档格式与归档密码控件
         compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
         // 两者都是「压缩策略」，语义互斥：勾选一个自动取消另一个，避免出现

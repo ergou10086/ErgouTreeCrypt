@@ -1252,7 +1252,7 @@ public final class FolderCrypt {
      */
     private static ArchivePacker.Format effectiveArchiveFormat(String format) {
         ArchivePacker.Format fmt = ArchivePacker.parseFormat(format);
-        return fmt == ArchivePacker.Format.GZ ? ArchivePacker.Format.TAR_GZ : fmt;
+        return ArchivePacker.effectiveFormat(fmt, 2);
     }
 
     /**

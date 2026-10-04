@@ -9,6 +9,7 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
@@ -87,7 +88,7 @@ public final class ArchiveExtractor {
                 || name.endsWith(".gz") || name.endsWith(".tgz")
                 || name.endsWith(".tar.gz")
                 || name.endsWith(".rar")
-                || name.endsWith(".7z");
+                || name.endsWith(".7z") || name.endsWith(".lz4");
     }
 
     /**
@@ -315,6 +316,10 @@ public final class ArchiveExtractor {
                 rawFiles = extractTarGz(actualArchive, destDir, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".7z")) {
                 rawFiles = extract7z(actualArchive, destDir, password, reporter, extractionFrom, 1f);
+            } else if (name.endsWith(".tar.lz4")) {
+                rawFiles = extractTarLz4(actualArchive, destDir, reporter, extractionFrom, 1f);
+            } else if (name.endsWith(".lz4")) {
+                rawFiles = extractLz4(actualArchive, archive, destDir, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".gz")) {
                 rawFiles = extractGz(actualArchive, destDir, reporter, extractionFrom, 1f);
             } else {
@@ -326,10 +331,13 @@ public final class ArchiveExtractor {
 
             // 对旧版 .enc 逐条目加密进行解密（向后兼容）
             return decryptLegacyEntries(rawFiles, password, reporter);
-        } finally {
+        } catch (IOException e) {
             if (tempDecrypted != null) {
-                Files.deleteIfExists(tempDecrypted);
+                throw new IOException("Archive password incorrect or file corrupted: " + e.getMessage(), e);
             }
+            throw e;
+        } finally {
+            if (tempDecrypted != null) Files.deleteIfExists(tempDecrypted);
         }
     }
 
@@ -337,57 +345,7 @@ public final class ArchiveExtractor {
      * 解压归档到目标目录。
      */
     public static List<Path> extract(Path archive, Path destDir, String password) throws IOException {
-        Files.createDirectories(destDir);
-
-        // 检测整体加密包裹（GZ / TAR.GZ）
-        Path actualArchive = archive;
-        Path tempDecrypted = null;
-        if (isEncryptedFile(archive)) {
-            if (password == null || password.isEmpty()) {
-                throw PasswordNeededException.of(archive);
-            }
-            tempDecrypted = Files.createTempFile("ergou-outer-dec-", archiveExt(archive));
-            decryptFileTo(archive, tempDecrypted, password);
-            actualArchive = tempDecrypted;
-        }
-
-        try {
-            String name = actualArchive.getFileName().toString().toLowerCase();
-            List<Path> rawFiles;
-            if (name.endsWith(".zip")) {
-                rawFiles = extractZip(actualArchive, destDir, password);
-            } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
-                rawFiles = extractTarGz(actualArchive, destDir);
-            } else if (name.endsWith(".7z")) {
-                rawFiles = extract7z(actualArchive, destDir, password);
-            } else if (name.endsWith(".gz")) {
-                rawFiles = extractGz(actualArchive, destDir);
-            } else if (name.endsWith(".rar")) {
-                throw new IOException("RAR extraction requires additional setup.");
-            } else {
-                throw new IOException("Unsupported archive format: " + name);
-            }
-
-            // 旧版 .enc 解密
-            List<Path> result = new ArrayList<>();
-            for (Path f : rawFiles) {
-                if (isEncryptedFile(f)) {
-                    if (password == null || password.isEmpty()) {
-                        throw PasswordNeededException.of(f);
-                    }
-                    Path decrypted = decryptFile(f, password);
-                    Files.deleteIfExists(f);
-                    result.add(decrypted);
-                } else {
-                    result.add(f);
-                }
-            }
-            return result;
-        } finally {
-            if (tempDecrypted != null) {
-                Files.deleteIfExists(tempDecrypted);
-            }
-        }
+        return extractPreserving(archive, destDir, password);
     }
 
     // ==================== ZIP 解压 ====================
@@ -583,6 +541,91 @@ public final class ArchiveExtractor {
             }
         }
         return files;
+    }
+
+    // ==================== LZ4 解压 ====================
+
+    private static List<Path> extractLz4(Path archive, Path original, Path destDir,
+                                         ProgressReporter reporter, float from, float to) throws IOException {
+        String name = original.getFileName().toString();
+        Path output = destDir.resolve(name.substring(0, name.length() - 4));
+        Path staged = Files.createTempFile(destDir, ".lz4-", ".tmp");
+        try {
+            try (InputStream fin = Files.newInputStream(archive);
+                 FramedLZ4CompressorInputStream lz4 = new FramedLZ4CompressorInputStream(fin, true);
+                 OutputStream out = Files.newOutputStream(staged)) {
+                copyLz4WithProgress(lz4, out, lz4, Files.size(archive), reporter, from, to);
+            }
+            Files.move(staged, output, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return List.of(output);
+        } finally {
+            Files.deleteIfExists(staged);
+        }
+    }
+
+    private static List<Path> extractTarLz4(Path archive, Path destDir,
+                                            ProgressReporter reporter, float from, float to) throws IOException {
+        // Validate the entire frame before publishing files (TAR EOF precedes the LZ4 checksum).
+        Path stage = Files.createTempDirectory(destDir, ".lz4-stage-").toAbsolutePath().normalize();
+        List<Path> files = new ArrayList<>();
+        try {
+            try (InputStream fin = Files.newInputStream(archive);
+                 FramedLZ4CompressorInputStream lz4 = new FramedLZ4CompressorInputStream(fin, true);
+                 TarArchiveInputStream tar = new TarArchiveInputStream(lz4)) {
+                org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
+                while ((entry = tar.getNextEntry()) != null) {
+                    Path out = stage.resolve(entry.getName()).normalize();
+                    if (!out.startsWith(stage)) throw new IOException("Bad archive entry (zip-slip): " + entry.getName());
+                    if (entry.isSymbolicLink() || entry.isLink() || (!entry.isDirectory() && !entry.isFile())) {
+                        throw new IOException("Unsupported TAR entry: " + entry.getName());
+                    }
+                    if (!tar.canReadEntryData(entry)) throw new IOException("Unreadable TAR entry: " + entry.getName());
+                    if (entry.isDirectory()) {
+                        Files.createDirectories(out);
+                    } else {
+                        Files.createDirectories(out.getParent());
+                        try (OutputStream fos = Files.newOutputStream(out)) {
+                            copyLz4WithProgress(tar, fos, lz4, Files.size(archive), reporter, from, to);
+                        }
+                    }
+                }
+                copyLz4WithProgress(lz4, OutputStream.nullOutputStream(), lz4,
+                        Files.size(archive), reporter, from, to);
+            }
+            try (var walk = Files.walk(stage)) {
+                for (Path path : walk.sorted().toList()) {
+                    if (path.equals(stage)) continue;
+                    Path output = destDir.resolve(stage.relativize(path));
+                    if (Files.isDirectory(path)) Files.createDirectories(output);
+                    else {
+                        Files.createDirectories(output.getParent());
+                        Files.move(path, output, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        files.add(output);
+                    }
+                }
+            }
+            return files;
+        } finally {
+            try (var walk = Files.walk(stage)) {
+                for (Path path : walk.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static void copyLz4WithProgress(InputStream in, OutputStream out,
+                                             FramedLZ4CompressorInputStream lz4, long total,
+                                             ProgressReporter reporter, float from, float to) throws IOException {
+        byte[] buffer = new byte[8192];
+        long next = lz4.getCompressedCount() + PROGRESS_STEP_BYTES;
+        int n;
+        while ((n = in.read(buffer)) != -1) {
+            out.write(buffer, 0, n);
+            long done = lz4.getCompressedCount();
+            if (done >= next) {
+                reportScaledProgress(done, total, reporter, Messages.get("status.extracting"), from, to);
+                next = done + PROGRESS_STEP_BYTES;
+            }
+        }
     }
 
     // ==================== GZ 解压 ====================
@@ -904,7 +947,11 @@ public final class ArchiveExtractor {
      */
     private static String archiveExt(Path archive) {
         String name = archive.getFileName().toString().toLowerCase();
-        if (name.endsWith(".tar.gz")) {
+        if (name.endsWith(".tar.lz4")) {
+            return ".tar.lz4";
+        } else if (name.endsWith(".lz4")) {
+            return ".lz4";
+        } else if (name.endsWith(".tar.gz")) {
             return ".tar.gz";
         } else if (name.endsWith(".gz")) {
             return ".gz";

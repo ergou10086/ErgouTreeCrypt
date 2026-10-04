@@ -126,10 +126,7 @@ public final class Encryptor {
      */
     private static ArchivePacker.Format preArchiveFormat(String raw, int entryCount) {
         ArchivePacker.Format fmt = ArchivePacker.parseFormat(raw);
-        if (fmt == ArchivePacker.Format.GZ && entryCount > 1) {
-            return ArchivePacker.Format.TAR_GZ;
-        }
-        return fmt;
+        return ArchivePacker.effectiveFormat(fmt, entryCount);
     }
 
     /**
@@ -203,7 +200,7 @@ public final class Encryptor {
                 ArchivePacker.packEntries(archive, null, inputs,
                         ArchivePacker.uniqueEntryNames(null, inputs), fmt,
                         ArchivePacker.resolveArchivePassword(
-                                req.getPreArchivePassword(), null, ArchivePacker.Format.ZIP),
+                                req.getPreArchivePassword(), null, fmt),
                         req.getReporter());
             } catch (Exception e) {
                 Files.deleteIfExists(archive);
@@ -541,8 +538,7 @@ public final class Encryptor {
 
             if (split) {
                 // GZ 多条目时 packEntries 会自动提升为 TAR.GZ，扩展名也需同步调整
-                ArchivePacker.Format extFmt = (fmt == ArchivePacker.Format.GZ)
-                        ? ArchivePacker.Format.TAR_GZ : fmt;
+                ArchivePacker.Format extFmt = ArchivePacker.effectiveFormat(fmt, 2);
                 List<Path> chunks = Splitter.listChunks(outPath);
                 Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                 String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);

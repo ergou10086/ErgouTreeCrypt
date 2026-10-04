@@ -68,6 +68,9 @@ public final class ArchivePostExtract {
         }
         String name = archive.getFileName().toString();
         String lower = name.toLowerCase();
+        if (lower.endsWith(".tar.lz4")) {
+            return name.substring(0, name.length() - ".tar.lz4".length());
+        }
         if (lower.endsWith(".tar.gz")) {
             return name.substring(0, name.length() - ".tar.gz".length());
         }

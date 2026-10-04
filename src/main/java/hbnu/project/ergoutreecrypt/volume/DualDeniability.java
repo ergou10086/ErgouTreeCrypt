@@ -350,8 +350,7 @@ public final class DualDeniability {
 
                 if (split) {
                     // GZ 多条目时 packEntries 会自动提升为 TAR.GZ，扩展名也需同步调整
-                    ArchivePacker.Format extFmt = (fmt == ArchivePacker.Format.GZ)
-                            ? ArchivePacker.Format.TAR_GZ : fmt;
+                    ArchivePacker.Format extFmt = ArchivePacker.effectiveFormat(fmt, 2);
                     List<Path> chunks = Splitter.listChunks(outPath);
                     Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                     String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);

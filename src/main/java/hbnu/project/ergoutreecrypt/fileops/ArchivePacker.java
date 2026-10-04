@@ -12,6 +12,7 @@ import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorOutputStream;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
@@ -37,13 +38,13 @@ import java.util.stream.Stream;
 /**
  * 归档打包工具。
  *
- * <p>支持 ZIP / GZ / TAR.GZ / 7Z 四种格式。密码保护策略：
+ * <p>支持 ZIP / GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4 六种格式。密码保护策略：
  * <ul>
  *   <li><b>ZIP：</b>使用 zip4j 原生 AES-256 加密，外部工具（Bandizip / 7-Zip）
  *       可正确提示密码；不受工具特有加密开关影响。</li>
- *   <li><b>GZ / TAR.GZ / 7Z：</b>无（或放弃）原生密码，采用本工具特有的整体
+ *   <li><b>GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4：</b>无（或放弃）原生密码，采用本工具特有的整体
  *       AES-256-CTR 加密包裹（MAGIC + salt + IV + ciphertext），仅能用本工具解密。
- *       是否允许对这三种格式加密，由
+ *       是否允许对这些格式加密，由
  *       {@link SettingsManager#isArchiveCustomEncryption()} 控制（默认关闭）。</li>
  * </ul>
  *
@@ -104,7 +105,7 @@ public final class ArchivePacker {
      *
      * <p>规则：
      * <ul>
-     *   <li>对 GZ / TAR.GZ / 7Z：仅当
+     *   <li>对 GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4：仅当
      *       {@link SettingsManager#isArchiveCustomEncryption()} 开启时才允许加密，
      *       否则一律返回 null（明文归档）。</li>
      *   <li>显式归档密码非空时直接采用。</li>
@@ -136,13 +137,14 @@ public final class ArchivePacker {
     }
 
     /**
-     * 判断格式是否属于「工具特有加密」范畴（GZ / TAR.GZ / 7Z）。
+     * 判断格式是否属于「工具特有加密」范畴（GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4）。
      *
      * @param format 归档格式，可为 null
      * @return true 表示该格式加密受工具特有加密开关控制
      */
     public static boolean isCustomEncryptionFormat(Format format) {
-        return format == Format.GZ || format == Format.TAR_GZ || format == Format._7Z;
+        return format == Format.GZ || format == Format.TAR_GZ || format == Format._7Z
+                || format == Format.LZ4 || format == Format.TAR_LZ4;
     }
 
     /**
@@ -197,19 +199,27 @@ public final class ArchivePacker {
      */
     public static void pack(Path output, Path input, Format format, String password,
                             ProgressReporter reporter) throws IOException {
+        if ((format == Format.LZ4 || format == Format.TAR_LZ4) && Files.isDirectory(input)) {
+            try (Stream<Path> walk = Files.walk(input)) {
+                List<Path> entries = walk.filter(p -> !p.equals(input)).sorted().toList();
+                if (entries.isEmpty()) entries = List.of(input);
+                packEntries(output, input.getParent(), entries, Format.TAR_LZ4, password, reporter);
+            }
+            return;
+        }
         long t0 = System.nanoTime();
         LogService.info("ArchivePacker", "开始打包 " + format
                 + " ← " + (input == null ? "?" : input.getFileName()));
         reportArchive(reporter, 0f, Messages.get("status.archiving"));
         boolean hasPwd = password != null && !password.isEmpty();
-        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
+        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4 用本工具特有的整体 AES 包裹（MAGIC）
         if (hasPwd && format == Format.ZIP) {
             packZipNative(output, input, password, reporter);
             reportArchive(reporter, 1f, Messages.get("status.archiving"));
             LogService.info("ArchivePacker", "打包完成", (System.nanoTime() - t0) / 1_000_000L);
             return;
         }
-        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4）：
         // 明文归档阶段占 0→plainEnd，整体 AES 包裹阶段占 plainEnd→1
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
         float plainEnd = hasPwd ? 0.7f : 1f;
@@ -219,6 +229,9 @@ public final class ArchivePacker {
                 case GZ -> packGz(workOutput, input, reporter, 0f, plainEnd);
                 case TAR_GZ -> packTarGz(workOutput, input, reporter, 0f, plainEnd);
                 case _7Z -> pack7z(workOutput, input, reporter, 0f, plainEnd);
+                case LZ4 -> packLz4(workOutput, input, reporter, 0f, plainEnd);
+                case TAR_LZ4 -> packTarLz4Entries(workOutput, input.getParent(), List.of(input), null,
+                        reporter, 0f, plainEnd);
                 default -> throw new IllegalArgumentException("Unsupported format: " + format);
             }
             if (hasPwd) {
@@ -298,17 +311,18 @@ public final class ArchivePacker {
         }
         LogService.info("ArchivePacker", "开始打包 " + format + ", 条目=" + entries.size());
 
-        Format effective = (format == Format.GZ && entries.size() > 1) ? Format.TAR_GZ : format;
+        Format effective = effectiveFormat(format, entries.size());
+        if (effective == Format.LZ4 && Files.isDirectory(entries.getFirst())) effective = Format.TAR_LZ4;
         boolean hasPwd = password != null && !password.isEmpty();
         reportArchive(reporter, 0f,
                 Messages.format("status.archiving.progress", 0, entries.size()));
 
-        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z 用本工具特有的整体 AES 包裹（MAGIC）
+        // ZIP 走原生 AES；GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4 用本工具特有的整体 AES 包裹（MAGIC）
         if (hasPwd && effective == Format.ZIP) {
             packZipEntriesNative(output, baseDir, entries, entryNames, password, reporter);
             return;
         }
-        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z）：
+        // 无密码；或需要整体包裹的格式（GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4）：
         // 明文归档阶段占 0→plainEnd，整体 AES 包裹阶段占 plainEnd→1
         Path workOutput = hasPwd ? Files.createTempFile("ergou-plain-", ".tmp") : output;
         float plainEnd = hasPwd ? 0.7f : 1f;
@@ -320,6 +334,9 @@ public final class ArchivePacker {
                 case TAR_GZ -> packTarGzEntries(workOutput, baseDir, entries, entryNames,
                         reporter, 0f, plainEnd);
                 case _7Z -> pack7zEntries(workOutput, baseDir, entries, entryNames,
+                        reporter, 0f, plainEnd);
+                case LZ4 -> packLz4(workOutput, entries.getFirst(), reporter, 0f, plainEnd);
+                case TAR_LZ4 -> packTarLz4Entries(workOutput, baseDir, entries, entryNames,
                         reporter, 0f, plainEnd);
                 default -> throw new IllegalArgumentException("Unsupported format: " + effective);
             }
@@ -762,6 +779,56 @@ public final class ArchivePacker {
         }
     }
 
+    // ==================== 标准 LZ4 Frame（无原生密码） ====================
+
+    private static void packLz4(Path output, Path input, ProgressReporter reporter,
+                                float from, float to) throws IOException {
+        try (OutputStream fos = Files.newOutputStream(output);
+             FramedLZ4CompressorOutputStream lz4 = new FramedLZ4CompressorOutputStream(fos);
+             InputStream fin = Files.newInputStream(input)) {
+            copyWithProgress(fin, lz4, 0, Files.size(input), reporter,
+                    Messages.get("status.archiving"), from, to);
+        }
+    }
+
+    private static void packTarLz4Entries(Path output, Path baseDir, List<Path> entries,
+                                          List<String> entryNames, ProgressReporter reporter,
+                                          float from, float to) throws IOException {
+        long total = entries.stream().filter(Files::isRegularFile).mapToLong(ArchivePacker::safeSize).sum();
+        long done = 0;
+        try (OutputStream fos = Files.newOutputStream(output);
+             FramedLZ4CompressorOutputStream lz4 = new FramedLZ4CompressorOutputStream(fos);
+             TarArchiveOutputStream tar = new TarArchiveOutputStream(lz4)) {
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+            tar.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
+            for (int i = 0; i < entries.size(); i++) {
+                Path file = entries.get(i);
+                if (Files.isSymbolicLink(file)) throw new IOException("Symbolic link is not supported: " + file);
+                TarArchiveEntry entry = new TarArchiveEntry(file, nameAt(entryNames, i, baseDir, file));
+                tar.putArchiveEntry(entry);
+                if (!entry.isDirectory()) {
+                    try (InputStream in = Files.newInputStream(file)) {
+                        done += copyWithProgress(in, tar, done, total, reporter,
+                                Messages.get("status.archiving"), from, to);
+                    }
+                }
+                tar.closeArchiveEntry();
+                reportScaledProgress(done, total, reporter,
+                        Messages.format("status.archiving.progress", i + 1, entries.size()), from, to);
+            }
+            tar.finish();
+        }
+    }
+
+    /** Single-stream formats must become TAR containers when there are multiple entries. */
+    public static Format effectiveFormat(Format format, int entryCount) {
+        if (entryCount > 1) {
+            if (format == Format.GZ) return Format.TAR_GZ;
+            if (format == Format.LZ4) return Format.TAR_LZ4;
+        }
+        return format;
+    }
+
     // ==================== 7Z 明文打包 ====================
 
     /**
@@ -1053,7 +1120,7 @@ public final class ArchivePacker {
      * @return 对应的 Format 枚举值
      */
     public static Format parseFormat(String raw) {
-        String name = raw.toUpperCase().replace('.', '_');
+        String name = raw.trim().toUpperCase(java.util.Locale.ROOT).replace('.', '_');
         // "7Z" maps to _7Z 枚举常量（Java 标识符不能以数字开头）
         if ("7Z".equals(name)) {
             return Format._7Z;
@@ -1073,6 +1140,8 @@ public final class ArchivePacker {
             case GZ -> ".gz";
             case TAR_GZ -> ".tar.gz";
             case _7Z -> ".7z";
+            case LZ4 -> ".lz4";
+            case TAR_LZ4 -> ".tar.lz4";
         };
     }
 
@@ -1083,6 +1152,8 @@ public final class ArchivePacker {
         ZIP,
         GZ,
         TAR_GZ,
-        _7Z
+        _7Z,
+        LZ4,
+        TAR_LZ4
     }
 }

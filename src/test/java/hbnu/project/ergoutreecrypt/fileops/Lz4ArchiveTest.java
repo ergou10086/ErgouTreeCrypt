@@ -108,6 +108,10 @@ class Lz4ArchiveTest {
                 else if (name.equals("concatenated")) {
                     ByteArrayOutputStream expected = new ByteArrayOutputStream(); expected.write(payload); expected.write(payload);
                     assertArrayEquals(expected.toByteArray(), Files.readAllBytes(files.getFirst()));
+                } else if (name.equals("linked-k64")) {
+                    ByteArrayOutputStream expected = new ByteArrayOutputStream();
+                    for (int i=0;i<100;i++) expected.write(payload);
+                    assertArrayEquals(expected.toByteArray(), Files.readAllBytes(files.getFirst()));
                 } else assertArrayEquals(payload, Files.readAllBytes(files.getFirst()));
             }));
     }
@@ -146,6 +150,23 @@ class Lz4ArchiveTest {
             assertEquals("compatible", Files.readString(ArchiveExtractor.extract(archive, dir.resolve("regression-out"), pwd).getFirst()));
         })));
     }
+    @Test void explicitPasswordIsUsedBeforePromptAndWrongPasswordCanRetry() throws Exception {
+        Path input = Files.writeString(dir.resolve("source.txt"), "retry-content");
+        Path archive = dir.resolve("retry.txt.lz4");
+        ArchivePacker.pack(archive, input, ArchivePacker.Format.LZ4, "correct");
+        java.util.concurrent.atomic.AtomicInteger prompts = new java.util.concurrent.atomic.AtomicInteger();
+        ArchivePasswordProvider delegate = (path, retry) -> {
+            assertTrue(retry); prompts.incrementAndGet(); return "correct";
+        };
+        ArchivePostExtract.extractIfArchive(archive, 2, null,
+                ArchivePasswordProvider.withPassword("correct", delegate));
+        assertEquals(0, prompts.get());
+        ArchivePostExtract.extractIfArchive(archive, 2, null,
+                ArchivePasswordProvider.withPassword("wrong", delegate));
+        assertEquals(1, prompts.get());
+        assertEquals("retry-content", Files.readString(dir.resolve("retry.txt/retry.txt")));
+    }
+
     @Test void progressUsesCompressedBytesAndFinishes() throws Exception {
         byte[] data = new byte[5 * 1024 * 1024]; new Random(1).nextBytes(data);
         Path input = Files.write(dir.resolve("progress.bin"), data);

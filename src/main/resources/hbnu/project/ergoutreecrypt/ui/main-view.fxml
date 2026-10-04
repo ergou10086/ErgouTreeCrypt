@@ -243,6 +243,8 @@
                                             <CustomPasswordField fx:id="archivePasswordField" styleClass="text-input"
                                                           managed="false" visible="false"
                                                           promptText="Archive password (optional)"/>
+                        <Label fx:id="archiveEncryptionNotice" styleClass="field-hint" wrapText="true"
+                               maxWidth="Infinity" managed="false" visible="false"/>
                                             <HBox spacing="10" alignment="CENTER_LEFT">
                                                 <HBox alignment="CENTER_LEFT" spacing="2">
                                                     <CheckBox fx:id="splitCheck" styleClass="check"/>

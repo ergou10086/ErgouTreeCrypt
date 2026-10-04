@@ -123,9 +123,9 @@ class EncryptViewModel : ViewModel() {
      * @param chunkSize       每卷大小（MiB）
      * @param comments        备注
      * @param preArchiveFormat   压缩后加密的归档格式（null 或空表示不先打包）
-     * @param preArchivePassword 压缩后加密的归档密码（仅 ZIP 使用，可为 null）
+     * @param preArchivePassword 压缩后加密的归档密码（ZIP 原生 AES；其他格式需开启工具特有加密，可为 null）
      * @param archiveFormat   加密后压缩的归档格式（null 或空表示不打包）
-     * @param archivePassword 归档密码（仅 ZIP 使用，可为 null）
+     * @param archivePassword 归档密码（ZIP 原生 AES；其他格式需开启工具特有加密，可为 null）
      * @param keyfiles        密钥文件路径列表
      * @param keyfileOrdered  密钥文件是否有序
      * @param argon2MemoryKib Argon2 内存参数（KiB）
@@ -351,7 +351,7 @@ class EncryptViewModel : ViewModel() {
      * @param chunkSize       每卷大小（MiB）
      * @param comments        备注
      * @param archiveFormat   加密后压缩的归档格式（null 或空表示不打包）
-     * @param archivePassword 归档密码（仅 ZIP 使用，可为 null）
+     * @param archivePassword 归档密码（ZIP 原生 AES；其他格式需开启工具特有加密，可为 null）
      * @param keyfiles        密钥文件路径列表
      * @param keyfileOrdered  密钥文件是否有序
      * @param argon2MemoryKib Argon2 内存参数（KiB）
@@ -418,7 +418,7 @@ class EncryptViewModel : ViewModel() {
 
             // 压缩后加密：整体打包成单个归档再加密，天然单文件、内存友好
             if (!preArchiveFormat.isNullOrBlank()) {
-                val fmt = ArchivePacker.parseFormat(preArchiveFormat)
+                val fmt = ArchivePacker.effectiveFormat(ArchivePacker.parseFormat(preArchiveFormat), 2)
                 val destEnc = Paths.get(outputDir)
                     .resolve("$folderName${ArchivePacker.extOf(fmt)}.ergou")
                 val entries: List<Path> = Files.walk(root).use { stream ->
@@ -525,7 +525,7 @@ class EncryptViewModel : ViewModel() {
 
             // 若启用「加密后压缩」：把整个结果目录打成单个归档，再删除结果目录
             if (!archiveFormat.isNullOrBlank()) {
-                val fmt = ArchivePacker.parseFormat(archiveFormat)
+                val fmt = ArchivePacker.effectiveFormat(ArchivePacker.parseFormat(archiveFormat), 2)
                 val archivePath = Paths.get(outputDir)
                     .resolve("${folderName}_result${ArchivePacker.extOf(fmt)}")
                 val entries: List<Path> = Files.walk(resultDir).use { stream ->

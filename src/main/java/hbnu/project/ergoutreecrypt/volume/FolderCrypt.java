@@ -796,7 +796,7 @@ public final class FolderCrypt {
                                                 ProgressReporter reporter) throws Exception {
         int limit = archiveDepthLimit(opts);
         ArchivePostExtract.extractNewArchives(mirrorRoot, depth, limit, reporter,
-                postExtractListener(opts, stats, reporter), opts.archivePasswordProvider);
+                postExtractListener(opts, stats, reporter), postExtractPasswordProvider(opts));
     }
 
     /**
@@ -815,7 +815,7 @@ public final class FolderCrypt {
         try {
             ArchivePostExtract.extractIfArchive(decrypted, 0, archiveDepthLimit(opts),
                     opts.reporter, postExtractListener(opts, stats, opts.reporter),
-                    opts.archivePasswordProvider);
+                    postExtractPasswordProvider(opts));
         } catch (InterruptedException e) {
             throw e;
         } catch (Exception e) {
@@ -1009,8 +1009,15 @@ public final class FolderCrypt {
         return dot > 0 ? name.substring(0, dot) : name;
     }
 
+    private static ArchivePasswordProvider postExtractPasswordProvider(DecryptOptions opts) {
+        return ArchivePasswordProvider.withPassword(
+                ArchivePacker.resolveArchivePassword(opts.archivePassword, opts.password),
+                opts.archivePasswordProvider);
+    }
+
     private static String stripArchiveExt(String name) {
         String lower = name.toLowerCase();
+        if (lower.endsWith(".tar.lz4")) return name.substring(0, name.length() - ".tar.lz4".length());
         if (lower.endsWith(".tar.gz")) {
             return name.substring(0, name.length() - ".tar.gz".length());
         }

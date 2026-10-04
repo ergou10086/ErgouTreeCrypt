@@ -355,7 +355,7 @@ public final class DualDeniability {
                     Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                     String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);
                     Path archivePath = archiveParent.resolve(archiveName);
-                    ArchivePacker.packEntries(archivePath, parent, chunks, fmt,
+                    ArchivePacker.packEntries(archivePath, parent, chunks, extFmt,
                             ArchivePacker.resolveArchivePassword(
                                     req.getArchivePassword(), req.getPassword(), fmt), reporter);
                     for (Path c : chunks) {

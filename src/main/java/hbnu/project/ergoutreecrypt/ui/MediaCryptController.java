@@ -153,6 +153,8 @@ public class MediaCryptController {
     private ComboBox<String> avCompressFormatCombo;
     @FXML
     private PasswordField avArchivePasswordField;
+    @FXML
+    private Label avArchiveEncryptionNotice;
 
     // ---- 解密选项 ----
     @FXML
@@ -235,7 +237,7 @@ public class MediaCryptController {
         avConfirmField.textProperty().addListener((o, a, b) -> updatePasswordFeedback());
 
         // 加密后压缩：格式下拉绑定
-        avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
+        avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
         avCompressFormatCombo.managedProperty().bind(avCompressAfterCheck.selectedProperty());
         avCompressFormatCombo.visibleProperty().bind(avCompressAfterCheck.selectedProperty());
         // 归档密码框：ZIP 始终可填；GZ/TAR.GZ/7Z 仅在开启「工具特有加密」时才显示
@@ -351,7 +353,7 @@ public class MediaCryptController {
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                     Messages.get("av.file.filter.all"),
                     "*.mp3", "*.mp4", "*.m4a", "*.m4v", "*.mov", "*.wav",
-                    "*.zip", "*.gz", "*.tar.gz"));
+                    "*.zip", "*.gz", "*.tar.gz", "*.7z", "*.lz4", "*.tar.lz4"));
         } else {
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                     Messages.get("av.file.filter"),
@@ -447,6 +449,9 @@ public class MediaCryptController {
      * @return 去掉扩展名的文件名
      */
     private static String stripArchiveExtension(final String name) {
+        if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".tar.lz4")) {
+            return name.substring(0, name.length() - ".tar.lz4".length());
+        }
         if (name.toLowerCase().endsWith(".tar.gz")) {
             return name.substring(0, name.length() - ".tar.gz".length());
         }
@@ -610,16 +615,13 @@ public class MediaCryptController {
         byte[] pwdBytes = pwd.getBytes(StandardCharsets.UTF_8);
         // 是否加密后归档
         boolean doArchive = avCompressAfterCheck.isSelected() && avCompressFormatCombo.getValue() != null;
+        ArchivePacker.Format archiveFormat = doArchive
+                ? ArchivePacker.parseFormat(avCompressFormatCombo.getValue()) : null;
+        String archivePassword = doArchive
+                ? ArchivePacker.resolveArchivePassword(archPwdOrNull(), pwd, archiveFormat) : null;
         Path finalOutput = output;
         if (doArchive) {
-            ArchivePacker.Format fmt = ArchivePacker.Format.valueOf(
-                    avCompressFormatCombo.getValue().replace(".", "_"));
-            String ext = switch (fmt) {
-                case ZIP -> ".zip";
-                case GZ -> ".gz";
-                case TAR_GZ -> ".tar.gz";
-                case _7Z -> ".7z";
-            };
+            String ext = ArchivePacker.extOf(archiveFormat);
             finalOutput = Path.of(output.toString() + ext);
         }
         Path archivePath = finalOutput;
@@ -627,10 +629,7 @@ public class MediaCryptController {
             codec.encrypt(input, output, pwdBytes, options, progress);
             if (doArchive) {
                 ProgressReporter archiveReporter = newArchiveReporter();
-                ArchivePacker.pack(archivePath, output, ArchivePacker.Format.valueOf(
-                        avCompressFormatCombo.getValue().replace(".", "_")),
-                        ArchivePacker.resolveArchivePassword(archPwdOrNull(), pwd),
-                        archiveReporter);
+                ArchivePacker.pack(archivePath, output, archiveFormat, archivePassword, archiveReporter);
                 java.nio.file.Files.deleteIfExists(output);
             }
             // 格式保持加密成功后记录历史（归档时记录归档产物路径）
@@ -962,6 +961,9 @@ public class MediaCryptController {
                     : "options.archivePassword.placeholder.custom.nofallback";
         }
         avArchivePasswordField.setPromptText(Messages.get(key));
+        avArchiveEncryptionNotice.setText(Messages.get("options.archiveEncryption.notice"));
+        avArchiveEncryptionNotice.setManaged(compressOn && !isZip);
+        avArchiveEncryptionNotice.setVisible(compressOn && !isZip);
     }
 
     private void setupInfoTooltips() {

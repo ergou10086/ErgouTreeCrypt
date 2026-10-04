@@ -10,13 +10,14 @@ java {
 // ============================================================
 // 同步共享源码（排除 module-info.java 和桌面专用代码）
 // ============================================================
-val syncCoreLibs by tasks.registering(Copy::class) {
+val syncCoreLibs by tasks.registering(Sync::class) {
     from("../../src/main/java") {
         exclude(
             "module-info.java",
             "hbnu/project/ergoutreecrypt/ui/**",
             "hbnu/project/ergoutreecrypt/stego/**",
-            "hbnu/project/ergoutreecrypt/filestego/**",
+            "hbnu/project/ergoutreecrypt/imagecrypt/robust/DesktopRobustImageDecoder.java",
+            "hbnu/project/ergoutreecrypt/imagecrypt/robust/DesktopRobustPayloadTranscoder.java",
             "hbnu/project/ergoutreecrypt/Launcher.java",
             "hbnu/project/ergoutreecrypt/PicocryptApplication.java"
         )
@@ -24,9 +25,10 @@ val syncCoreLibs by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("sync-core"))
 }
 
-val syncTests by tasks.registering(Copy::class) {
+val syncTests by tasks.registering(Sync::class) {
     from("../../src/test/java") {
         exclude(
+            "hbnu/project/ergoutreecrypt/ui/**",
             "hbnu/project/ergoutreecrypt/stego/**",
             "hbnu/project/ergoutreecrypt/filestego/**",
             "hbnu/project/ergoutreecrypt/mediacrypt/**"
@@ -36,10 +38,11 @@ val syncTests by tasks.registering(Copy::class) {
 }
 
 // 同步 i18n 资源，供共享核心的 Messages 在测试类路径下加载
-val syncTestResources by tasks.registering(Copy::class) {
+val syncTestResources by tasks.registering(Sync::class) {
     from("../../src/main/resources") {
         include("hbnu/project/ergoutreecrypt/i18n/messages*.properties")
     }
+    from("../../src/test/resources") { include("lz4/**") }
     into(layout.buildDirectory.dir("sync-test-resources"))
 }
 
@@ -63,6 +66,7 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("net.lingala.zip4j:zip4j:2.11.5")
     implementation("org.tukaani:xz:1.10")
+    implementation("com.github.luben:zstd-jni:1.5.7-12")
 
     // JUnit 5（使用 BOM 确保版本对齐）
     testImplementation(platform("org.junit:junit-bom:5.12.1"))

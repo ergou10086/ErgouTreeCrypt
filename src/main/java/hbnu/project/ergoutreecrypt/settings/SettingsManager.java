@@ -193,10 +193,10 @@ public final class SettingsManager {
     }
 
     /**
-     * 是否为非 ZIP 格式（GZ / TAR.GZ / 7Z）启用本工具特有的压缩包加密方式。
+     * 是否为非 ZIP 格式（GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4）启用本工具特有的压缩包加密方式。
      *
      * <p>本工具特有加密采用整体 AES-256-CTR 包裹（MAGIC 头），仅能由本工具解密。
-     * 关闭（默认）时：GZ / TAR.GZ / 7Z 不支持密码，始终生成明文归档。
+     * 关闭（默认）时：GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4 不支持密码，始终生成明文归档。
      * 开启时：这三种格式可使用密码进行 MAGIC 包裹加密。ZIP 始终走原生 AES，不受此开关影响。
      *
      * @return true 表示启用非 ZIP 格式的工具特有加密

@@ -302,7 +302,12 @@ public final class ArchiveExtractor {
             }
             tempDecrypted = Files.createTempFile("ergou-outer-dec-", archiveExt(archive));
             // 整体解密占 0→0.3，随后的解压占 0.3→1
-            decryptFileTo(archive, tempDecrypted, password, reporter, 0f, 0.3f);
+            try {
+                decryptFileTo(archive, tempDecrypted, password, reporter, 0f, 0.3f);
+            } catch (IOException e) {
+                Files.deleteIfExists(tempDecrypted);
+                throw e;
+            }
             actualArchive = tempDecrypted;
             extractionFrom = 0.3f;
         }

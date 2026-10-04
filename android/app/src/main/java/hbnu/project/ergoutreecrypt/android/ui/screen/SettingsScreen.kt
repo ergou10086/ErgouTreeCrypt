@@ -91,6 +91,8 @@ fun SettingsScreen(
     val languageCode by settings.languageCode.collectAsState(initial = "zh_CN")
     val threadCount by settings.threadCount.collectAsState(initial = 2)
     val defaultReedSolomon by settings.isDefaultReedSolomon.collectAsState(initial = false)
+    val archiveCustomEncryption by settings.isArchiveCustomEncryption.collectAsState(initial = false)
+    val archivePasswordFallback by settings.isArchivePasswordFallback.collectAsState(initial = false)
     val imageCryptDefaultMode by settings.imageCryptDefaultMode.collectAsState(
         initial = "PUBLIC_RECOVERY"
     )
@@ -284,6 +286,28 @@ fun SettingsScreen(
                 )
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("压缩包密码保护", style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("启用非 ZIP 格式的工具特有加密", modifier = Modifier.weight(1f))
+                Switch(checked = archiveCustomEncryption, onCheckedChange = { value ->
+                    scope.launch { settings.setArchiveCustomEncryption(value) }
+                })
+            }
+            Text(
+                "GZ / TAR.GZ / LZ4（含 TAR.LZ4）及 7Z 使用 AES-256 整包包裹，加密归档仅本工具可解，外部软件无法打开。请保留本工具及密码。默认关闭，归档密码留空则不加密。ZIP 使用原生 AES-256。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("归档密码留空时回退到文件加密密码", modifier = Modifier.weight(1f))
+                Switch(checked = archivePasswordFallback, onCheckedChange = { value ->
+                    scope.launch { settings.setArchivePasswordFallback(value) }
+                })
+            }
+            Text("默认关闭。开启后仅加密后压缩会回退；非 ZIP 格式还需要同时启用工具特有加密。",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(24.dp))
 
             // === 默认加密选项 ===

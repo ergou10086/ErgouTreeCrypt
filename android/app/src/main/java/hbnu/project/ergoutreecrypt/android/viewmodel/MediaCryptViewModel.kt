@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.nio.file.Paths
+import java.nio.file.Files
+import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
+import hbnu.project.ergoutreecrypt.volume.ProgressReporter
 import java.nio.charset.StandardCharsets
 
 /**
@@ -69,7 +72,9 @@ class MediaCryptViewModel : ViewModel() {
         storeIntegrity: Boolean = true,
         argon2MemoryKib: Int? = null,
         argon2Passes: Int? = null,
-        argon2Threads: Int? = null
+        argon2Threads: Int? = null,
+        archiveFormat: String? = null,
+        archivePassword: String? = null
     ) {
         // 全局操作权占用失败：已有其他 Tab 的操作在运行
         val token = OperationCoordinator.tryAcquire() ?: return
@@ -94,6 +99,19 @@ class MediaCryptViewModel : ViewModel() {
                 val progressCallback = LoggingMediaProgress(createMediaProgress(), "MediaCrypt")
 
                 codec.encrypt(Paths.get(input), Paths.get(output), pwdBytes, options, progressCallback)
+                if (!archiveFormat.isNullOrEmpty()) {
+                    val format = ArchivePacker.parseFormat(archiveFormat)
+                    val archive = Paths.get(output + ArchivePacker.extOf(format))
+                    ArchivePacker.pack(archive, Paths.get(output), format,
+                        ArchivePacker.resolveArchivePassword(archivePassword, password, format),
+                        object : ProgressReporter {
+                            override fun setStatus(text: String) { _progress.update { it.copy(statusText = text) } }
+                            override fun setProgress(fraction: Float, info: String) { _progress.update { it.copy(progress = fraction) } }
+                            override fun setCanCancel(can: Boolean) {}
+                            override fun isCancelled(): Boolean = currentJob?.isActive != true
+                        })
+                    Files.deleteIfExists(Paths.get(output))
+                }
                 success = true
                 _progress.update { it.copy(state = ProgressState.State.DONE, progress = 1f) }
             } catch (e: CancellationException) {

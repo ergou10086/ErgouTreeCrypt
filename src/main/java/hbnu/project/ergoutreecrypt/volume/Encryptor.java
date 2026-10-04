@@ -213,7 +213,7 @@ public final class Encryptor {
         }
 
         // 第二级：加密前压缩（Zstandard），或多文件合并
-        if (hasMultipleFiles || req.isCompress()) {
+        if ((hasMultipleFiles && !packFirst) || req.isCompress()) {
             ctx.setStatus(Messages.get("status.compressing"), ProgressPhase.ARCHIVE);
             Path tmp = Files.createTempFile("ergou", ".tmp");
             ctx.tempFile = tmp.toString();
@@ -543,7 +543,7 @@ public final class Encryptor {
                 Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                 String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);
                 Path archivePath = archiveParent.resolve(archiveName);
-                ArchivePacker.packEntries(archivePath, parent, chunks, fmt,
+                ArchivePacker.packEntries(archivePath, parent, chunks, extFmt,
                         ArchivePacker.resolveArchivePassword(
                                 req.getArchivePassword(), req.getPassword(), fmt), ctx.reporter);
                 for (Path c : chunks) {

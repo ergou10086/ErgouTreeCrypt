@@ -23,4 +23,11 @@ public interface ArchivePasswordProvider {
      * @return 归档密码；返回 null 或空字符串表示放弃 / 跳过
      */
     String providePassword(Path archive, boolean retry);
+
+    /** Use an explicit password first; request UI input only when absent or rejected. */
+    static ArchivePasswordProvider withPassword(String password, ArchivePasswordProvider fallback) {
+        if (password == null || password.isEmpty()) return fallback;
+        return (archive, retry) -> !retry ? password
+                : fallback == null ? null : fallback.providePassword(archive, true);
+    }
 }

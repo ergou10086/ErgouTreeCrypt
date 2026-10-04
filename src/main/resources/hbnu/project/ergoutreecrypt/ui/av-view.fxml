@@ -108,6 +108,8 @@
                         <CustomPasswordField fx:id="avArchivePasswordField" styleClass="text-input"
                                       managed="false" visible="false"
                                       promptText="Archive password (optional)"/>
+                        <Label fx:id="avArchiveEncryptionNotice" styleClass="field-hint" wrapText="true"
+                               maxWidth="Infinity" managed="false" visible="false"/>
                     </VBox>
 
                     <!-- 解密选项 -->

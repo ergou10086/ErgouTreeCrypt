@@ -136,7 +136,7 @@ public final class SettingsDialog {
 
         // 默认压缩格式
         ComboBox<String> defaultFormat = new ComboBox<>();
-        defaultFormat.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
+        defaultFormat.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
         defaultFormat.setPrefWidth(120);
         FlowPane fmtBox = new FlowPane(8, 8,
                 new Label(Messages.get("settings.defaultFormat")), defaultFormat);

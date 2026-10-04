@@ -261,6 +261,8 @@ public class MainController {
     @FXML
     private PasswordField archivePasswordField;
     @FXML
+    private Label archiveEncryptionNotice;
+    @FXML
     private CheckBox splitCheck;
     @FXML
     private Label splitInfo;
@@ -392,7 +394,7 @@ public class MainController {
                 compressLevelValueLabel.setText(String.valueOf(currentCompressLevel())));
 
         // 压缩后加密 / 加密后压缩：共用同一组归档格式与归档密码控件
-        compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z");
+        compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
         // 两者都是「压缩策略」，语义互斥：勾选一个自动取消另一个，避免出现
         // 「先打包再加密、加密完再打包」这类无意义组合
         compressBeforeCheck.selectedProperty().addListener((o, wasOn, isOn) -> {
@@ -621,6 +623,9 @@ public class MainController {
                     : "options.archivePassword.placeholder.custom.nofallback";
         }
         archivePasswordField.setPromptText(Messages.get(key));
+        archiveEncryptionNotice.setText(Messages.get("options.archiveEncryption.notice"));
+        archiveEncryptionNotice.setManaged(compressOn && !isZip);
+        archiveEncryptionNotice.setVisible(compressOn && !isZip);
     }
 
     /**
@@ -1908,7 +1913,9 @@ public class MainController {
             if (req.isDecryptThenExtract()) {
                 ArchivePostExtract.extractIfArchive(Path.of(req.getOutputFile()),
                         ArchivePostExtract.maxDepth(req.isRecursiveExtract()),
-                        reporter, req.getArchivePasswordProvider());
+                        reporter, ArchivePasswordProvider.withPassword(
+                                ArchivePacker.resolveArchivePassword(req.getArchivePassword(), req.getPassword()),
+                                req.getArchivePasswordProvider()));
             }
             Path finalOut = Path.of(req.getOutputFile());
             HistoryService.record(OperationType.GENERIC_DECRYPT,

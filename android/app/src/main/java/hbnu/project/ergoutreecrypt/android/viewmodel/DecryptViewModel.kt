@@ -85,7 +85,10 @@ class DecryptViewModel : ViewModel() {
                             out,
                             ArchivePostExtract.maxDepth(request.isRecursiveExtract),
                             reporter,
-                            request.archivePasswordProvider
+                            ArchivePasswordProvider.withPassword(
+                                hbnu.project.ergoutreecrypt.fileops.ArchivePacker.resolveArchivePassword(request.archivePassword, request.password),
+                                request.archivePasswordProvider
+                            )
                         )
                     }
                 }

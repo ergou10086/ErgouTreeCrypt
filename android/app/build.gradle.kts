@@ -50,6 +50,17 @@ val syncInteropCorpus by tasks.registering(Copy::class) {
     into("src/androidTest/assets/imagecrypt/interop")
 }
 
+// Desktop interop corpus is generated on demand; large real files stay out of Git.
+val syncLz4Golden by tasks.registering(Sync::class) {
+    from("../../src/test/resources/lz4/golden")
+    into(layout.buildDirectory.dir("lz4-golden-assets/lz4/golden"))
+}
+
+val syncLz4InteropSupport by tasks.registering(Sync::class) {
+    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/fileops/Lz4InteropSupport.java") }
+    into(layout.buildDirectory.dir("lz4-interop-java"))
+}
+
 // ============================================================
 // 版本号：唯一真源是桌面端 pom.xml 的 <version>，在此构建时解析读取，
 // 从而无需每次发版在 pom 与 gradle 之间手动同步。
@@ -164,6 +175,10 @@ android {
     // sourceSets：Android 自有代码 + 同步后的共享核心代码
     // ============================================================
     sourceSets {
+        named("androidTest") {
+            java.srcDir(layout.buildDirectory.dir("lz4-interop-java"))
+            assets.srcDir(layout.buildDirectory.dir("lz4-golden-assets"))
+        }
         named("main") {
             java.srcDirs(
                 "src/main/java",
@@ -182,11 +197,11 @@ android {
 }
 
 // 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
-tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n) }
+tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n, syncLz4InteropSupport) }
 
 // androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料
 tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }
-    .configureEach { dependsOn(syncInteropCorpus) }
+    .configureEach { dependsOn(syncInteropCorpus, syncLz4Golden) }
 
 // ============================================================
 // 自定义 APK 输出文件名：ErgouTreeCrypt-v<版本号>-release.apk

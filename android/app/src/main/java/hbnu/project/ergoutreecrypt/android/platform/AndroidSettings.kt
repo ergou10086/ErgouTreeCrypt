@@ -14,6 +14,7 @@ import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookCsv
 import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry
 import hbnu.project.ergoutreecrypt.settings.SettingsManager
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -63,6 +64,11 @@ class AndroidSettings(context: Context) {
 
     val themeMode: Flow<String> = dataStore.data.map {
         it[KEY_THEME_MODE] ?: DEF_THEME_MODE
+    }
+
+    /** 持久化的分卷信息存储方式，未知值回退到公开尾部。 */
+    val splitMetadataMode: Flow<SplitMetadataMode> = dataStore.data.map {
+        SplitMetadataMode.fromKey(it[KEY_SPLIT_METADATA_MODE])
     }
 
     val defaultSplitSize: Flow<Int> = dataStore.data.map {
@@ -166,6 +172,7 @@ class AndroidSettings(context: Context) {
             defaultReedSolomon = prefs[KEY_DEFAULT_RS] ?: DEF_RS
             defaultPasswordless = prefs[KEY_DEFAULT_PASSWORDLESS] ?: DEF_PASSWORDLESS
             splitSize = prefs[KEY_DEFAULT_SPLIT_SIZE] ?: DEF_SPLIT_SIZE
+            splitMetadataMode = SplitMetadataMode.fromKey(prefs[KEY_SPLIT_METADATA_MODE])
             archivePasswordFallback = prefs[KEY_ARCHIVE_PWD_FALLBACK] ?: DEF_ARCHIVE_PWD_FALLBACK
             archiveCustomEncryption = prefs[KEY_ARCHIVE_CUSTOM_ENC] ?: DEF_ARCHIVE_CUSTOM_ENC
             themeMode = prefs[KEY_THEME_MODE] ?: DEF_THEME_MODE
@@ -311,6 +318,12 @@ class AndroidSettings(context: Context) {
         }
     }
 
+    /** @param mode 新任务使用的分卷格式，同时同步共享核心。 */
+    suspend fun setSplitMetadataMode(mode: SplitMetadataMode) {
+        dataStore.edit { it[KEY_SPLIT_METADATA_MODE] = mode.name }
+        SettingsManager.setSplitMetadataMode(mode)
+    }
+
     suspend fun setDefaultSplitSize(v: Int) {
         dataStore.edit { it[KEY_DEFAULT_SPLIT_SIZE] = v.coerceIn(1, 4096) }
         SettingsManager.setDefaultSplitSize(v)
@@ -380,6 +393,7 @@ class AndroidSettings(context: Context) {
         private val KEY_DEFAULT_PASSWORDLESS = booleanPreferencesKey("default.passwordless")
         private val KEY_THREAD_COUNT = intPreferencesKey("thread.count")
         private val KEY_THEME_MODE = stringPreferencesKey("theme.mode")
+        private val KEY_SPLIT_METADATA_MODE = stringPreferencesKey("split.metadata.mode")
         private val KEY_DEFAULT_SPLIT_SIZE = intPreferencesKey("default.split.size")
         private val KEY_DEFAULT_COMPRESS_FORMAT = stringPreferencesKey("default.compress.format")
         private val KEY_ARCHIVE_PWD_FALLBACK = booleanPreferencesKey("archive.password.fallback")

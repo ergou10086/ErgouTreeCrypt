@@ -29,10 +29,8 @@ android/.externalNativeBuild/
 android/.cxx/
 
 # --- Docs ---
-# 历史临时文档默认忽略，仅跟踪明确列出的正式设计文档。
-!docs/
-docs/*
-!docs/产品能力增强与Web端演进设计.md
+# docs 中的全部文档仅保存在本地，禁止提交，无例外。
+/docs/
 CLAUDE.md
 "*.apk" 
 "**/build/" 
@@ -41,3 +39,8 @@ CLAUDE.md
 
 temp/
 src/test/resources/imagecrypt/test_picture
+src/test/resources/filetest
+
+# Python regression runner caches
+__pycache__/
+*.py[cod]

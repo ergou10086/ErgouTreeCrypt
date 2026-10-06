@@ -60,6 +60,7 @@ import hbnu.project.ergoutreecrypt.android.ui.component.QuickDecryptSettings
 import hbnu.project.ergoutreecrypt.android.ui.component.PickerLoadingIndicator
 import hbnu.project.ergoutreecrypt.android.ui.component.pickerLoadingText
 import hbnu.project.ergoutreecrypt.i18n.Messages
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
@@ -93,6 +94,7 @@ fun SettingsScreen(
     val defaultReedSolomon by settings.isDefaultReedSolomon.collectAsState(initial = false)
     val archiveCustomEncryption by settings.isArchiveCustomEncryption.collectAsState(initial = false)
     val archivePasswordFallback by settings.isArchivePasswordFallback.collectAsState(initial = false)
+    val splitMetadataMode by settings.splitMetadataMode.collectAsState(initial = SplitMetadataMode.EMBEDDED)
     val imageCryptDefaultMode by settings.imageCryptDefaultMode.collectAsState(
         initial = "PUBLIC_RECOVERY"
     )
@@ -308,6 +310,22 @@ fun SettingsScreen(
             }
             Text("默认关闭。开启后仅加密后压缩会回退；非 ZIP 格式还需要同时启用工具特有加密。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(Messages.get("settings.splitMetadata"), style = MaterialTheme.typography.titleSmall)
+            Text(Messages.get("settings.splitMetadata.tip"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SplitMetadataMode.values().forEach { mode ->
+                    FilterChip(
+                        selected = splitMetadataMode == mode,
+                        onClick = { scope.launch { settings.setSplitMetadataMode(mode) } },
+                        label = { Text(Messages.get(mode.labelKey)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(24.dp))
 
             // === 默认加密选项 ===

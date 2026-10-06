@@ -15,6 +15,7 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 import hbnu.project.ergoutreecrypt.filetypes.OutputNaming;
 import hbnu.project.ergoutreecrypt.exception.CancelledException;
 import hbnu.project.ergoutreecrypt.exception.CryptoException;
@@ -525,7 +526,7 @@ public final class Encryptor {
                 fileToSplit = outPath;
             }
 
-            if (req.isDeniability()) {
+            if (req.isDeniability() || req.getSplitMetadataMode() == SplitMetadataMode.MANIFEST) {
                 Splitter.splitWithManifest(fileToSplit, chunkBytes, ctx.reporter);
             } else {
                 Splitter.split(fileToSplit, chunkBytes - Splitter.METADATA_BYTES, ctx.reporter);

@@ -6,6 +6,7 @@ import hbnu.project.ergoutreecrypt.log.LogLevel;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.Argon2DesktopMode;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 import hbnu.project.ergoutreecrypt.version.AppVersion;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -158,6 +159,18 @@ public final class SettingsDialog {
         grid.add(infoIcon(Messages.get("settings.defaultSplitSize.tip")), 2, row);
         row++;
 
+        ComboBox<String> splitMetadataCombo = new ComboBox<>();
+        splitMetadataCombo.setId("splitMetadataMode");
+        for (SplitMetadataMode mode : SplitMetadataMode.values()) {
+            splitMetadataCombo.getItems().add(Messages.get(mode.getLabelKey()));
+        }
+        FlowPane splitMetadataBox = new FlowPane(6, 8,
+                new Label(Messages.get("settings.splitMetadata")), splitMetadataCombo);
+        splitMetadataBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(splitMetadataBox, 0, row, 2, 1);
+        grid.add(infoIcon(Messages.get("settings.splitMetadata.tip")), 2, row);
+        row++;
+
         // === 行为 ===
         grid.add(section(Messages.get("settings.section.behavior")), 0, row++, 3, 1);
 
@@ -288,6 +301,7 @@ public final class SettingsDialog {
         defaultReedSolomon.setSelected(SettingsManager.isDefaultReedSolomon());
         defaultFormat.setValue(SettingsManager.getDefaultCompressFormat());
         defaultSplitSize.getValueFactory().setValue(SettingsManager.getDefaultSplitSize());
+        splitMetadataCombo.setValue(Messages.get(SettingsManager.getSplitMetadataMode().getLabelKey()));
         rememberOutputDir.setSelected(SettingsManager.isRememberOutputDir());
         autoClearPassword.setSelected(SettingsManager.isAutoClearPassword());
         archiveCustomEncryption.setSelected(SettingsManager.isArchiveCustomEncryption());
@@ -349,6 +363,14 @@ public final class SettingsDialog {
                 SettingsManager.setDefaultCompressFormat(b));
         defaultSplitSize.valueProperty().addListener((o, a, b) ->
                 SettingsManager.setDefaultSplitSize(b));
+        splitMetadataCombo.valueProperty().addListener((o, a, b) -> {
+            for (SplitMetadataMode mode : SplitMetadataMode.values()) {
+                if (Messages.get(mode.getLabelKey()).equals(b)) {
+                    SettingsManager.setSplitMetadataMode(mode);
+                    return;
+                }
+            }
+        });
         rememberOutputDir.selectedProperty().addListener((o, a, b) ->
                 SettingsManager.setRememberOutputDir(b));
         autoClearPassword.selectedProperty().addListener((o, a, b) ->

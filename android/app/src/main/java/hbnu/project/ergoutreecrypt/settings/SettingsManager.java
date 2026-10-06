@@ -48,6 +48,7 @@ public final class SettingsManager {
     private static volatile boolean defaultReedSolomon = DEF_RS;
     private static volatile boolean defaultPasswordless = DEF_PASSWORDLESS;
     private static volatile int splitSize = DEF_SPLIT_SIZE;
+    private static volatile SplitMetadataMode splitMetadataMode = SplitMetadataMode.EMBEDDED;
     private static volatile boolean rememberOutputDir = DEF_REMEMBER_OUTDIR;
     private static volatile boolean autoClearPassword = DEF_AUTO_CLEAR_PWD;
     private static volatile String lastOutputDir = "";
@@ -103,6 +104,16 @@ public final class SettingsManager {
     /** 默认分卷大小（MiB）。 */
     public static int getDefaultSplitSize() {
         return splitSize;
+    }
+
+    /** @return 新任务使用的分卷信息存储方式，默认公开尾部 */
+    public static SplitMetadataMode getSplitMetadataMode() {
+        return splitMetadataMode;
+    }
+
+    /** @param mode 分卷信息存储方式，空值恢复为公开尾部 */
+    public static void setSplitMetadataMode(SplitMetadataMode mode) {
+        splitMetadataMode = mode == null ? SplitMetadataMode.EMBEDDED : mode;
     }
 
     /** 是否记住上次输出目录。 */
@@ -307,6 +318,7 @@ public final class SettingsManager {
         defaultReedSolomon = bridge.defaultReedSolomon;
         defaultPasswordless = bridge.defaultPasswordless;
         splitSize = bridge.splitSize;
+        setSplitMetadataMode(bridge.splitMetadataMode);
         rememberOutputDir = bridge.rememberOutputDir;
         autoClearPassword = bridge.autoClearPassword;
         lastOutputDir = bridge.lastOutputDir;
@@ -333,6 +345,7 @@ public final class SettingsManager {
         public boolean defaultReedSolomon = DEF_RS;
         public boolean defaultPasswordless = DEF_PASSWORDLESS;
         public int splitSize = DEF_SPLIT_SIZE;
+        public SplitMetadataMode splitMetadataMode = SplitMetadataMode.EMBEDDED;
         public boolean rememberOutputDir = DEF_REMEMBER_OUTDIR;
         public boolean autoClearPassword = DEF_AUTO_CLEAR_PWD;
         public String lastOutputDir = "";

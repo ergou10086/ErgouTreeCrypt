@@ -13,6 +13,7 @@ import hbnu.project.ergoutreecrypt.exception.ExceptionMapper;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.log.LogService;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1162,6 +1163,7 @@ public final class FolderCrypt {
         req.setCompress(opts.compress);
         req.setCompressionLevel(opts.compressionLevel);
         req.setChunkSize(opts.chunkSize);
+        req.setSplitMetadataMode(opts.splitMetadataMode);
         req.setRsCodecs(opts.rsCodecs != null ? opts.rsCodecs : new RsCodecs());
         req.setArgon2MemoryKib(opts.argon2MemoryKib);
         req.setArgon2Passes(opts.argon2Passes);
@@ -1993,6 +1995,8 @@ public final class FolderCrypt {
          */
         public int compressionLevel = 3;
         public boolean split;
+        /** 批处理开始时快照的分卷格式。 */
+        public SplitMetadataMode splitMetadataMode = SettingsManager.getSplitMetadataMode();
         public int chunkSize;            // 每卷大小，单位 MiB
         public String archiveFormat;     // null/"" 表示不压缩
         public String archivePassword;

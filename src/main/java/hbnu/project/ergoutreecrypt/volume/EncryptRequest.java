@@ -2,6 +2,8 @@ package hbnu.project.ergoutreecrypt.volume;
 
 import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
+import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 
 import java.util.List;
 
@@ -91,6 +93,9 @@ public final class EncryptRequest {
      * 是否将输出切分为固定大小的分卷碎片。
      */
     private boolean split;
+
+    /** 创建任务时快照分卷格式，运行中修改设置不影响本任务。 */
+    private SplitMetadataMode splitMetadataMode = SettingsManager.getSplitMetadataMode();
 
     /**
      * 每分卷的最大字节数（单位 MiB）。
@@ -290,6 +295,16 @@ public final class EncryptRequest {
 
     public void setSplit(boolean s) {
         this.split = s;
+    }
+
+    /** @return 本任务的分卷信息存储方式 */
+    public SplitMetadataMode getSplitMetadataMode() {
+        return splitMetadataMode;
+    }
+
+    /** @param mode 本任务的分卷信息存储方式，空值使用公开尾部 */
+    public void setSplitMetadataMode(SplitMetadataMode mode) {
+        splitMetadataMode = mode == null ? SplitMetadataMode.EMBEDDED : mode;
     }
 
     public int getChunkSize() {

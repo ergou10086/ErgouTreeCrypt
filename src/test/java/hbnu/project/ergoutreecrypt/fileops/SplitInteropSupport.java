@@ -3,6 +3,7 @@ package hbnu.project.ergoutreecrypt.fileops;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.crypto.BruteForceGuard;
 import hbnu.project.ergoutreecrypt.settings.SettingsManager;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 import hbnu.project.ergoutreecrypt.volume.*;
 import java.io.*;
 import java.nio.file.*;
@@ -131,6 +132,153 @@ public final class SplitInteropSupport {
         for(Path chunk:Splitter.listChunks(base))require(SplitMetadata.read(chunk)==null,"Identifiable footer appended to traditional disguise");
         inventory.setProperty("count",Integer.toString(count));
         try(OutputStream out=Files.newOutputStream(output.resolve("manifest.properties"))){inventory.store(out,"Traditional disguise split fallback (test inventory only)");}
+        return count;
+    }
+
+    /**
+     * 格式设置的定向语料：两种方式的普通、高级选项、空文件、前后归档和双卷隐藏。
+     *
+     * @param output 语料目录
+     * @param source 真实测试文件
+     * @param mobile 是否运行于 ART
+     *
+     * @return 用例数
+     * @throws Exception 生成或格式断言失败
+     */
+    public static int generateModes(Path output, Path source, boolean mobile) throws Exception {
+        if (Files.exists(output)) deleteWork(output);
+        Files.createDirectories(output);
+        try (InputStream in = Files.newInputStream(source)) {
+            Files.write(output.resolve("sample.bin"), in.readNBytes(3 * 1024 * 1024 + 129));
+        }
+        Files.write(output.resolve("empty.bin"), new byte[0]);
+        Files.write(output.resolve("key1"), new byte[]{1, 2, 3});
+        Files.write(output.resolve("key2"), new byte[]{4, 5, 6});
+        Properties inventory = new Properties();
+        inventory.setProperty("runtime", mobile ? "Android ART" : "Desktop JVM");
+        SplitMetadataMode saved = SettingsManager.getSplitMetadataMode();
+        boolean custom = SettingsManager.isArchiveCustomEncryption();
+        SettingsManager.setArchiveCustomEncryption(true);
+        int index = 0;
+        try {
+            for (SplitMetadataMode mode : SplitMetadataMode.values()) {
+                SettingsManager.setSplitMetadataMode(mode);
+                EncryptRequest snapshot = new EncryptRequest();
+                FolderCrypt.EncryptOptions batch = new FolderCrypt.EncryptOptions();
+                SettingsManager.setSplitMetadataMode(mode == SplitMetadataMode.EMBEDDED ? SplitMetadataMode.MANIFEST : SplitMetadataMode.EMBEDDED);
+                require(snapshot.getSplitMetadataMode() == mode && batch.splitMetadataMode == mode, "Task format was not snapshotted");
+                SettingsManager.setSplitMetadataMode(mode);
+                String name = "mode-" + mode.name().toLowerCase(Locale.ROOT) + "-";
+                index = produce(output, inventory, index, name + "plain", "sample.bin", 0, "", null, false, mobile, false, false);
+                index = produce(output, inventory, index, name + "advanced", "sample.bin", 15, "", null, false, mobile, false, false);
+                index = produce(output, inventory, index, name + "empty", "empty.bin", 0, "", null, false, mobile, true, false);
+                index = produce(output, inventory, index, name + "post-zip", "sample.bin", 0, "post", "ZIP", true, mobile, false, false);
+                index = produce(output, inventory, index, name + "pre-lz4", "sample.bin", 0, "pre", "LZ4", true, mobile, false, false);
+                index = produce(output, inventory, index, "dual-" + name, "sample.bin", 0, "post", "ZIP", true, mobile, false, true);
+                index = produceModeFolder(output, inventory, index, name + "folder");
+            }
+        } finally {
+            SettingsManager.setSplitMetadataMode(saved);
+            SettingsManager.setArchiveCustomEncryption(custom);
+        }
+        inventory.setProperty("count", Integer.toString(index));
+        try (OutputStream out = Files.newOutputStream(output.resolve("manifest.properties"))) {
+            inventory.store(out, "Split format settings regression inventory only");
+        }
+        return index;
+    }
+
+    /**
+     * @param root 语料目录
+     * @param inventory 用例记录
+     * @param index 编号
+     * @param id 用例名
+     *
+     * @return 下一个编号
+     * @throws Exception 嵌套目录分卷失败 */
+    private static int produceModeFolder(Path root, Properties inventory, int index, String id) throws Exception {
+        Path input = Files.createDirectories(root.resolve("folder-input-" + index).resolve("层 空格"));
+        Files.copy(root.resolve("sample.bin"), input.resolve("sample.bin"));
+        Path artifact = Files.createDirectories(root.resolve("case-" + index));
+        FolderCrypt.EncryptOptions options = new FolderCrypt.EncryptOptions();
+        options.password = PASSWORD; options.rsCodecs = new RsCodecs(); options.split = true; options.chunkSize = 1;
+        options.argon2MemoryKib = 4096; options.argon2Passes = 1; options.argon2Threads = 1;
+        options.threadCount = 2; options.encryptDepth = 2;
+        FolderCrypt.encryptFolder(input.getParent(), artifact, options);
+        require(options.batchResult.failedCount() == 0, "Folder mode encryption failed");
+        String p = "case." + index + ".";
+        inventory.setProperty(p + "id", id); inventory.setProperty(p + "input", "sample.bin");
+        inventory.setProperty(p + "sha256", sha256(root.resolve("sample.bin"))); inventory.setProperty(p + "mask", "0");
+        inventory.setProperty(p + "workflow", ""); inventory.setProperty(p + "format", "");
+        inventory.setProperty(p + "archivePassword", "false"); inventory.setProperty(p + "public", "false");
+        inventory.setProperty(p + "artifact", root.relativize(artifact).toString().replace('\\', '/'));
+        try (var walk = Files.walk(artifact)) {
+            List<Path> files = walk.filter(Files::isRegularFile).sorted().toList();
+            inventory.setProperty(p + "files", Integer.toString(files.size()));
+            for (int i = 0; i < files.size(); i++) {
+                inventory.setProperty(p + "file." + i, root.relativize(files.get(i)).toString().replace('\\', '/'));
+                inventory.setProperty(p + "file." + i + ".sha256", sha256(files.get(i)));
+            }
+        }
+        deleteWork(input.getParent());
+        return index + 1;
+    }
+
+    /**
+     * 验证格式与卷大小，认证与解密，并检查两种方式下的缺首卷、中卷、末卷。
+     *
+     * @param corpus 双格式语料
+     * @param work 工作目录
+     * @return 成功读取用例数
+     *
+     * @throws Exception 格式或明文核对失败
+     */
+    public static int verifyModes(Path corpus, Path work) throws Exception {
+        int count = verifyAll(corpus, work.resolve("complete"));
+        Properties inventory = new Properties();
+        try (InputStream in = Files.newInputStream(corpus.resolve("manifest.properties"))) { inventory.load(in); }
+        for (int i = 0; i < count; i++) {
+            String p = "case." + i + ".";
+            String id = inventory.getProperty(p + "id");
+            Path artifact = corpus.resolve(inventory.getProperty(p + "artifact"));
+            Path volumeDir = artifact;
+            Path extracted = work.resolve("archive-" + i);
+            if (inventory.getProperty(p + "workflow").equals("post")) {
+                ArchiveExtractor.extractPreserving(artifact, extracted, ARCHIVE_PASSWORD);
+                volumeDir = extracted;
+            }
+            Path base = findBase(volumeDir);
+            var info = Splitter.inspect(base);
+            boolean manifest = id.contains("mode-manifest-");
+            require(Files.isRegularFile(Splitter.manifestPath(base)) == manifest, "Wrong format selected: " + id);
+            for (Path chunk : info.chunks()) {
+                require((SplitMetadata.read(chunk) == null) == manifest, "Footer policy mismatch: " + id);
+                require(Files.size(chunk) <= 1024 * 1024, "Configured volume limit exceeded");
+            }
+            if (id.endsWith("-plain")) {
+                require(info.expectedCount() >= 3, "Missing-volume test needs three volumes");
+                for (int missing : List.of(0, 1, info.expectedCount() - 1)) {
+                    Path folder = Files.createDirectories(work.resolve("missing-" + i + "-" + missing));
+                    Path brokenBase = folder.resolve(base.getFileName());
+                    for (Path file : Splitter.artifacts(base)) Files.copy(file, folder.resolve(file.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+                    Files.delete(Path.of(brokenBase + "." + missing));
+                    var broken = Splitter.inspect(brokenBase);
+                    require(broken.totalKnown() && broken.expectedCount() == info.expectedCount() && broken.missing().equals(List.of(missing)), "Incorrect missing volume hint");
+                    Path selected = Path.of(brokenBase + "." + (missing == 0 ? 1 : 0));
+                    VerifyRequest v = new VerifyRequest(); v.setInputFile(selected.toString()); v.setPassword(PASSWORD); v.setRsCodecs(new RsCodecs());
+                    boolean rejected = false;
+                    try { Verifier.verify(v); } catch (IOException expected) { rejected = true; }
+                    require(rejected, "Missing volume authenticated");
+                    DecryptRequest d = new DecryptRequest(); d.setInputFile(selected.toString()); d.setPassword(PASSWORD); d.setRsCodecs(new RsCodecs()); d.setOutputFile(folder.resolve("plain").toString());
+                    rejected = false;
+                    try { Decryptor.decrypt(d); } catch (IOException expected) { rejected = true; }
+                    require(rejected && !Files.exists(Path.of(d.getOutputFile())), "Missing volume decrypted");
+                    deleteWork(folder);
+                }
+            }
+            if (Files.exists(extracted)) deleteWork(extracted);
+        }
+        deleteWork(work);
         return count;
     }
 

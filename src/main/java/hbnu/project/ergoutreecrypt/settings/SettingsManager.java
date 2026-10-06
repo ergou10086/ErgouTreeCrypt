@@ -21,6 +21,7 @@ public final class SettingsManager {
     private static final String KEY_DEFAULT_PARANOID    = "default.paranoid";
     private static final String KEY_DEFAULT_RS          = "default.reedSolomon";
     private static final String KEY_DEFAULT_PASSWORDLESS = "default.passwordless";
+    private static final String KEY_SPLIT_METADATA_MODE = "split.metadata.mode";
     private static final String KEY_DEFAULT_SPLIT_SIZE  = "default.split.size";
     private static final String KEY_REMEMBER_OUTPUT_DIR = "remember.output.dir";
     private static final String KEY_AUTO_CLEAR_PASSWORD = "auto.clear.password";
@@ -81,6 +82,16 @@ public final class SettingsManager {
 
     public static int getDefaultSplitSize()           { return PREFS.getInt(KEY_DEFAULT_SPLIT_SIZE, DEF_SPLIT_SIZE); }
     public static void setDefaultSplitSize(int v)      { PREFS.putInt(KEY_DEFAULT_SPLIT_SIZE, v); }
+
+    /** @return 新任务使用的分卷信息存储方式，默认公开尾部 */
+    public static SplitMetadataMode getSplitMetadataMode() {
+        return SplitMetadataMode.fromKey(PREFS.get(KEY_SPLIT_METADATA_MODE, "EMBEDDED"));
+    }
+
+    /** @param mode 分卷信息存储方式，空值恢复为公开尾部 */
+    public static void setSplitMetadataMode(SplitMetadataMode mode) {
+        PREFS.put(KEY_SPLIT_METADATA_MODE, (mode == null ? SplitMetadataMode.EMBEDDED : mode).name());
+    }
 
     public static boolean isRememberOutputDir()       { return PREFS.getBoolean(KEY_REMEMBER_OUTPUT_DIR, DEF_REMEMBER_OUTDIR); }
     public static void setRememberOutputDir(boolean v) { PREFS.putBoolean(KEY_REMEMBER_OUTPUT_DIR, v); }

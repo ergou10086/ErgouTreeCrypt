@@ -6,7 +6,7 @@
 
     <groupId>hbnu.project</groupId>
     <artifactId>ErgouTreeCrypt</artifactId>
-    <version>2.9.9</version>
+    <version>3.0.5</version>
     <name>ErgouTreeCrypt</name>
 
     <properties>

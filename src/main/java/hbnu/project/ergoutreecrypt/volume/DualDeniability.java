@@ -8,6 +8,7 @@ import hbnu.project.ergoutreecrypt.encoding.ReedSolomon;
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs;
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker;
 import hbnu.project.ergoutreecrypt.fileops.Splitter;
+import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode;
 import hbnu.project.ergoutreecrypt.exception.CryptoException;
 import hbnu.project.ergoutreecrypt.exception.ErrorKind;
 import hbnu.project.ergoutreecrypt.header.Flags;
@@ -333,7 +334,7 @@ public final class DualDeniability {
                     reporter.setStatus(Messages.get("status.splitting"));
                 }
                 long chunkBytes = (long) req.getChunkSize() * CryptoConstants.MIB;
-                chunkDir = splitOutput(Path.of(outputPath), chunkBytes);
+                chunkDir = splitOutput(Path.of(outputPath), chunkBytes, req.getSplitMetadataMode());
                 req.setOutputFile(chunkDir.resolve(Path.of(outputPath).getFileName()).toString());
             }
 
@@ -679,10 +680,11 @@ public final class DualDeniability {
      *
      * @param filePath   待切分的文件
      * @param chunkBytes 每卷字节数
+     * @param mode 分卷信息存储方式
      * @return 分卷文件夹路径
      * @throws IOException I/O 错误
      */
-    private static Path splitOutput(Path filePath, long chunkBytes) throws IOException {
+    private static Path splitOutput(Path filePath, long chunkBytes, SplitMetadataMode mode) throws IOException {
         String outName = filePath.getFileName().toString();
         String folderName = outName;
         if (folderName.toLowerCase().endsWith(".ergou")) {
@@ -700,7 +702,11 @@ public final class DualDeniability {
         Files.createDirectories(chunkDir);
         Path movedFile = chunkDir.resolve(outName);
         Files.move(filePath, movedFile, StandardCopyOption.REPLACE_EXISTING);
-        Splitter.split(movedFile, chunkBytes - Splitter.METADATA_BYTES);
+        if (mode == SplitMetadataMode.MANIFEST) {
+            Splitter.splitWithManifest(movedFile, chunkBytes, null);
+        } else {
+            Splitter.split(movedFile, chunkBytes - Splitter.METADATA_BYTES);
+        }
         Files.deleteIfExists(movedFile);
         return chunkDir;
     }

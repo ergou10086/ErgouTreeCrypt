@@ -26,7 +26,20 @@ public final class SplitTestDocumentsProvider extends ContentProvider {
         files.put("root/B/same.bin.ergou.1",new byte[]{15,16,17,18,19});
         byte[] manifest="format=EGTC-SPLIT-1\ncount=2\nbytes=10\nchunkSize=5\n".getBytes(StandardCharsets.UTF_8);
         files.put("root/A/same.bin.ergou.volumes",manifest);files.put("root/B/same.bin.ergou.volumes",manifest);
+        files.put("root/Embedded/same.bin.ergou.0",embedded(new byte[]{0,1,2,3,4},0));
+        files.put("root/Embedded/same.bin.ergou.1",embedded(new byte[]{5,6,7,8,9},1));
         return true;
+    }
+
+    /** @param payload 测试载荷 @param index 编号 @return 不需要外部清单的新版测试分卷。 */
+    private static byte[] embedded(byte[] payload,int index) {
+        java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(64);
+        b.putLong(0x45475443564f4c32L).putInt(index).putInt(2).putLong(10).putLong(5)
+                .putLong(1234).putLong(5678).putInt(2);
+        java.util.zip.CRC32 crc=new java.util.zip.CRC32();crc.update(b.array(),0,52);
+        b.putInt((int)crc.getValue()).putLong(0x324c4f5654434745L);
+        byte[] result=java.util.Arrays.copyOf(payload,payload.length+64);
+        System.arraycopy(b.array(),0,result,payload.length,64);return result;
     }
 
     /** @param uri 文档 URI @return 文档 ID */

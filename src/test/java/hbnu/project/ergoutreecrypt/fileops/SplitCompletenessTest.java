@@ -11,7 +11,7 @@ import java.util.concurrent.CancellationException;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 分卷缺失、清单、异常文件、取消与输出保护的回归测试。 */
+/** 分卷内嵌元数据、旧清单、异常文件、取消与输出保护的回归测试。 */
 class SplitCompletenessTest {
     @TempDir Path dir;
 
@@ -39,11 +39,12 @@ class SplitCompletenessTest {
                 Splitter.split(base,1024);
                 for(int i:indices) Files.delete(Path.of(base+"."+i));
                 var info=Splitter.inspect(base);
-                assertEquals(3,info.expectedCount());
-                assertEquals(indices,info.missing());
+                assertEquals(indices.size() == 3 ? 0 : 3,info.expectedCount());
+                assertEquals(indices.size() == 3 ? List.of() : indices,info.missing());
+                assertEquals(indices.size() != 3,info.totalKnown());
                 Path out=Files.writeString(dir.resolve("out"+indices),"keep");
                 IOException error=assertThrows(IOException.class,()->Splitter.recombine(out,base.toString()));
-                for(int i:indices) assertTrue(error.getMessage().contains("."+i));
+                if(indices.size()!=3)for(int i:indices) assertTrue(error.getMessage().contains("."+i));
                 assertEquals("keep",Files.readString(out));
                 assertFalse(Files.exists(Path.of(out+".incomplete")));
             }));
@@ -89,7 +90,11 @@ class SplitCompletenessTest {
     /** 无清单的旧分卷保持兼容，明确提示无法确定总卷数。 */
     @Test void legacyAndActualChunkList() throws Exception {
         Path base=Files.write(dir.resolve("legacy.pcv"),data(2050)); Splitter.split(base,1024);
-        Files.delete(Splitter.manifestPath(base)); assertFalse(Splitter.inspect(base).totalKnown());
+        for(Path chunk:Splitter.listChunks(base)) {
+            byte[] bytes=Files.readAllBytes(chunk);
+            Files.write(chunk,Arrays.copyOf(bytes,bytes.length-SplitMetadata.SIZE));
+        }
+        assertFalse(Splitter.inspect(base).totalKnown());
         Path out=dir.resolve("out"); Splitter.recombine(out,base.toString()); assertArrayEquals(data(2050),Files.readAllBytes(out));
         Files.delete(Path.of(base+".1")); assertEquals(2,Splitter.listChunks(base).size());
         assertEquals(List.of(1),Splitter.inspect(base).missing());
@@ -150,7 +155,7 @@ class SplitCompletenessTest {
         DecryptRequest d=new DecryptRequest();d.setInputFile(chunk.toString());d.setOutputFile(dir.resolve("out").toString());d.setPassword("pw");d.setRsCodecs(new RsCodecs());d.setRecombine(true);
         Decryptor.decrypt(d); Decryptor.decrypt(d); assertEquals(chunk.toString(),d.getInputFile());
         assertArrayEquals(data(2000),Files.readAllBytes(dir.resolve("out"))); assertArrayEquals(cipher,Files.readAllBytes(base));
-        VerifyRequest v=new VerifyRequest();v.setInputFile(Splitter.manifestPath(base).toString());v.setPassword("pw");v.setRsCodecs(new RsCodecs());v.setRecombine(false);
+        VerifyRequest v=new VerifyRequest();v.setInputFile(Path.of(base+".0").toString());v.setPassword("pw");v.setRsCodecs(new RsCodecs());v.setRecombine(false);
         assertTrue(Verifier.verify(v)); assertArrayEquals(cipher,Files.readAllBytes(base));
         Files.delete(Path.of(base+".0")); assertThrows(IOException.class,()->Verifier.verify(v));
     }
@@ -161,7 +166,7 @@ class SplitCompletenessTest {
         for(String name:List.of("bad","good")) {Path base=dir.resolve(name+".ergou");Encryptor.encrypt(request(source,base));Splitter.split(base,700);Files.delete(base);}
         Files.delete(dir.resolve("bad.ergou.0"));
         FolderCrypt.DecryptOptions opts=new FolderCrypt.DecryptOptions();opts.password="pw";opts.rsCodecs=new RsCodecs();
-        FolderCrypt.decryptFiles(List.of(dir.resolve("bad.ergou.1"),dir.resolve("good.ergou.1"),dir.resolve("good.ergou.volumes")),dir.resolve("out"),opts);
+        FolderCrypt.decryptFiles(List.of(dir.resolve("bad.ergou.1"),dir.resolve("good.ergou.1"),dir.resolve("good.ergou.2")),dir.resolve("out"),opts);
         assertArrayEquals(data(2000),Files.readAllBytes(dir.resolve("out/good")));assertEquals(1,opts.batchResult.succeededCount());assertEquals(1,opts.batchResult.failedCount());
     }
 

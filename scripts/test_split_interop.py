@@ -17,9 +17,9 @@ PACKAGE='hbnu.project.ergoutreecrypt.debug'
 def run(args,cwd=ROOT):
     subprocess.run([str(x) for x in args],cwd=cwd,check=True)
 
-def upload(adb,source):
-    run(adb+['shell','run-as',PACKAGE,'mkdir','-p','files/split-interop/desktop'])
-    proc=subprocess.Popen(adb+['exec-in','run-as',PACKAGE,'tar','-xf','-','-C','files/split-interop/desktop'],stdin=subprocess.PIPE)
+def upload(adb,source,destination="files/split-interop/desktop"):
+    run(adb+['shell','run-as',PACKAGE,'mkdir','-p',destination])
+    proc=subprocess.Popen(adb+['exec-in','run-as',PACKAGE,'tar','-xf','-','-C',destination],stdin=subprocess.PIPE)
     try:
         with tarfile.open(fileobj=proc.stdin,mode='w|') as archive:
             for file in sorted(source.rglob('*')):
@@ -29,9 +29,9 @@ def upload(adb,source):
     finally:proc.stdin.close()
     if proc.wait()!=0:raise RuntimeError('Split corpus upload failed')
 
-def download(adb,output):
+def download(adb,output,source="files/split-interop/android"):
     output.mkdir(parents=True,exist_ok=True)
-    proc=subprocess.Popen(adb+['exec-out','run-as',PACKAGE,'tar','-cf','-','-C','files/split-interop/android','.'],stdout=subprocess.PIPE)
+    proc=subprocess.Popen(adb+['exec-out','run-as',PACKAGE,'tar','-cf','-','-C',source,'.'],stdout=subprocess.PIPE)
     try:
         with tarfile.open(fileobj=proc.stdout,mode='r|') as archive:
             for entry in archive:

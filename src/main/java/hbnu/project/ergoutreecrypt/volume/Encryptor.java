@@ -525,7 +525,11 @@ public final class Encryptor {
                 fileToSplit = outPath;
             }
 
-            Splitter.split(fileToSplit, chunkBytes, ctx.reporter);
+            if (req.isDeniability()) {
+                Splitter.splitWithManifest(fileToSplit, chunkBytes, ctx.reporter);
+            } else {
+                Splitter.split(fileToSplit, chunkBytes - Splitter.METADATA_BYTES, ctx.reporter);
+            }
             Files.deleteIfExists(fileToSplit);
         }
 

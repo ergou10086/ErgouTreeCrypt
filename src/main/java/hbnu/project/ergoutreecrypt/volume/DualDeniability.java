@@ -700,7 +700,7 @@ public final class DualDeniability {
         Files.createDirectories(chunkDir);
         Path movedFile = chunkDir.resolve(outName);
         Files.move(filePath, movedFile, StandardCopyOption.REPLACE_EXISTING);
-        Splitter.split(movedFile, chunkBytes);
+        Splitter.split(movedFile, chunkBytes - Splitter.METADATA_BYTES);
         Files.deleteIfExists(movedFile);
         return chunkDir;
     }

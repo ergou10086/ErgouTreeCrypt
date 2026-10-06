@@ -26,7 +26,7 @@ class SplitDesktopUiTest {
     }
     /** @throws Exception 实际界面加载或显示结果失败。 */
     @Test void selectedDirectoryAndMissingLastChunkShowTotal() throws Exception {
-        Path base=Files.write(dir.resolve("file.ergou"),new byte[2050]);Splitter.split(base,1024);Files.delete(base);Files.delete(Path.of(base+".2"));
+        Path base=Files.write(dir.resolve("file.ergou"),new byte[2050]);Splitter.split(base,1024);assertFalse(Files.exists(Splitter.manifestPath(base)));Files.delete(base);Files.delete(Path.of(base+".2"));
         FXMLLoader loader=new FXMLLoader(getClass().getResource("/hbnu/project/ergoutreecrypt/ui/main-view.fxml"));
         fx(()->{
             Parent view=loader.load();new Scene(view,1100,950);view.applyCss();view.layout();

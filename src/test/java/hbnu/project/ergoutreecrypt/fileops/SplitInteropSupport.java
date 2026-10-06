@@ -62,7 +62,80 @@ public final class SplitInteropSupport {
     }
 
     /**
-     * 创建一个用例，并记录全部分卷与清单的 SHA-256。
+     * 只生成内嵌元数据迁移涉及的用例，保留旧格式读取和新格式归档入口验证。
+     * @param output 语料目录 @param source 真实源文件 @param mobile 是否 ART @param slow 是否包含可否认容器
+     * @return 用例数 @throws Exception 生成失败。
+     */
+    public static int generateMetadata(Path output,Path source,boolean mobile,boolean slow) throws Exception {
+        if(Files.exists(output))deleteWork(output);
+        Files.createDirectories(output);
+        Files.copy(source,output.resolve("source.bin"),StandardCopyOption.REPLACE_EXISTING);
+        try(InputStream in=Files.newInputStream(source)){Files.write(output.resolve("sample.bin"),in.readNBytes(3*1024*1024+129));}
+        Files.write(output.resolve("empty.bin"),new byte[0]);
+        Files.write(output.resolve("key1"),"first keyfile".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(output.resolve("key2"),"第二个密钥文件🔑".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Properties manifest=new Properties();manifest.setProperty("runtime",mobile?"Android ART":"Desktop JVM");
+        boolean custom=SettingsManager.isArchiveCustomEncryption(),fallback=SettingsManager.isArchivePasswordFallback();
+        SettingsManager.setArchiveCustomEncryption(true);SettingsManager.setArchivePasswordFallback(false);
+        int index=0;
+        try {
+            index=produce(output,manifest,index,"embedded-sample","sample.bin",0,"",null,false,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-real","source.bin",0,"",null,false,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-all-options","sample.bin",15,"",null,false,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-empty","empty.bin",0,"",null,false,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-post-zip","sample.bin",15,"post","ZIP",true,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-post-lz4-single","empty.bin",0,"post","LZ4",true,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-post-gz-single","empty.bin",0,"post","GZ",false,mobile,false,false);
+            index=produce(output,manifest,index,"embedded-pre-lz4","sample.bin",15,"pre","LZ4",true,mobile,false,false);
+            for(boolean sidecar:List.of(false,true)) {
+                int legacy=index;
+                index=produce(output,manifest,index,sidecar?"legacy-sidecar":"legacy-raw","sample.bin",0,"",null,false,mobile,false,false);
+                Path base=findBase(output.resolve(manifest.getProperty("case."+legacy+".artifact")));
+                var info=Splitter.inspect(base);SplitMetadata metadata=SplitMetadata.read(info.chunks().getFirst());
+                for(Path chunk:info.chunks()) {
+                    byte[] bytes=Files.readAllBytes(chunk);Files.write(chunk,Arrays.copyOf(bytes,bytes.length-SplitMetadata.SIZE));
+                }
+                if(sidecar)writeUtf8(Splitter.manifestPath(base),"format=EGTC-SPLIT-1\ncount="+metadata.count()+"\nbytes="+metadata.total()+"\nchunkSize="+metadata.chunkSize()+"\n");
+                try(var walk=Files.walk(base.getParent())) {
+                    List<Path> files=walk.filter(Files::isRegularFile).sorted().toList();
+                    String p="case."+legacy+".";manifest.setProperty(p+"files",Integer.toString(files.size()));
+                    for(int f=0;f<files.size();f++) {
+                        manifest.setProperty(p+"file."+f,output.relativize(files.get(f)).toString().replace('\\','/'));
+                        manifest.setProperty(p+"file."+f+".sha256",sha256(files.get(f)));
+                    }
+                }
+            }
+            if(slow) {
+                index=produce(output,manifest,index,"legacy-deniability","sample.bin",15,"",null,false,mobile,false,true);
+                index=produce(output,manifest,index,"dual-deniability","sample.bin",7,"post","ZIP",true,mobile,false,true);
+            }
+        } finally {SettingsManager.setArchiveCustomEncryption(custom);SettingsManager.setArchivePasswordFallback(fallback);}
+        manifest.setProperty("count",Integer.toString(index));
+        try(OutputStream out=Files.newOutputStream(output.resolve("manifest.properties"))){manifest.store(out,"Embedded split metadata migration corpus (test inventory only)");}
+        return index;
+    }
+
+    /**
+     * 传统伪装模式保留随机外观的清单回退，单独追加八方向，不重复已通过的内嵌矩阵。
+     * @param output 语料目录 @param source 真实样本 @param mobile 是否 ART @return 用例数 @throws Exception 写入或检查失败。
+     */
+    public static int generateLegacyFallback(Path output,Path source,boolean mobile) throws Exception {
+        if(Files.exists(output))deleteWork(output);Files.createDirectories(output);
+        try(InputStream in=Files.newInputStream(source)){Files.write(output.resolve("sample.bin"),in.readNBytes(3*1024*1024+129));}
+        Files.write(output.resolve("key1"),"first keyfile".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(output.resolve("key2"),"第二个密钥文件🔑".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Properties inventory=new Properties();inventory.setProperty("runtime",mobile?"Android ART":"Desktop JVM");
+        int count=produce(output,inventory,0,"legacy-deniability","sample.bin",15,"",null,false,mobile,false,true);
+        Path base=findBase(output.resolve(inventory.getProperty("case.0.artifact")));
+        require(Files.isRegularFile(Splitter.manifestPath(base)),"Traditional disguise lost fallback manifest");
+        for(Path chunk:Splitter.listChunks(base))require(SplitMetadata.read(chunk)==null,"Identifiable footer appended to traditional disguise");
+        inventory.setProperty("count",Integer.toString(count));
+        try(OutputStream out=Files.newOutputStream(output.resolve("manifest.properties"))){inventory.store(out,"Traditional disguise split fallback (test inventory only)");}
+        return count;
+    }
+
+    /**
+     * 创建一个用例，并记录全部分卷产物的 SHA-256。
      * @param root 语料根 @param manifest 用例清单 @param index 编号 @param id 名称 @param input 输入名
      * @param mask 偏执、RS、Zstd、密钥文件四个开关 @param workflow 归档顺序 @param fmt 格式
      * @param archivePassword 归档密码开关 @param mobile 运行端 @param publicPassword 是否无密码
@@ -116,14 +189,18 @@ public final class SplitInteropSupport {
             String archivePw=Boolean.parseBoolean(manifest.getProperty(p+"archivePassword"))?ARCHIVE_PASSWORD:null;
             String workflow=manifest.getProperty(p+"workflow");Path volumeDir=artifact;
             if(workflow.equals("post")){volumeDir=work.resolve("volumes");ArchiveExtractor.extractPreserving(artifact,volumeDir,archivePw);}
-            Path base;
-            try(var walk=Files.walk(volumeDir)) {
-                Path sidecar=walk.filter(Files::isRegularFile).filter(f->Splitter.isManifestPath(f.toString())).findFirst().orElseThrow(()->new IOException("Missing split manifest"));
-                base=Path.of(sidecar.toString().substring(0,sidecar.toString().length()-".volumes".length()));
+            Path base=findBase(volumeDir);
+            if(manifest.getProperty(p+"id").startsWith("embedded-")) {
+                try(var walk=Files.walk(volumeDir)){require(walk.noneMatch(f->Splitter.isManifestPath(f.toString())),"New output contains sidecar");}
             }
-            var inspection=Splitter.inspect(base);inspection.requireComplete();require(inspection.totalKnown(),"Unknown total");
+            var inspection=Splitter.inspect(base);inspection.requireComplete();
+            if(manifest.getProperty(p+"id").startsWith("embedded-")||manifest.getProperty(p+"id").endsWith("deniability")) {
+                long maximum=(manifest.getProperty(p+"input").equals("source.bin")?7L:1L)*1024*1024;
+                for(Path chunk:inspection.chunks())require(Files.size(chunk)<=maximum,"Volume exceeds configured maximum: "+chunk);
+            }
+            require(inspection.totalKnown() || manifest.getProperty(p+"id").equals("legacy-raw"),"Unknown total");
             List<String> keys=(Integer.parseInt(manifest.getProperty(p+"mask"))&8)==0?List.of():List.of(corpus.resolve("key1").toString(),corpus.resolve("key2").toString());
-            VerifyRequest v=new VerifyRequest();v.setInputFile(Splitter.manifestPath(base).toString());v.setPassword(pw);v.setKeyfiles(keys);v.setRsCodecs(new RsCodecs());v.setRecombine(true);
+            VerifyRequest v=new VerifyRequest();v.setInputFile(selectInput(base).toString());v.setPassword(pw);v.setKeyfiles(keys);v.setRsCodecs(new RsCodecs());v.setRecombine(true);
             require(Verifier.verify(v),"Verifier rejected "+manifest.getProperty(p+"id"));
             Path restored=work.resolve("restored.bin"+(workflow.equals("pre")?ArchivePacker.extOf(ArchivePacker.parseFormat(manifest.getProperty(p+"format"))):""));
             DecryptRequest d=new DecryptRequest();d.setInputFile(inspection.chunks().get(inspection.chunks().size()-1).toString());d.setOutputFile(restored.toString());d.setPassword(pw);d.setKeyfiles(keys);d.setRsCodecs(new RsCodecs());d.setRecombine(true);
@@ -231,8 +308,7 @@ public final class SplitInteropSupport {
             Path source=Files.write(root.resolve("source.bin"),bytes);
             EncryptRequest e=new EncryptRequest();e.setInputFile(source.toString());e.setOutputFile(root.resolve("data.ergou").toString());e.setPassword(PASSWORD);e.setRsCodecs(new RsCodecs());e.setArgon2MemoryKib(4096);e.setArgon2Passes(1);e.setArgon2Threads(1);e.setSplit(true);e.setChunkSize(1);e.setArchiveFormat("ZIP");e.setArchivePassword(ARCHIVE_PASSWORD);Encryptor.encrypt(e);
             Path volumes=root.resolve("unpacked-"+round);ArchiveExtractor.extractPreserving(Path.of(e.getOutputFile()),volumes,ARCHIVE_PASSWORD);
-            Path sidecar;try(var walk=Files.walk(volumes)){sidecar=walk.filter(f->Splitter.isManifestPath(f.toString())).findFirst().orElseThrow();}
-            Path base=Path.of(sidecar.toString().substring(0,sidecar.toString().length()-".volumes".length()));
+            Path base=findBase(volumes);Path sidecar=selectInput(base);
             var inspection=Splitter.inspect(base);inspection.requireComplete();require(inspection.expectedCount()==(round==0?2:1),"Old ZIP split tail retained");
             VerifyRequest v=new VerifyRequest();v.setInputFile(sidecar.toString());v.setPassword(PASSWORD);v.setRsCodecs(new RsCodecs());require(Verifier.verify(v),"Repeated ZIP split failed authentication");
             DecryptRequest d=new DecryptRequest();d.setInputFile(sidecar.toString());d.setOutputFile(root.resolve("plain-"+round).toString());d.setPassword(PASSWORD);d.setRsCodecs(new RsCodecs());Decryptor.decrypt(d);require(sameBytes(source,Path.of(d.getOutputFile())),"Repeated ZIP split lost bytes");
@@ -261,9 +337,9 @@ public final class SplitInteropSupport {
             String p="case."+i+".";if(!"dual-deniability".equals(manifest.getProperty(p+"id")))continue;
             Files.createDirectories(root);Path volumes=root.resolve("volumes");
             ArchiveExtractor.extractPreserving(corpus.resolve(manifest.getProperty(p+"artifact")),volumes,ARCHIVE_PASSWORD);
-            Path sidecar;try(var walk=Files.walk(volumes)){sidecar=walk.filter(f->Splitter.isManifestPath(f.toString())).findFirst().orElseThrow();}
+            Path base=findBase(volumes);Path sidecar=selectInput(base);
             if(damage) {
-                String baseName=sidecar.toString().substring(0,sidecar.toString().length()-".volumes".length());
+                String baseName=base.toString();
                 Path first=Path.of(baseName+".0");byte[] chunk=Files.readAllBytes(first);
                 int dataOffset=java.nio.ByteBuffer.wrap(chunk,5,4).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt();
                 chunk[dataOffset+2]^=1;Files.write(first,chunk);Splitter.inspect(Path.of(baseName)).requireComplete();
@@ -285,7 +361,7 @@ public final class SplitInteropSupport {
         Path source=Files.write(root.resolve("source.bin"),bytes),a=Files.write(root.resolve("key-a"),new byte[]{1,2}),b=Files.write(root.resolve("key-b"),new byte[]{3,4});
         EncryptRequest e=new EncryptRequest();e.setInputFile(source.toString());e.setOutputFile(root.resolve("data.ergou").toString());e.setPassword(PASSWORD);e.setRsCodecs(new RsCodecs());e.setKeyfiles(List.of(a.toString(),b.toString()));e.setKeyfileOrdered(false);e.setArgon2MemoryKib(4096);e.setArgon2Passes(1);e.setArgon2Threads(1);Encryptor.encrypt(e);
         Path base=Path.of(e.getOutputFile());Splitter.split(base,700);Files.delete(base);
-        VerifyRequest v=new VerifyRequest();v.setInputFile(Splitter.manifestPath(base).toString());v.setPassword(PASSWORD);v.setKeyfiles(List.of(b.toString(),a.toString()));v.setRsCodecs(new RsCodecs());require(Verifier.verify(v),"Unordered reversed keyfiles failed verification");
+        VerifyRequest v=new VerifyRequest();v.setInputFile(selectInput(base).toString());v.setPassword(PASSWORD);v.setKeyfiles(List.of(b.toString(),a.toString()));v.setRsCodecs(new RsCodecs());require(Verifier.verify(v),"Unordered reversed keyfiles failed verification");
         DecryptRequest d=new DecryptRequest();d.setInputFile(Path.of(base+".2").toString());d.setOutputFile(root.resolve("restored.bin").toString());d.setPassword(PASSWORD);d.setKeyfiles(v.getKeyfiles());d.setRsCodecs(new RsCodecs());Decryptor.decrypt(d);require(sameBytes(source,Path.of(d.getOutputFile())),"Unordered keyfiles failed decryption");
         for(Path artifact:Splitter.artifacts(base)) {
             String before=sha256(artifact);d.setOutputFile(artifact.toString());boolean rejected=false;
@@ -317,7 +393,7 @@ public final class SplitInteropSupport {
         boolean enforced=!Files.isWritable(folder);
         try {
             VerifyRequest v=new VerifyRequest();v.setInputFile(Path.of(base+".1").toString());v.setPassword(PASSWORD);v.setRsCodecs(new RsCodecs());require(Verifier.verify(v),"Readonly verification failed");
-            DecryptRequest d=new DecryptRequest();d.setInputFile(Splitter.manifestPath(base).toString());d.setOutputFile(root.resolve("restored.bin").toString());d.setPassword(PASSWORD);d.setRsCodecs(new RsCodecs());Decryptor.decrypt(d);
+            DecryptRequest d=new DecryptRequest();d.setInputFile(selectInput(base).toString());d.setOutputFile(root.resolve("restored.bin").toString());d.setPassword(PASSWORD);d.setRsCodecs(new RsCodecs());Decryptor.decrypt(d);
             require(sameBytes(source,Path.of(d.getOutputFile())),"Readonly source plaintext mismatch");
             for(Path artifact:artifacts)require(sha256(artifact).equals(before.get(artifact)),"Readonly source changed");
             try(var entries=Files.list(folder)){require(entries.count()==artifacts.size(),"Source-folder temporary file leaked");}
@@ -326,6 +402,21 @@ public final class SplitInteropSupport {
             folder.toFile().setWritable(true,false);for(Path artifact:artifacts)artifact.toFile().setWritable(true,false);
             deleteWork(root);
         }
+    }
+
+    /** @param folder 分卷目录 @return 新旧格式的基础路径 @throws IOException 未找到分卷。 */
+    private static Path findBase(Path folder) throws IOException {
+        try(var walk=Files.walk(folder)) {
+            Path input=walk.filter(Files::isRegularFile)
+                    .filter(f->Splitter.isSplitChunkPath(f.toString())||Splitter.isManifestPath(f.toString()))
+                    .sorted().findFirst().orElseThrow(()->new IOException("Missing split volumes"));
+            String path=input.toString();
+            return Path.of(Splitter.isManifestPath(path)?path.substring(0,path.length()-".volumes".length()):Splitter.splitChunkBase(path));
+        }
+    }
+    /** @param base 分卷基础路径 @return 可选择的旧清单或新碎片。 */
+    private static Path selectInput(Path base) {
+        return Files.isRegularFile(Splitter.manifestPath(base))?Splitter.manifestPath(base):Path.of(base+".0");
     }
 
     /** @param input 文件 @return SHA-256 @throws Exception 读取失败。 */
@@ -346,6 +437,11 @@ public final class SplitInteropSupport {
     private static void deleteWork(Path work) throws IOException {
         try(var walk=Files.walk(work)){for(Path p:walk.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(p);}
     }
+    /** @param path 输出路径 @param text UTF-8 文本 @throws IOException 写入失败。 */
+    private static void writeUtf8(Path path,String text) throws IOException {
+        Files.write(path,text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     /** @param condition 断言 @param message 失败详情 @throws IOException 不满足。 */
     private static void require(boolean condition,String message) throws IOException {if(!condition)throw new IOException(message);}
 }

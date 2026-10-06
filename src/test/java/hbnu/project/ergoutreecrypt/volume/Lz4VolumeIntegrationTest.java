@@ -48,8 +48,9 @@ class Lz4VolumeIntegrationTest {
             Path source=Files.write(root.resolve("source.bin"),data); Path enc=Files.createDirectories(root.resolve("enc"));
             EncryptRequest req=request(source,enc.resolve("source.bin.ergou")); req.setSplit(true); req.setChunkSize(1); req.setArchiveFormat("LZ4"); req.setArchivePassword("archive"); Encryptor.encrypt(req);
             Path archive=enc.resolve("source.bin.tar.lz4"); assertTrue(Files.isRegularFile(archive));
-            List<Path> chunks=ArchiveExtractor.extract(archive,root.resolve("chunks"),"archive"); assertEquals(size>1024*1024?3:2,chunks.size());
-            assertTrue(chunks.stream().anyMatch(p -> Splitter.isManifestPath(p.toString())));
+            List<Path> chunks=ArchiveExtractor.extract(archive,root.resolve("chunks"),"archive"); assertEquals(size>1024*1024?2:1,chunks.size());
+            assertFalse(chunks.stream().anyMatch(p -> Splitter.isManifestPath(p.toString())));
+            assertTrue(Splitter.inspect(Path.of(Splitter.splitChunkBase(chunks.getFirst().toString()))).totalKnown());
             Path restored=root.resolve("out"); Files.createDirectories(restored);
             FolderCrypt.DecryptOptions opts=new FolderCrypt.DecryptOptions(); opts.password="volume";opts.archivePassword="archive";opts.rsCodecs=new RsCodecs();
             FolderCrypt.decryptAuto(archive,restored,opts);

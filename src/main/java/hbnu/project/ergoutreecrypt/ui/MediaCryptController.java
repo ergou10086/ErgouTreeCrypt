@@ -237,10 +237,10 @@ public class MediaCryptController {
         avConfirmField.textProperty().addListener((o, a, b) -> updatePasswordFeedback());
 
         // 加密后压缩：格式下拉绑定
-        avCompressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
+        avCompressFormatCombo.getItems().setAll("ZIP", "ZIPX", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
         avCompressFormatCombo.managedProperty().bind(avCompressAfterCheck.selectedProperty());
         avCompressFormatCombo.visibleProperty().bind(avCompressAfterCheck.selectedProperty());
-        // 归档密码框：ZIP 始终可填；GZ/TAR.GZ/7Z 仅在开启「工具特有加密」时才显示
+        // 归档密码框：ZIP / ZIPX 始终可填；其他格式仅在开启「工具特有加密」时才显示。
         avCompressAfterCheck.selectedProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         avCompressFormatCombo.valueProperty().addListener((o, a, b) -> updateArchivePasswordVisibility());
         updateArchivePasswordVisibility();
@@ -353,7 +353,7 @@ public class MediaCryptController {
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                     Messages.get("av.file.filter.all"),
                     "*.mp3", "*.mp4", "*.m4a", "*.m4v", "*.mov", "*.wav",
-                    "*.zip", "*.gz", "*.tar.gz", "*.7z", "*.lz4", "*.tar.lz4"));
+                    "*.zip", "*.zipx", "*.gz", "*.tar.gz", "*.7z", "*.lz4", "*.tar.lz4"));
         } else {
             chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
                     Messages.get("av.file.filter"),
@@ -944,7 +944,7 @@ public class MediaCryptController {
     private void updateArchivePasswordVisibility() {
         boolean compressOn = avCompressAfterCheck.isSelected();
         String fmt = avCompressFormatCombo.getValue();
-        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt);
+        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt) || "ZIPX".equalsIgnoreCase(fmt);
         boolean customEnc = SettingsManager.isArchiveCustomEncryption();
         boolean show = compressOn && (isZip || customEnc);
         avArchivePasswordField.setManaged(show);

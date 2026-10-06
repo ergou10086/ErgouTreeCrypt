@@ -140,7 +140,7 @@ private fun formatSize(bytes: Long): String {
 /** 归档格式 */
 private data class Fmt(val code: String, val label: String)
 private val ARCHIVE_FORMATS = listOf(
-    Fmt("", "不归档"), Fmt("ZIP", "ZIP"), Fmt("GZ", "GZ"),
+    Fmt("", "不归档"), Fmt("ZIP", "ZIP"), Fmt("ZIPX", "ZIPX"), Fmt("GZ", "GZ"),
     Fmt("TAR.GZ", "TAR.GZ"), Fmt("7Z", "7Z"), Fmt("LZ4", "LZ4"), Fmt("TAR.LZ4", "TAR.LZ4")
 )
 
@@ -208,8 +208,8 @@ private fun detectMediaFormat(fileName: String?): MediaFormat? {
 
 private val TIP_RS = "使用 Reed-Solomon 纠错码，可在文件部分损坏时恢复数据。启用后文件体积增加约 6%。"
 private val TIP_DENIABILITY = "创建包含两份内容的加密容器：真密码解密真实文件，伪密码（钓鱼密码）解密无害的伪装文件。即使被胁迫，也可安全交出伪密码。"
-private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP 格式支持 AES-256 密码保护；GZ / TAR.GZ / LZ4（含 TAR.LZ4）及 7Z 可在设置中启用本工具特有 AES-256 密码保护，加密归档仅本工具可解。"
-private val TIP_COMPRESS_BEFORE = "加密前把所选内容按下方格式打成「一个」压缩包，再对压缩包整体加密；归档内保留原有目录结构，ZIP 可设置 AES-256 密码，其他格式可在设置中开启工具特有加密（仅本工具可解）。与「加密后压缩」互斥。"
+private val TIP_COMPRESS_AFTER = "加密完成后将输出文件打包为指定归档格式。ZIP / ZIPX 格式支持 AES-256 密码保护；GZ / TAR.GZ / LZ4（含 TAR.LZ4）及 7Z 可在设置中启用本工具特有 AES-256 密码保护，加密归档仅本工具可解。"
+private val TIP_COMPRESS_BEFORE = "加密前把所选内容按下方格式打成「一个」压缩包，再对压缩包整体加密；归档内保留原有目录结构，ZIP / ZIPX 可设置 AES-256 密码，其他格式可在设置中开启工具特有加密（仅本工具可解）。与「加密后压缩」互斥。"
 private val TIP_ZSTD = "加密前使用 Zstandard 压缩文件内容。桌面端和 Android 端可互相解压。"
 private val TIP_SPLIT = "将加密输出切分为多个指定大小的分卷文件，便于传输和存储。"
 private val TIP_KEYFILE_ORDERED = "要求按添加时的顺序提供密钥文件，顺序错误将导致解密失败。"
@@ -646,7 +646,7 @@ fun EncryptScreen(
             }
             val tier = argon2Mode.resolve()
             // 显式归档密码按格式能力传递；留空不传，回退由共享核心和设置统一处理。
-            val archPwd = if ((archiveFmt == "ZIP" || archiveCustomEncryption) && archivePassword.isNotEmpty()) archivePassword else null
+            val archPwd = if ((archiveFmt in listOf("ZIP", "ZIPX") || archiveCustomEncryption) && archivePassword.isNotEmpty()) archivePassword else null
 
             // 多文件批处理：视为「同一个文件夹里的多个文件」，产物平铺进 批名/ 或打成 批名.扩展名
             if (isBatch) {
@@ -1361,8 +1361,8 @@ fun EncryptScreen(
                         Spacer(Modifier.width(8.dp))
                         ArchiveDropdown(archiveFmt) { archiveFmt = it }
                     }
-                    // ZIP 格式显示密码输入框
-                    if (archiveFmt.isNotEmpty() && archiveFmt != "ZIP") {
+                    // ZIP / ZIPX 始终支持原生归档密码。
+                    if (archiveFmt.isNotEmpty() && archiveFmt !in listOf("ZIP", "ZIPX")) {
                         Text(
                             "GZ / TAR.GZ / LZ4（含 TAR.LZ4）及 7Z 的密码保护使用本工具特有 AES-256 整包加密，仅本工具可解；外部解压软件无法打开加密归档，请保留本工具及密码。" +
                                 if (archiveCustomEncryption) "默认留空不加密。" else "当前未启用：可在设置中开启工具特有压缩包加密。",
@@ -1370,7 +1370,7 @@ fun EncryptScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (archiveFmt.isNotEmpty() && (archiveFmt == "ZIP" || archiveCustomEncryption)) {
+                    if (archiveFmt.isNotEmpty() && (archiveFmt in listOf("ZIP", "ZIPX") || archiveCustomEncryption)) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
                             value = archivePassword,

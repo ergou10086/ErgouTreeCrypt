@@ -38,7 +38,8 @@ import java.util.stream.Stream;
 /**
  * 归档打包工具。
  *
- * <p>支持 ZIP / GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4 六种格式。密码保护策略：
+ * <p>支持 ZIP / ZIPX / GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4。ZIPX 使用 XZ 压缩和标准 WinZip AES。
+ * 密码保护策略：
  * <ul>
  *   <li><b>ZIP：</b>使用 zip4j 原生 AES-256 加密，外部工具（Bandizip / 7-Zip）
  *       可正确提示密码；不受工具特有加密开关影响。</li>
@@ -161,7 +162,11 @@ public final class ArchivePacker {
             return false;
         }
         String name = archive.getFileName().toString().toLowerCase();
+        if (name.endsWith(".zipx")) {
+            return ZipxArchive.isEncrypted(archive);
+        }
         if (name.endsWith(".zip")) {
+            if (ZipxArchive.needsExtendedReader(archive)) return ZipxArchive.isEncrypted(archive);
             try (ZipFile zf = new ZipFile(archive.toFile())) {
                 return zf.isEncrypted();
             } catch (Exception e) {
@@ -199,6 +204,17 @@ public final class ArchivePacker {
      */
     public static void pack(Path output, Path input, Format format, String password,
                             ProgressReporter reporter) throws IOException {
+        if (format == Format.ZIPX) {
+            if (Files.isDirectory(input)) {
+                try (Stream<Path> walk = Files.walk(input)) {
+                    List<Path> entries = walk.sorted().toList();
+                    packEntries(output, input.getParent(), entries, format, password, reporter);
+                }
+            } else {
+                packEntries(output, input.getParent(), List.of(input), format, password, reporter);
+            }
+            return;
+        }
         if ((format == Format.LZ4 || format == Format.TAR_LZ4) && Files.isDirectory(input)) {
             try (Stream<Path> walk = Files.walk(input)) {
                 List<Path> entries = walk.filter(p -> !p.equals(input)).sorted().toList();
@@ -308,6 +324,16 @@ public final class ArchivePacker {
         if (entryNames != null && entryNames.size() != entries.size()) {
             throw new IOException("entry name count mismatch: "
                     + entryNames.size() + " != " + entries.size());
+        }
+        if (format == Format.ZIPX) {
+            List<String> names = new java.util.ArrayList<>(uniqueEntryNames(baseDir, entries));
+            if (entryNames != null) {
+                for (int i = 0; i < entries.size(); i++) {
+                    if (entryNames.get(i) != null && !entryNames.get(i).isEmpty()) names.set(i, entryNames.get(i));
+                }
+            }
+            ZipxArchive.pack(output, entries, names, ZipxMethod.XZ, password, reporter);
+            return;
         }
         LogService.info("ArchivePacker", "开始打包 " + format + ", 条目=" + entries.size());
 
@@ -1159,6 +1185,7 @@ public final class ArchivePacker {
     public static String extOf(Format format) {
         return switch (format) {
             case ZIP -> ".zip";
+            case ZIPX -> ".zipx";
             case GZ -> ".gz";
             case TAR_GZ -> ".tar.gz";
             case _7Z -> ".7z";
@@ -1172,6 +1199,8 @@ public final class ArchivePacker {
      */
     public enum Format {
         ZIP,
+        /** Standard ZIPX using XZ/LZMA2 and optional native WinZip AES. */
+        ZIPX,
         GZ,
         TAR_GZ,
         _7Z,

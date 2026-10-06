@@ -37,7 +37,7 @@
 | 🎭**可否认加密**         | 外层 XChaCha20 伪装层，提供合理的可否认性                  |
 | 🔑**密钥文件**           | 支持以文件作为额外密钥因子（有序/无序）                    |
 | 🔓**无密码模式**         | 使用公开默认密码，适用于无保密需求的快速操作               |
-| 📦**归档与分卷**         | ZIP 原生 AES 密码；GZ/TAR.GZ/7Z 可选「工具特有加密」包裹（仅本工具可解）；独立橙色进度条 |
+| 📦**归档与分卷**         | ZIP / ZIPX 原生 AES 密码；ZIPX 默认 XZ 压缩；GZ/TAR.GZ/7Z 可选「工具特有加密」包裹（仅本工具可解）；独立橙色进度条 |
 | 🌓**主题与国际化**       | 浅色/深色/跟随系统；中/英文实时切换，进度说明严格跟随所选语言                       |
 
 ### 🚧 开发中：图片加密（EGTC-IMG v1）
@@ -83,7 +83,7 @@
 - **Deniable encryption**: Outer XChaCha20 wrapper provides plausible deniability
 - **Keyfile support**: File-based additional entropy, with optional ordered mode
 - **Passwordless mode**: Encrypt/decrypt without setting a password (uses a built-in public default)
-- **Archive & split support**: Compress into ZIP/GZ/TAR.GZ/7Z; split large output into multiple volumes; compress/extract progress uses a separate orange progress bar from encrypt/decrypt
+- **Archive & split support**: ZIP/ZIPX/GZ/TAR.GZ/7Z/LZ4; ZIPX uses XZ compression and standard WinZip AES; split large output into multiple volumes; compress/extract progress uses a separate orange progress bar from encrypt/decrypt
 - **Windows 11 Fluent Design UI**: Custom window chrome, drag-and-drop, segmented toggle, collapsible advanced panel
 - **Theme support**: Light / Dark / System (auto-detects Windows registry setting)
 - **i18n**: Chinese (Simplified) and English, switchable at runtime — including all progress phase status texts
@@ -161,7 +161,7 @@ mvn test
    - **Reed-Solomon 纠错**：抵抗文件损坏，约 6% 空间开销
    - **可否认加密**：外层伪装加密层
    - **加密前压缩**：先用 Zstandard 压缩再加密
-   - **加密后压缩**：加密完成后打包为 ZIP/GZ/TAR.GZ
+   - **加密后压缩**：加密完成后打包为 ZIP/ZIPX/GZ/TAR.GZ/7Z/LZ4/TAR.LZ4
    - **分卷输出**：按指定大小拆分为多个文件
    - **密钥文件**：添加文件作为额外密钥
 4. **点击"加密"**：等待进度条完成（若启用「加密后压缩」，会额外出现橙色的压缩/打包进度条，与蓝色加解密进度分离显示）
@@ -203,7 +203,7 @@ mvn test
      - `MP4 · mdat 加密`（V-MDAT）— 加密整个 mdat box
    - **偏执模式**：Serpent + XChaCha20 双重加密
    - **完整性校验**：在元数据中存储原文 BLAKE2b 哈希，解密后可校验还原正确性
-   - **加密后压缩**：加密完成后打包为 ZIP/GZ/TAR.GZ
+   - **加密后压缩**：加密完成后打包为 ZIP/ZIPX/GZ/TAR.GZ/7Z/LZ4/TAR.LZ4
 5. **点击"加密媒体"**
 6. 输出文件保持原扩展名（如 `.mp3`），文件大小不变，可正常播放但内容为噪声
 
@@ -343,7 +343,15 @@ UI 内建密码强度评估与随机密码生成器（默认 20 字符），参�
 
 加密后压缩、解密前解压与加解密流水线分离展示：蓝色条表示加密/解密进度，橙色条表示压缩/解压/打包进度；状态说明文案始终与当前界面语言一致。
 
-**ZIP 密码：** 使用原生 AES-256（兼容 7-Zip、Bandizip、Windows 资源管理器等），密码框常显、可留空。可在设置中开启「压缩包密码留空则使用加密密码」：开启后归档密码留空时自动使用加密密码做原生保护；关闭时（默认）留空则生成无密码明文 ZIP。
+**ZIP / ZIPX 密码：** 使用标准 WinZip AES-256，密码框常显、可留空，不受工具特有加密开关影响。可在设置中开启「压缩包密码留空则使用加密密码」：开启后，加密后压缩时归档密码留空会使用加密密码；关闭时（默认）留空则生成无密码归档。ZIPX 的外部兼容性由独立 Python 和 7-Zip 样本及外部解码测试验证。
+
+ZIPX 密码在桌面和 Android 上均按 UTF-8 编码。Windows 版 7-Zip 23.01 按系统 ANSI 代码页转换 ZIP 密码，直接输入同一个中文／emoji 密码可能报错；向这类外部软件交换时建议使用 ASCII 密码。外部测试脚本显式适配真实文件场景的密码字节并分别执行 `7za t` 认证和 `7za x` 恢复，不把字节适配测试宣称为外部软件的 Unicode 界面兼容性；另有三种生产编码器的 ASCII 密码回归，直接使用未经修改的 7-Zip 验证。
+
+**ZIPX 支持范围：** 桌面和 Android 的通用加密、媒体加密后归档、解密前解压、解密后解压以及前后归档分卷流程使用同一共享实现。界面创建 ZIPX 默认使用 XZ/LZMA2；Java API `ZipxArchive.pack` 也可选择 BZip2 或 LZMA。读取支持 Store（0）、Deflate（8）、Deflate64（9）、BZip2（12）、LZMA（14）、XZ（95），以及这些方法的 AE-1/AE-2 AES-128/192/256 条目、ZIP64 和数据描述符。解码内存上限为 64 MiB，超限明确失败。
+
+PPMd（98）、JPEG（96）、MP3（94）、WavPack（97）和其他未实现方法会在解压前明确报错，**当前阶段不宣称完整支持所有 WinZip ZIPX 文件**。ZIPX 中的传统 ZipCrypto、PKWARE 强加密和原生 ZIP 多盘归档暂不支持；本工具 `.ergou` 分卷可以放入 ZIPX 并跨端还原。AES 先认证完整密文，再解码；所有文件的大小和适用 CRC 均通过验证后才提交输出。
+
+依据：[WinZip ZIPX 说明](https://kb.winzip.com/en/130326)、[PKWARE APPNOTE 6.3.10](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)、[WinZip AES 规范](https://www.winzip.com/en/support/aes-encryption/)。可复现入口：`scripts/test_zipx_interop.py --adb PATH --sevenzip PATH`；可通过 `--source` 指定真实测试文件。14 个真实文件场景在桌面 JVM 和 Android ART 之间交换同一批字节，四种生产／读取组合每种均分别执行认证和解压／解密后 SHA-256 比对。独立格式样本保存在 `src/test/resources/zipx/golden/`，真实媒体和运行报告保存在忽略的 `target/zipx-interop/`。
 
 **GZ / TAR.GZ / 7Z 密码：** 无（或已放弃）原生密码。默认这三种格式**不支持密码**，始终生成明文包。如需为其加密，请在设置中开启「**为非 zip 格式开启工具特有压缩包加密方式**」：开启后可填写归档密码，采用本工具特有的整体 AES-256 包裹加密（`EGTC_ARCHV1` 魔数），**仅能用本工具解压，外部工具无法识别其密码**。7Z 内容方法使用 COPY（不对载荷做 LZMA2），打包快。旧版原生加密 7Z 解压仍向后兼容。
 
@@ -353,6 +361,7 @@ UI 内建密码强度评估与随机密码生成器（默认 20 字符），参�
 | 格式   | 扩展名    | 说明                       |
 | ------ | --------- | -------------------------- |
 | ZIP    | `.zip`    | 通用压缩格式，支持密码保护 |
+| ZIPX   | `.zipx`   | 默认 XZ/LZMA2，可选标准 WinZip AES；支持范围见上文 |
 | GZ     | `.gz`     | 单文件 gzip 压缩           |
 | TAR.GZ | `.tar.gz` | tar 归档 + gzip 压缩       |
 | 7Z     | `.7z`     | 7-Zip 归档，支持原生 AES-256 |

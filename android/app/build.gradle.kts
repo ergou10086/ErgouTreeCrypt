@@ -61,6 +61,16 @@ val syncLz4InteropSupport by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("lz4-interop-java"))
 }
 
+// ZIPX fixtures and harness are shared by JVM tests and actual ART instrumentation.
+val syncZipxInteropSupport by tasks.registering(Sync::class) {
+    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/fileops/ZipxInteropSupport.java") }
+    into(layout.buildDirectory.dir("zipx-interop-java"))
+}
+val syncZipxGolden by tasks.registering(Sync::class) {
+    from("../../src/test/resources/zipx/golden")
+    into(layout.buildDirectory.dir("zipx-golden-assets/zipx/golden"))
+}
+
 // ============================================================
 // 版本号：唯一真源是桌面端 pom.xml 的 <version>，在此构建时解析读取，
 // 从而无需每次发版在 pom 与 gradle 之间手动同步。
@@ -176,6 +186,8 @@ android {
     // ============================================================
     sourceSets {
         named("androidTest") {
+            java.srcDir(layout.buildDirectory.dir("zipx-interop-java"))
+            assets.srcDir(layout.buildDirectory.dir("zipx-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("lz4-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("lz4-golden-assets"))
         }
@@ -198,6 +210,8 @@ android {
 
 // 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n, syncLz4InteropSupport) }
+tasks.named("preBuild") { dependsOn(syncZipxInteropSupport) }
+tasks.matching { it.name.contains("AndroidTest") }.configureEach { dependsOn(syncZipxGolden) }
 
 // androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料
 tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }

@@ -84,7 +84,7 @@ public final class ArchiveExtractor {
      */
     public static boolean isArchive(Path file) {
         String name = file.getFileName().toString().toLowerCase();
-        return name.endsWith(".zip")
+        return name.endsWith(".zip") || name.endsWith(".zipx")
                 || name.endsWith(".gz") || name.endsWith(".tgz")
                 || name.endsWith(".tar.gz")
                 || name.endsWith(".rar")
@@ -129,6 +129,9 @@ public final class ArchiveExtractor {
         }
 
         String name = archive.getFileName().toString().toLowerCase();
+        if (name.endsWith(".zipx")) {
+            return ZipxArchive.isEncrypted(archive);
+        }
         if (name.endsWith(".zip")) {
             return hasEncryptedZipEntries(archive);
         }
@@ -152,6 +155,7 @@ public final class ArchiveExtractor {
      * ZIP 加密检测：先通过 zip4j 检测原生加密，再检测旧版 .enc 条目。
      */
     private static boolean hasEncryptedZipEntries(Path archive) throws IOException {
+        if (ZipxArchive.needsExtendedReader(archive)) return ZipxArchive.isEncrypted(archive);
         // 新版：zip4j 原生加密
         try {
             try (ZipFile zf = new ZipFile(archive.toFile())) {
@@ -315,7 +319,9 @@ public final class ArchiveExtractor {
         try {
             String name = actualArchive.getFileName().toString().toLowerCase();
             List<Path> rawFiles;
-            if (name.endsWith(".zip")) {
+            if (name.endsWith(".zipx") || (name.endsWith(".zip") && ZipxArchive.needsExtendedReader(actualArchive))) {
+                rawFiles = ZipxArchive.extract(actualArchive, destDir, password, reporter);
+            } else if (name.endsWith(".zip")) {
                 rawFiles = extractZip(actualArchive, destDir, password, reporter, extractionFrom, 1f);
             } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) {
                 rawFiles = extractTarGz(actualArchive, destDir, reporter, extractionFrom, 1f);
@@ -960,6 +966,8 @@ public final class ArchiveExtractor {
             return ".tar.gz";
         } else if (name.endsWith(".gz")) {
             return ".gz";
+        } else if (name.endsWith(".zipx")) {
+            return ".zipx";
         } else if (name.endsWith(".zip")) {
             return ".zip";
         } else if (name.endsWith(".7z")) {

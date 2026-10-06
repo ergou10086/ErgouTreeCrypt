@@ -42,7 +42,7 @@ val syncTestResources by tasks.registering(Sync::class) {
     from("../../src/main/resources") {
         include("hbnu/project/ergoutreecrypt/i18n/messages*.properties")
     }
-    from("../../src/test/resources") { include("lz4/**") }
+    from("../../src/test/resources") { include("lz4/**", "zipx/**") }
     into(layout.buildDirectory.dir("sync-test-resources"))
 }
 

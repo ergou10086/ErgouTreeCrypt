@@ -394,7 +394,7 @@ public class MainController {
                 compressLevelValueLabel.setText(String.valueOf(currentCompressLevel())));
 
         // 压缩后加密 / 加密后压缩：共用同一组归档格式与归档密码控件
-        compressFormatCombo.getItems().setAll("ZIP", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
+        compressFormatCombo.getItems().setAll("ZIP", "ZIPX", "GZ", "TAR.GZ", "7Z", "LZ4", "TAR.LZ4");
         // 两者都是「压缩策略」，语义互斥：勾选一个自动取消另一个，避免出现
         // 「先打包再加密、加密完再打包」这类无意义组合
         compressBeforeCheck.selectedProperty().addListener((o, wasOn, isOn) -> {
@@ -605,7 +605,7 @@ public class MainController {
     private void updateArchivePasswordVisibility() {
         boolean compressOn = compressAfterCheck.isSelected() || compressBeforeCheck.isSelected();
         String fmt = compressFormatCombo.getValue();
-        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt);
+        boolean isZip = fmt == null || "ZIP".equalsIgnoreCase(fmt) || "ZIPX".equalsIgnoreCase(fmt);
         boolean customEnc = SettingsManager.isArchiveCustomEncryption();
         boolean canPassword = isZip || customEnc;
         boolean show = compressOn && canPassword;

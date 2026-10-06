@@ -292,7 +292,10 @@ public final class SplitInteropSupport {
     private static int produce(Path root,Properties manifest,int index,String id,String input,int mask,
             String workflow,String fmt,boolean archivePassword,boolean mobile,boolean publicPassword,boolean deniable) throws Exception {
         Path caseDir=Files.createDirectories(root.resolve("case-"+index));
-        EncryptRequest req=new EncryptRequest();req.setInputFile(root.resolve(input).toString());req.setOutputFile(caseDir.resolve(input+".ergou").toString());
+        EncryptRequest req=new EncryptRequest();
+        // 测试语料显式指定格式，避免受用户已保存的设置影响。
+        req.setSplitMetadataMode(id.contains("mode-manifest-") ? SplitMetadataMode.MANIFEST : SplitMetadataMode.EMBEDDED);
+        req.setInputFile(root.resolve(input).toString());req.setOutputFile(caseDir.resolve(input+".ergou").toString());
         req.setPassword(publicPassword?"":PASSWORD);req.setRsCodecs(new RsCodecs());req.setArgon2MemoryKib(mobile?4096:8192);req.setArgon2Passes(1);req.setArgon2Threads(2);
         req.setParanoid((mask&1)!=0);req.setReedSolomon((mask&2)!=0);req.setCompress((mask&4)!=0);
         if((mask&8)!=0){req.setKeyfiles(List.of(root.resolve("key1").toString(),root.resolve("key2").toString()));req.setKeyfileOrdered(true);}

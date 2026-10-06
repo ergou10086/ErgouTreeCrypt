@@ -57,7 +57,7 @@ val syncLz4Golden by tasks.registering(Sync::class) {
 }
 
 val syncLz4InteropSupport by tasks.registering(Sync::class) {
-    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/fileops/Lz4InteropSupport.java") }
+    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/fileops/Lz4InteropSupport.java", "hbnu/project/ergoutreecrypt/fileops/SplitInteropSupport.java") }
     into(layout.buildDirectory.dir("lz4-interop-java"))
 }
 

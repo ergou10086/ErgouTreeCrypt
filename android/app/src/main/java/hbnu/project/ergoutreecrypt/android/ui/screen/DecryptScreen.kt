@@ -383,6 +383,19 @@ fun DecryptScreen(
         }
     }
 
+    var splitSummary by remember { mutableStateOf("") }
+    LaunchedEffect(inPath, selectedInputs) {
+        val paths = (selectedInputs.map { it.path } + listOfNotNull(inPath)).distinct()
+        val selectedUris = selectedInputs.mapNotNull { it.uri } + listOfNotNull(inUri)
+        splitSummary = withContext(Dispatchers.IO) {
+            runCatching {
+                fileOps.retainSplitInputs(selectedUris)
+                Splitter.describeInputs(paths.map { File(it).toPath() })
+            }
+                .getOrElse { it.message ?: "无法检查分卷" }
+        }
+    }
+
     // ---- 密钥文件 ----
     var kfUris by remember { mutableStateOf(listOf<Uri>()) }
     var kfPaths by remember { mutableStateOf(listOf<String>()) }
@@ -501,7 +514,7 @@ fun DecryptScreen(
             try {
                 // 名称查询与目录解析全部移入 IO 线程
                 val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
-                val path = withContext(Dispatchers.IO) { fileOps.resolveTreeUriToPath(u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveDecryptTreeToPath(u) }
                 isFolder = true
                 inUri = u
                 val displayName = if (name == "未知文件") "选择的文件夹" else name
@@ -514,7 +527,7 @@ fun DecryptScreen(
                     )
                 } else {
                     // 目录路径解析失败（云盘等非主卷提供者）时给出可见提示，避免按钮静默置灰
-                    Toast.makeText(ctx, "无法访问所选文件夹，请选择本地存储目录", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, "无法读取所选目录，请检查目录访问权限或存储空间", Toast.LENGTH_LONG).show()
                 }
                 outName = "${FileNameSanitizer.sanitize(displayName)}_decrypted"
             } finally {
@@ -707,7 +720,7 @@ fun DecryptScreen(
             // 避免把归档文件误当作单卷送入 Decryptor 导致整包读入内存
             if (input != null && (isFolder
                     || ArchiveExtractor.isArchive(File(input).toPath())
-                    || Splitter.isSplitChunkPath(input))) {
+                    || (Splitter.isSplitChunkPath(input) || Splitter.isManifestPath(input)))) {
                 vm.startAutoDecrypt(
                     inputs = listOf(input),
                     outputDir = writeDir,
@@ -1144,6 +1157,10 @@ fun DecryptScreen(
             // ============================================================
             // 一、文件选择区（单文件或单文件夹）
             // ============================================================
+            if (splitSummary.isNotBlank()) {
+                Text(splitSummary, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            }
             if (!hasFile) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Card(

@@ -351,7 +351,7 @@ public final class DualDeniability {
                 if (split) {
                     // GZ 多条目时 packEntries 会自动提升为 TAR.GZ，扩展名也需同步调整
                     ArchivePacker.Format extFmt = ArchivePacker.effectiveFormat(fmt, 2);
-                    List<Path> chunks = Splitter.listChunks(outPath);
+                    List<Path> chunks = Splitter.artifacts(outPath);
                     Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                     String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);
                     Path archivePath = archiveParent.resolve(archiveName);
@@ -407,6 +407,20 @@ public final class DualDeniability {
      * @throws Exception 密码错误或 I/O 错误
      */
     public static void decrypt(DecryptRequest req) throws Exception {
+        process(req, false);
+    }
+
+    /**
+     * 验证匹配密码的数据区认证标签，不生成明文文件。
+     * @param req 密码、输入及进度选项
+     * @throws Exception 密码、密文认证或读写失败
+     */
+    public static void verify(DecryptRequest req) throws Exception {
+        process(req, true);
+    }
+
+    /** @param req 请求 @param verifyOnly 是否仅计算 MAC @throws Exception 操作失败。 */
+    private static void process(DecryptRequest req, boolean verifyOnly) throws Exception {
         LogService.info("DualDeniability", "开始双卷可否认解密");
         String inputFile = req.getInputFile();
         String password = Passwordless.effectivePassword(req.getPassword());
@@ -466,7 +480,7 @@ public final class DualDeniability {
                         reporter.setStatus(Messages.get("status.decrypting.decoy"));
                     }
                     DataRegion.decryptFrom(inputFile, params, cand, paranoid,
-                            req.isForceDecrypt(), rs, reporter, req.getOutputFile());
+                            req.isForceDecrypt(), rs, reporter, req.getOutputFile(), verifyOnly);
                     return;
                 }
             }
@@ -480,7 +494,7 @@ public final class DualDeniability {
                         reporter.setStatus(Messages.get("status.decrypting.hidden"));
                     }
                     DataRegion.decryptFrom(inputFile, params, cand, paranoid,
-                            req.isForceDecrypt(), rs, reporter, req.getOutputFile());
+                            req.isForceDecrypt(), rs, reporter, req.getOutputFile(), verifyOnly);
                     return;
                 }
             }
@@ -490,8 +504,7 @@ public final class DualDeniability {
             throw new CryptoException(ErrorKind.WRONG_PASSWORD,
                     "password is incorrect or the file is not a valid dual-deniability volume");
         }
-        // 解密成功，重置计数器（在 DataRegion.decryptFrom 中已完成）
-        // 注意：recordSuccess 在返回前由 Decryptor 统一调用，此处不重复
+        // 成功计数在返回前由 Decryptor 统一清零。
     }
 
     /**
@@ -1127,11 +1140,32 @@ public final class DualDeniability {
          * @param rs            RS 编解码器
          * @param reporter      进度回调
          * @param outputFile    输出文件路径
+         * @param verifyOnly    是否仅认证，不生成明文
          * @throws Exception 密码学或 I/O 错误
          */
         static void decryptFrom(String inputFile, MetaBlockParams params, byte[] passwordBytes,
                                 boolean paranoid, boolean forceDecrypt, RsCodecs rs,
-                                ProgressReporter reporter, String outputFile) throws Exception {
+                                ProgressReporter reporter, String outputFile, boolean verifyOnly) throws Exception {
+            try {
+                decryptFrom(inputFile,params,passwordBytes,paranoid,forceDecrypt,rs,reporter,outputFile,verifyOnly,true);
+            } catch (CryptoException error) {
+                if (!params.flags.isReedSolomon() || forceDecrypt || error.kind() != ErrorKind.TAMPERED_DATA) throw error;
+                LogService.info("DualDeniability", "RS 快速读取认证失败，重建密钥并进行完整纠错重试");
+                if (reporter != null) reporter.setStatus(Messages.get("split.repairing"));
+                decryptFrom(inputFile,params,passwordBytes,paranoid,false,rs,reporter,outputFile,verifyOnly,false);
+            }
+        }
+
+        /**
+         * 使用全新的 KDF/HKDF 和 MAC 状态读取数据区，每次重试独立派生。
+         * @param inputFile 容器 @param params 参数 @param passwordBytes 密码字节 @param paranoid 偏执模式
+         * @param forceDecrypt 忽略认证错误 @param rs 编解码器 @param reporter 进度 @param outputFile 输出
+         * @param verifyOnly 是否仅认证 @param fastDecode 是否只剥离 RS 冗余
+         * @throws Exception 认证、解密或读写失败
+         */
+        private static void decryptFrom(String inputFile, MetaBlockParams params, byte[] passwordBytes,
+                                boolean paranoid, boolean forceDecrypt, RsCodecs rs,
+                                ProgressReporter reporter, String outputFile, boolean verifyOnly, boolean fastDecode) throws Exception {
             boolean reedSolomon = params.flags.isReedSolomon();
             byte[] key = Argon2Kdf.deriveKey(passwordBytes, params.salt, paranoid);
 
@@ -1151,7 +1185,7 @@ public final class DualDeniability {
 
                 String incomplete = outputFile + ".incomplete";
                 try (FileChannel ch = FileChannel.open(Path.of(inputFile), StandardOpenOption.READ);
-                     OutputStream fout = Files.newOutputStream(Path.of(incomplete))) {
+                     OutputStream fout = verifyOnly ? OutputStream.nullOutputStream() : Files.newOutputStream(Path.of(incomplete))) {
 
                     ch.position(dataOffset);
 
@@ -1166,6 +1200,9 @@ public final class DualDeniability {
                     InputStream chIn = java.nio.channels.Channels.newInputStream(ch);
 
                     while (done < encodedLen) {
+                        if (Thread.currentThread().isInterrupted() || reporter != null && reporter.isCancelled()) {
+                            throw new hbnu.project.ergoutreecrypt.exception.CancelledException();
+                        }
                         int maxRead = (int) Math.min(bufSize, encodedLen - done);
                         int n = readFull(chIn, src, maxRead);
                         if (n <= 0) {
@@ -1175,12 +1212,18 @@ public final class DualDeniability {
                         if (reedSolomon) {
                             boolean isLast = done + n >= encodedLen;
                             byte[] decoded = decodeWithRSFast(src, n, rs, isLast,
-                                    params.flags.isPadded(), forceDecrypt, true);
-                            cs.decrypt(dst, decoded, decoded.length);
-                            fout.write(dst, 0, decoded.length);
+                                    params.flags.isPadded(), forceDecrypt, fastDecode);
+                            if (verifyOnly) mac.update(decoded, decoded.length);
+                            else {
+                                cs.decrypt(dst, decoded, decoded.length);
+                                fout.write(dst, 0, decoded.length);
+                            }
                         } else {
-                            cs.decrypt(dst, src, n);
-                            fout.write(dst, 0, n);
+                            if (verifyOnly) mac.update(src, n);
+                            else {
+                                cs.decrypt(dst, src, n);
+                                fout.write(dst, 0, n);
+                            }
                         }
 
                         done += n;
@@ -1202,7 +1245,7 @@ public final class DualDeniability {
                 boolean macOk = HeaderAuth.constantTimeEqual(computedMac, params.authTag);
 
                 if (!macOk && !forceDecrypt) {
-                    Files.deleteIfExists(Path.of(incomplete));
+                    if (!verifyOnly) Files.deleteIfExists(Path.of(incomplete));
                     cs.close();
                     SecureZero.zero(key);
                     SecureZero.zero(macSubkey);
@@ -1216,6 +1259,8 @@ public final class DualDeniability {
                 SecureZero.zero(macSubkey);
                 SecureZero.zero(serpentKey);
                 SecureZero.zero(headerSk);
+
+                if (verifyOnly) return;
 
                 // 加密前压缩：解密后的 .incomplete 为压缩数据，先解压还原
                 if (params.compressed) {

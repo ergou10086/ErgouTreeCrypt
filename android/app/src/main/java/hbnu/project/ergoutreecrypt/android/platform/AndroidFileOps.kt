@@ -14,6 +14,7 @@ import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import hbnu.project.ergoutreecrypt.history.OperationRecord
+import hbnu.project.ergoutreecrypt.fileops.Splitter
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -99,6 +100,9 @@ data class MaterializedImageInput(
  */
 class AndroidFileOps(private val context: Context) {
 
+    /** 当前页面独立的分卷缓存，避免其他页面的旧碎片混入。 */
+    private val splitSession = UUID.randomUUID().toString()
+
     /** 已解析成功的 URI→路径缓存（同一页面实例内复用）。 */
     private val resolvedCache = java.util.concurrent.ConcurrentHashMap<Uri, String>()
 
@@ -132,6 +136,24 @@ class AndroidFileOps(private val context: Context) {
 
         // 3. 拷贝到内部存储
         return copyToInternal(uri)?.also { resolvedCache[uri] = it }
+    }
+
+    /**
+     * 只保留当前选择的分卷副本，移除已取消选择的缓存碎片。
+     * 删除范围限定于本页面拥有的私有分卷目录，直连路径和源文档不受影响。
+     * @param selected 当前选择的文档 URI
+     */
+    fun retainSplitInputs(selected: Collection<Uri>) {
+        val retained = selected.toSet()
+        val ownedRoot = File(context.filesDir, "crypto_tmp/split_$splitSession").canonicalFile.toPath()
+        for ((uri, path) in resolvedCache.entries.toList()) {
+            if (uri in retained) continue
+            val file = File(path)
+            if (file.canonicalFile.toPath().startsWith(ownedRoot)) {
+                if (file.exists() && !file.delete()) throw java.io.IOException("无法移除已取消选择的分卷缓存")
+                resolvedCache.remove(uri, path)
+            }
+        }
     }
 
     /**
@@ -291,6 +313,56 @@ class AndroidFileOps(private val context: Context) {
                 if (path != null && File(path).isDirectory) path else null
             }
         } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 通过目录树授权物化解密输入，支持分区存储、SD 卡和云盘分卷目录。
+     * 保留子目录、碎片和清单名称；每次选择使用独立目录。
+     * @param uri 用户授权的目录树
+     * @return 可供共享核心读取的目录，失败时为 null
+     */
+    fun resolveDecryptTreeToPath(uri: Uri): String? {
+        if (uri.scheme == "file") return uri.path
+        val session = File(context.filesDir, "crypto_tmp/tree_${UUID.randomUUID()}")
+        return try {
+            val rootId = DocumentsContract.getTreeDocumentId(uri)
+            val rootUri = DocumentsContract.buildDocumentUriUsingTree(uri, rootId)
+            val name = FileNameSanitizer.sanitize(queryDisplayName(rootUri) ?: "folder")
+            val root = File(session, name).apply { check(mkdirs()) }
+            val queue = java.util.ArrayDeque<Pair<String, File>>()
+            queue.add(rootId to root)
+            var entries = 0
+            while (queue.isNotEmpty()) {
+                val (parentId, parent) = queue.removeFirst()
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(uri, parentId)
+                val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val cursor = context.contentResolver.query(childrenUri, columns, null, null, null)
+                    ?: throw java.io.IOException("无法读取目录")
+                cursor.use {
+                    while (it.moveToNext()) {
+                        check(++entries <= 1_000_000) { "目录条目过多" }
+                        val id = it.getString(0)
+                        val safeName = FileNameSanitizer.sanitize(it.getString(1))
+                        check(safeName.isNotBlank() && safeName != "." && safeName != "..")
+                        val target = File(parent, safeName)
+                        check(!target.exists()) { "目录中有清洗后同名的文件" }
+                        if (it.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            check(target.mkdir())
+                            queue.add(id to target)
+                        } else {
+                            val childUri = DocumentsContract.buildDocumentUriUsingTree(uri, id)
+                            val input = openInputStream(childUri) ?: throw java.io.IOException("无法读取 $safeName")
+                            input.use { source -> target.outputStream().use { dest -> copyStream(source, dest) } }
+                        }
+                    }
+                }
+            }
+            root.absolutePath
+        } catch (_: Exception) {
+            session.deleteRecursively()
             null
         }
     }
@@ -705,9 +777,22 @@ class AndroidFileOps(private val context: Context) {
      * @return 拷贝后的临时文件路径，调用方负责在使用后清理
      */
     private fun copyToInternal(uri: Uri): String? {
-        val tmpDir = File(context.filesDir, "crypto_tmp")
+        val displayName = queryDisplayName(uri) ?: ""
+        val split = Splitter.isSplitChunkPath(displayName.ifBlank { "unknown" }) ||
+            Splitter.isManifestPath(displayName.ifBlank { "unknown" })
+        val parentId = runCatching { DocumentsContract.getDocumentId(uri).substringBeforeLast('/', "") }
+            .getOrDefault("")
+        val group = "${uri.authority}/$parentId"
+        val hash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(group.toByteArray()).joinToString("") { "%02x".format(it) }
+        val tmpDir = if (split) File(context.filesDir, "crypto_tmp/split_$splitSession/$hash")
+            else File(context.filesDir, "crypto_tmp")
         tmpDir.mkdirs()
-        val tmpFile = File(tmpDir, UUID.randomUUID().toString() + queryExtension(uri))
+        val tmpFile = File(tmpDir, if (split) FileNameSanitizer.sanitize(displayName)
+            else UUID.randomUUID().toString() + queryExtension(uri))
+        if (split && resolvedCache.any { (other, path) -> other != uri && path == tmpFile.absolutePath }) {
+            throw java.io.IOException("同名分卷来自不同文档，请分别选择各自的分卷文件夹")
+        }
         return try {
             // 输入流打不开（如权限被收回）时返回 null，避免把空临时文件误当作有效输入
             val input = openInputStream(uri)

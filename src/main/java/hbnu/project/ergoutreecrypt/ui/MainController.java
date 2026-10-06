@@ -788,6 +788,7 @@ public class MainController {
         cryptoProgressCaption.setText(Messages.get("progress.crypto"));
         archiveProgressCaption.setText(Messages.get("progress.archive"));
         setupInfoTooltips();
+        if (!selectedFiles.isEmpty()) showFileInfo();
         updateActionButtonText();
         updatePasswordFeedback();
         refreshKeyfileList();
@@ -1270,7 +1271,7 @@ public class MainController {
         for (File f : selectedFiles) {
             String name = f.getName().toLowerCase();
             boolean encrypted = name.endsWith(".pcv") || name.endsWith(".ergou")
-                    || Splitter.isSplitChunkPath(f.getAbsolutePath());
+                    || (Splitter.isSplitChunkPath(f.getAbsolutePath()) || Splitter.isManifestPath(f.getAbsolutePath()));
             if (!encrypted) {
                 allEncrypted = false;
                 break;
@@ -1350,6 +1351,19 @@ public class MainController {
             } else {
                 fileMetaLabel.setText(Messages.format("file.size", FileSizes.human(selectedFile.length())));
             }
+            if (mode == Mode.DECRYPT) {
+                File selected = selectedFile;
+                String metadata = fileMetaLabel.getText();
+                java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                    try { return Splitter.describeInput(selected.toPath()); }
+                    catch (IOException e) { return e.getMessage(); }
+                }).thenAccept(summary -> Platform.runLater(() -> {
+                    if (selected.equals(selectedFile) && mode == Mode.DECRYPT && !summary.isBlank()) {
+                        fileMetaLabel.setText(metadata + "\n" + summary);
+                        fileMetaLabel.setWrapText(true);
+                    }
+                }));
+            }
             setVisible(fileCard, true);
             setVisible(fileListCard, false);
         }
@@ -1374,6 +1388,19 @@ public class MainController {
         fileListTitleLabel.setText(
                 Messages.format("file.list.title", selectedFiles.size()));
         fileListMetaLabel.setText(Messages.format("file.list.size", FileSizes.human(total)));
+        if (mode == Mode.DECRYPT) {
+            List<File> selected = List.copyOf(selectedFiles);
+            String metadata = fileListMetaLabel.getText();
+            java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try { return Splitter.describeInputs(selected.stream().map(File::toPath).toList()); }
+                catch (IOException e) { return e.getMessage(); }
+            }).thenAccept(summary -> Platform.runLater(() -> {
+                if (selected.equals(selectedFiles) && mode == Mode.DECRYPT && !summary.isBlank()) {
+                    fileListMetaLabel.setText(metadata + "\n" + summary);
+                    fileListMetaLabel.setWrapText(true);
+                }
+            }));
+        }
         refreshFileList();
         setVisible(fileCard, false);
         setVisible(fileListCard, true);
@@ -1442,7 +1469,7 @@ public class MainController {
         // 解密：文件夹/压缩包/分卷碎片输出到父目录；单文件去扩展名
         if (selectedFile.isDirectory()
                 || ArchiveExtractor.isArchive(selectedFile.toPath())
-                || Splitter.isSplitChunkPath(path)) {
+                || (Splitter.isSplitChunkPath(path) || Splitter.isManifestPath(path))) {
             File parent = selectedFile.getParentFile();
             return parent != null ? parent.getAbsolutePath() : path;
         }
@@ -1700,7 +1727,7 @@ public class MainController {
         String in = selectedFile.getAbsolutePath();
 
         // 自动检测分卷与可否认加密
-        boolean isSplit = Splitter.isSplitChunkPath(in);
+        boolean isSplit = (Splitter.isSplitChunkPath(in) || Splitter.isManifestPath(in));
 
         VerifyRequest req = new VerifyRequest();
         req.setInputFile(in);
@@ -1882,7 +1909,7 @@ public class MainController {
         // 文件夹 / 压缩包 / 分卷碎片：自动识别并整体解密（含分卷碎片合并、递归解密）
         if (selectedFile.isDirectory()
                 || ArchiveExtractor.isArchive(selectedFile.toPath())
-                || Splitter.isSplitChunkPath(in)) {
+                || (Splitter.isSplitChunkPath(in) || Splitter.isManifestPath(in))) {
             startAutoDecrypt(pwd);
             return;
         }

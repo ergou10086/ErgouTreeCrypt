@@ -669,7 +669,7 @@ class SplitRoundtripTest {
             Path noZero = tmp.resolve("nz");
             Files.createDirectories(noZero);
             Files.write(noZero.resolve("x.ergou.1"), new byte[]{1});
-            assertNull(FolderCrypt.detectChunkBase(noZero));
+            assertEquals("x.ergou", FolderCrypt.detectChunkBase(noZero));
         } finally {
             rmrf(tmp);
         }

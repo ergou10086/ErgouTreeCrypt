@@ -30,6 +30,9 @@ public final class OperationContext implements AutoCloseable {
      */
     String tempFile;
 
+    /** 本次分卷合并产生的独立临时文件。 */
+    String recombinedFile;
+
     /**
      * 附加临时文件路径（「压缩后加密」在加密前生成的中间归档）。
      *

@@ -523,7 +523,7 @@ public final class FileInputGuard {
             return GuardResult.accept();
         }
         // 2. 分卷碎片：走合并分卷
-        if (Splitter.isSplitChunkPath(input.toString())) {
+        if ((Splitter.isSplitChunkPath(input.toString()) || Splitter.isManifestPath(input.toString()))) {
             return GuardResult.accept();
         }
         // 3. EGTC-IMG 图片密文：只读协议头后引导到图片还原
@@ -577,7 +577,7 @@ public final class FileInputGuard {
         if (directory) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_REQUIRE_FILE);
         }
-        if (Splitter.isSplitChunkPath(input.toString())) {
+        if ((Splitter.isSplitChunkPath(input.toString()) || Splitter.isManifestPath(input.toString()))) {
             return GuardResult.accept();
         }
         GuardResult imageCryptProbe = probeImageCryptEnvelope(input);

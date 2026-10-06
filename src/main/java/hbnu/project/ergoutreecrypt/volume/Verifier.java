@@ -58,7 +58,8 @@ public final class Verifier {
         OperationContext ctx = new OperationContext();
         ctx.reporter = req.getReporter();
         try {
-            Decryptor.decryptPreprocess(ctx, toDecryptRequest(req));
+            Decryptor.decryptPreprocess(ctx, toDecryptRequest(req), true);
+            if (ctx.dualDeniabilityDone) return true;
             Decryptor.decryptReadHeader(ctx, toDecryptRequest(req));
             Decryptor.decryptDeriveProcessVerify(ctx, toDecryptRequest(req));
             verifyMacScan(ctx, req, true);
@@ -69,7 +70,7 @@ public final class Verifier {
             LogService.error("Verifier", "校验失败", e);
             throw e;
         } finally {
-            cleanupVerify(ctx);
+            Decryptor.cleanupPreprocess(ctx);
             ctx.close();
         }
     }
@@ -157,6 +158,8 @@ public final class Verifier {
         if (!macOk && ctx.header.getFlags().isReedSolomon() && !ctx.triedFullRSDecode) {
             ctx.triedFullRSDecode = true;
             SecureZero.zero(computedMac);
+            // 重建 HKDF 和一次性子密钥，RS 全解码不能复用已消费的 MAC 子密钥。
+            Decryptor.decryptDeriveProcessVerify(ctx, toDecryptRequest(req));
             verifyMacScan(ctx, req, false);
             verifyCompare(ctx, req);
             return;
@@ -188,15 +191,4 @@ public final class Verifier {
         return dr;
     }
 
-    /**
-     * 清理校验过程中产生的临时文件（recombine 合并结果、deniability 剥离结果）。
-     */
-    private static void cleanupVerify(OperationContext ctx) {
-        if (ctx.tempFile != null) {
-            try {
-                Files.deleteIfExists(Path.of(ctx.tempFile));
-            } catch (IOException ignored) {
-            }
-        }
-    }
 }

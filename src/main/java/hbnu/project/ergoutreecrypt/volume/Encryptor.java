@@ -525,7 +525,7 @@ public final class Encryptor {
                 fileToSplit = outPath;
             }
 
-            Splitter.split(fileToSplit, chunkBytes);
+            Splitter.split(fileToSplit, chunkBytes, ctx.reporter);
             Files.deleteIfExists(fileToSplit);
         }
 
@@ -539,7 +539,7 @@ public final class Encryptor {
             if (split) {
                 // GZ 多条目时 packEntries 会自动提升为 TAR.GZ，扩展名也需同步调整
                 ArchivePacker.Format extFmt = ArchivePacker.effectiveFormat(fmt, 2);
-                List<Path> chunks = Splitter.listChunks(outPath);
+                List<Path> chunks = Splitter.artifacts(outPath);
                 Path archiveParent = parent.getParent() != null ? parent.getParent() : Path.of(".");
                 String archiveName = parent.getFileName().toString() + ArchivePacker.extOf(extFmt);
                 Path archivePath = archiveParent.resolve(archiveName);

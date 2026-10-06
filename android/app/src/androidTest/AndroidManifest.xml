@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider android:name="hbnu.project.ergoutreecrypt.android.SplitTestDocumentsProvider"
+            android:authorities="hbnu.project.ergoutreecrypt.split.tests"
+            android:exported="true" android:grantUriPermissions="true" />
+    </application>
+</manifest>

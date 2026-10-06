@@ -88,6 +88,8 @@ public final class Decryptor {
             LogPhases.run("Decryptor", "preprocess", () -> decryptPreprocess(ctx, req));
             // 双卷可否认解密已在预处理阶段完成，跳过后续流水线
             if (ctx.dualDeniabilityDone) {
+                hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance()
+                        .recordSuccess(inputPath);
                 LogService.info("Decryptor", "双卷可否认解密完成", (System.nanoTime() - t0) / 1_000_000L);
                 return;
             }
@@ -109,6 +111,7 @@ public final class Decryptor {
             LogService.error("Decryptor", "解密失败", e);
             throw e;
         } finally {
+            cleanupPreprocess(ctx);
             ctx.close();
         }
         // 解密成功，重置计数器
@@ -123,27 +126,40 @@ public final class Decryptor {
      * 解密预处理：合并分卷碎片、检测双卷可否认加密、检测并剥离旧版可否认加密外层。
      */
     static void decryptPreprocess(OperationContext ctx, DecryptRequest req) throws Exception {
+        decryptPreprocess(ctx, req, false);
+    }
+
+    /** @param ctx 上下文 @param req 请求 @param verifyOnly 双卷是否仅校验 @throws Exception 预处理失败。 */
+    static void decryptPreprocess(OperationContext ctx, DecryptRequest req, boolean verifyOnly) throws Exception {
         String inputFile = req.getInputFile();
 
         // 合并分卷碎片
-        if (req.isRecombine()) {
+        if (req.isRecombine() || Splitter.isSplitChunkPath(inputFile) || Splitter.isManifestPath(inputFile)) {
             ctx.setStatus(Messages.get("status.recombining"));
             String base = Splitter.splitChunkBase(inputFile);
             if (base == null) {
-                base = inputFile;
+                base = Splitter.isManifestPath(inputFile)
+                        ? inputFile.substring(0, inputFile.length() - ".volumes".length()) : inputFile;
             }
-            Path outputPath = Path.of(base);
-            Splitter.recombine(outputPath, base);
-            ctx.tempFile = outputPath.toString();
+            if (req.getOutputFile() != null) Splitter.requireSeparateOutput(Path.of(req.getOutputFile()),Path.of(base));
+            Path outputPath = Files.createTempFile("ergou-recombine-", ".ergou");
+            ctx.recombinedFile = outputPath.toString();
+            Splitter.recombine(outputPath, base, ctx.reporter);
             inputFile = outputPath.toString();
-            req.setInputFile(inputFile);
         }
 
         // 双卷可否认加密（EGTD）自动检测
         if (DualDeniability.isDualDeniable(inputFile)) {
             ctx.dualDeniabilityDone = true;
             req.setDualDeniability(true);
-            DualDeniability.decrypt(req);
+            String originalInput = req.getInputFile();
+            try {
+                req.setInputFile(inputFile);
+                if (verifyOnly) DualDeniability.verify(req);
+                else DualDeniability.decrypt(req);
+            } finally {
+                req.setInputFile(originalInput);
+            }
             return;
         }
 
@@ -484,6 +500,19 @@ public final class Decryptor {
         try {
             Files.deleteIfExists(Path.of(req.getOutputFile() + ".incomplete"));
         } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * 删除本次预处理拥有的合并与可否认临时文件，不触碰源文件。
+     * @param ctx 本次操作上下文
+     */
+    static void cleanupPreprocess(OperationContext ctx) {
+        for (String path : new String[] { ctx.recombinedFile, ctx.tempFile }) {
+            if (path != null) {
+                try { Files.deleteIfExists(Path.of(path)); }
+                catch (IOException ignored) { }
+            }
         }
     }
 

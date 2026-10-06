@@ -534,32 +534,54 @@ public final class ArchivePacker {
         int done = 0;
         long grandTotal = entries.stream().mapToLong(ArchivePacker::safeSize).sum();
         long doneBytes = 0;
-        try (ZipFile zipFile = new ZipFile(output.toFile(), password.toCharArray())) {
-            zipFile.setRunInThread(true);
-            for (int i = 0; i < total; i++) {
-                Path file = entries.get(i);
-                long entrySize = safeSize(file);
-                ZipParameters params = newZipAesParameters();
-                params.setFileNameInZip(nameAt(entryNames, i, baseDir, file));
-                ProgressMonitor monitor = zipFile.getProgressMonitor();
-                boolean isDir = Files.isDirectory(file);
-                if (isDir) {
-                    zipFile.addFolder(file.toFile(), params);
-                } else {
-                    zipFile.addFile(file.toFile(), params);
+        Path temporary = Files.createTempFile(output.toAbsolutePath().getParent(), ".ergou-zip-", ".zip");
+        Files.delete(temporary);
+        try {
+            try (ZipFile zipFile = new ZipFile(temporary.toFile(), password.toCharArray())) {
+                zipFile.setRunInThread(true);
+                for (int i = 0; i < total; i++) {
+                    Path file = entries.get(i);
+                    long entrySize = safeSize(file);
+                    ZipParameters params = newZipAesParameters();
+                    params.setFileNameInZip(nameAt(entryNames, i, baseDir, file));
+                    ProgressMonitor monitor = zipFile.getProgressMonitor();
+                    boolean isDir = Files.isDirectory(file);
+                    if (isDir) {
+                        zipFile.addFolder(file.toFile(), params);
+                    } else {
+                        zipFile.addFile(file.toFile(), params);
+                    }
+                    // 每个条目的 zip4j 进度映射到整体字节区间内，实现跨条目连续进度
+                    awaitZip4jProgress(monitor, reporter,
+                            grandTotal > 0 ? (float) doneBytes / grandTotal : 0f,
+                            grandTotal > 0 ? (float) (doneBytes + entrySize) / grandTotal : 1f,
+                            !isDir);
+                    doneBytes += entrySize;
+                    done++;
+                    reportArchive(reporter, grandTotal > 0 ? (float) doneBytes / grandTotal : (float) done / total,
+                            Messages.format("status.archiving.progress", done, total));
                 }
-                // 每个条目的 zip4j 进度映射到整体字节区间内，实现跨条目连续进度
-                awaitZip4jProgress(monitor, reporter,
-                        grandTotal > 0 ? (float) doneBytes / grandTotal : 0f,
-                        grandTotal > 0 ? (float) (doneBytes + entrySize) / grandTotal : 1f,
-                        !isDir);
-                doneBytes += entrySize;
-                done++;
-                reportArchive(reporter, grandTotal > 0 ? (float) doneBytes / grandTotal : (float) done / total,
-                        Messages.format("status.archiving.progress", done, total));
             }
+            assertZipNativelyEncrypted(temporary);
+            try (ZipFile finished = new ZipFile(temporary.toFile(), password.toCharArray())) {
+                for (int i = 0; i < entries.size(); i++) {
+                    Path entry = entries.get(i);
+                    if (!Files.isRegularFile(entry)) continue;
+                    var header = finished.getFileHeader(nameAt(entryNames, i, baseDir, entry));
+                    if (header == null || header.getUncompressedSize() != Files.size(entry)) {
+                        throw new IOException("ZIP entry missing or incomplete: " + entry.getFileName());
+                    }
+                }
+            }
+            try {
+                Files.move(temporary, output, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException error) {
+                Files.move(temporary, output, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
-        assertZipNativelyEncrypted(output);
     }
 
     /**

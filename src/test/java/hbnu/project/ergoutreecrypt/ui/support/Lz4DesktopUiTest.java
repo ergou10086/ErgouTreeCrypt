@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Load real FXML and exercise format/password/compatibility notice visibility. */
+/** 加载真实 FXML，验证格式、密码与兼容提示的可见性。 */
 @EnabledIfSystemProperty(named="ergoutreecrypt.uiTests", matches="true")
 class Lz4DesktopUiTest {
     @BeforeAll static void toolkit() throws Exception {

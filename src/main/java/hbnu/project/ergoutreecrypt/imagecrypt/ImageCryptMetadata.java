@@ -12,8 +12,7 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  *
  * <h3>恢复大小的区间性</h3>
  * <p>待解密的封装区长度 {@link #payloadLength()} 可以精确读出，但其中清单描述区的长度取决于
- * 原始文件名与 MIME 的字节数，只有解密后才能确定。因此恢复文件大小只能给出上下界，见
- * {@link #minRestoredBytes()} 与 {@link #maxRestoredBytes()}。
+ * 原始文件名与 MIME 的字节数，只有解密后才能确定。因此恢复文件大小只能给出上下界，见{@link #minRestoredBytes()} 与 {@link #maxRestoredBytes()}。
  *
  * @param protocolVersion   协议版本，v1 为 1
  * @param mode              保护模式
@@ -27,7 +26,6 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * @param argon2Lanes       Argon2id lane 并行度；公开恢复模式为 0
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public record ImageCryptMetadata(int protocolVersion, ImageCryptMode mode,
                                  int canvasWidth, int canvasHeight, long payloadLength,

@@ -66,8 +66,7 @@ import javafx.stage.Stage;
  * <ul>
  *   <li>开关关闭（默认）：按文件扩展名识别（仍是 .mp3/.mp4/.wav），直接走对应格式解密；</li>
  *   <li>开关开启：明确告诉程序"这是一个被本工具加密过、表面看是正常媒体但内容是噪声的文件"，
- *       用于用户不确定来源、想强调走"加密媒体还原"路径的场景。两者底层都按容器内的加密元数据还原，
- *       开关主要影响 UI 提示与校验严格度。</li>
+ *       用于用户不确定来源、想强调走"加密媒体还原"路径的场景。两者底层都按容器内的加密元数据还原，开关主要影响 UI 提示与校验严格度。</li>
  * </ul>
  *
  * @author ErgouTree
@@ -920,7 +919,7 @@ public class MediaCryptController {
         return (Stage) avRoot.getScene().getWindow();
     }
 
-    // ---- Info-icon tooltip helpers ----
+    // ---- 信息图标提示辅助方法 ----
 
     private static void setTip(Label label, String text) {
         if (label == null) return;
@@ -936,8 +935,7 @@ public class MediaCryptController {
     }
 
     /**
-     * 根据「加密后压缩」勾选、所选归档格式与「工具特有加密」设置，
-     * 更新音视频页归档密码框的显隐与提示文案。
+     * 根据「加密后压缩」勾选、所选归档格式与「工具特有加密」设置，更新音视频页归档密码框的显隐与提示文案。
      *
      * <p>ZIP 始终可填密码；GZ / TAR.GZ / 7Z 仅在开启工具特有加密时才显示密码框。
      */

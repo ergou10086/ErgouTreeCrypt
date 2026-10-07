@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Reproduce the real-file JVM <-> Android ART LZ4 matrix using a debug APK.
-No root is required: tar streams are transferred through adb run-as.
-Usage: python scripts/test_lz4_interop.py --adb PATH [--serial DEVICE] [--source FILE]
+"""使用调试 APK 复现真实文件的 JVM 与 Android ART LZ4 互操作矩阵。
+通过 adb run-as 搬运 tar 流，无需 root 权限。
+用法：python scripts/test_lz4_interop.py --adb PATH [--serial DEVICE] [--source FILE]
 """
 import argparse
 import hashlib

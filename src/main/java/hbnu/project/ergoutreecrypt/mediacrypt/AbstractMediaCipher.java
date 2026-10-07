@@ -224,8 +224,7 @@ public abstract class AbstractMediaCipher implements MediaCipher {
      * 依据元数据派生子密钥编排。
      *
      * <p>元数据含 Argon2 参数覆写（v2、移动端加密）时优先使用覆写值，
-     * 否则按 paranoid 标志使用默认参数（桌面端 1 GiB）。此方法把元数据中
-     * 的 {@code int} 覆写字段（0 表示未设置）转换为可空参数传入派生。
+     * 否则按 paranoid 标志使用默认参数（桌面端 1 GiB）。此方法把元数据中的 {@code int} 覆写字段（0 表示未设置）转换为可空参数传入派生。
      *
      * @param password 已归一化密码 UTF-8 字节
      * @param metadata 解析出的元数据

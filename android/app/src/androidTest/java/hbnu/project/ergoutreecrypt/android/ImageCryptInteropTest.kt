@@ -29,10 +29,7 @@ import java.util.Properties
  *
  * ## 为什么这个测试不能由宿主 JVM 测试替代
  *
- * 本测试运行在真实 Android 运行时（ART）上，走的是 APK 内的依赖、Android 文件系统与
- * 设备 CPU。`android/shared-test` 与 `KdfFourWayInteropTest` 跑在同一台 PC 的 JVM 上，
- * 既不会加载 APK 的 Bouncy Castle，也不会经过 ART 的 desugar 结果，因此**不能**用来证明
- * 跨端可用性。两者的区别不是"更快 vs 更慢"，而是"证明了不同的事情"。
+ * 本测试运行在真实 Android 运行时（ART）上，走的是 APK 内的依赖、Android 文件系统与设备 CPU。`android/shared-test` 与 `KdfFourWayInteropTest` 跑在同一台 PC 的 JVM 上，既不会加载 APK 的 Bouncy Castle，也不会经过 ART 的 desugar 结果，因此**不能**用来证明跨端可用性。两者的区别不是"更快 vs 更慢"，而是"证明了不同的事情"。
  *
  * ## 两个方向
  *
@@ -41,8 +38,7 @@ import java.util.Properties
  * | Desktop → Android | [desktopArtifactsRestoreByteForByteOnDevice] | 读取随 APK 打包的桌面产物，在设备上还原并比对 SHA-256 |
  * | Android → Desktop | [androidArtifactsAreExportedForDesktopVerification] | 在设备上生成产物并写入可导出目录，交由桌面 JVM 校验 |
  *
- * 语料由 Gradle 从 `src/test/resources/imagecrypt/interop` 同步到 androidTest assets，
- * 因此两端看到的是**同一批字节**，不存在"两边各生成一份再互相比对"的伪互操作。
+ * 语料由 Gradle 从 `src/test/resources/imagecrypt/interop` 同步到 androidTest assets，因此两端看到的是**同一批字节**，不存在"两边各生成一份再互相比对"的伪互操作。
  *
  * ## 设备上必须成立的三件事
  *
@@ -51,7 +47,6 @@ import java.util.Properties
  * 3. 组合字符口令经 NFC 后导出的字节与桌面端完全一致。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 @RunWith(AndroidJUnit4::class)
 class ImageCryptInteropTest {
@@ -74,9 +69,7 @@ class ImageCryptInteropTest {
     /**
      * 被测应用的上下文。
      *
-     * 所有**文件**操作都走这里而不是测试 APK 的上下文：真实流程中图片加解密读写的是应用自己的
-     * 私有目录，测试只有用同一个目录才验证了真实行为；而且测试运行器进程的 cacheDir / filesDir
-     * 在部分设备上并不会被预先创建，用它反而会引入与产品无关的环境故障。
+     * 所有**文件**操作都走这里而不是测试 APK 的上下文：真实流程中图片加解密读写的是应用自己的私有目录，测试只有用同一个目录才验证了真实行为；而且测试运行器进程的 cacheDir / filesDir在部分设备上并不会被预先创建，用它反而会引入与产品无关的环境故障。
      */
     private val appContext get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -126,8 +119,7 @@ class ImageCryptInteropTest {
     /**
      * 组合字符口令的 NFC 与 NFD 两种形态必须导出相同的 UTF-8 字节。
      *
-     * 若设备端漏掉 NFC 归一化，用户会看到"同一个密码在电脑上能打开、在手机上打不开"这类
-     * 极难排查的故障，因此这条断言独立于任何加解密流程单独成立。
+     * 若设备端漏掉 NFC 归一化，用户会看到"同一个密码在电脑上能打开、在手机上打不开"这类极难排查的故障，因此这条断言独立于任何加解密流程单独成立。
      */
     @Test
     fun composedPasswordNormalizesIdenticallyOnDevice() {
@@ -149,13 +141,9 @@ class ImageCryptInteropTest {
     /**
      * v1 规范参数下，设备上的三条 KDF 执行路径必须给出完全相同的 32 字节密钥。
      *
-     * 共享核心只有一份源码，但 Argon2 在运行时会按可用堆内存与 ABI 落到 BouncyCastle 堆内、
-     * Java 离堆或 native libargon2 三条完全不同的实现上。只要有一条在某个参数组合上偏移一位，
-     * 密码模式的产物就会变成"只有本机能打开"——而这在任一单端的测试里都不会有任何异常表现。
+     * 共享核心只有一份源码，但 Argon2 在运行时会按可用堆内存与 ABI 落到 BouncyCastle 堆内、Java 离堆或 native libargon2 三条完全不同的实现上。只要有一条在某个参数组合上偏移一位，密码模式的产物就会变成"只有本机能打开"——而这在任一单端的测试里都不会有任何异常表现。
      *
-     * 本用例**断言** native 库可用而不是跳过：APK 的 abiFilters 覆盖 arm64-v8a / armeabi-v7a /
-     * x86_64，任何受支持的测试设备都应命中其中之一。若这里变成跳过，"native 路径已验证"就
-     * 成了一句没有依据的话。
+     * 本用例**断言** native 库可用而不是跳过：APK 的 abiFilters 覆盖 arm64-v8a / armeabi-v7a /x86_64，任何受支持的测试设备都应命中其中之一。若这里变成跳过，"native 路径已验证"就成了一句没有依据的话。
      */
     @Test
     fun everyKdfExecutionPathAgreesOnV1ParametersOnDevice() {
@@ -187,7 +175,7 @@ class ImageCryptInteropTest {
      * 直接用 BouncyCastle 的 Argon2id 派生 v1 密钥，作为另外两条路径的对照基准。
      *
      * @param password 口令字节
-     * @param salt     salt
+     * @param salt 盐值
      * @return 32 字节派生密钥
      */
     private fun deriveWithBouncyCastle(password: ByteArray, salt: ByteArray): ByteArray {
@@ -208,9 +196,7 @@ class ImageCryptInteropTest {
     /**
      * Android → Desktop：在设备上生成产物并写入可导出目录，交由桌面 JVM 校验。
      *
-     * 产物命名与桌面语料保持一致（`android-<输入>-<组合>-v1.egimg.png`），因此桌面侧可以用
-     * 同一份 `corpus.properties` 里的期望值来验证，而不必相信设备自己写下的"预期结果"——
-     * 否则设备写错了期望值也能让校验通过，互操作就变成了自证。
+     * 产物命名与桌面语料保持一致（`android-<输入>-<组合>-v1.egimg.png`），因此桌面侧可以用同一份 `corpus.properties` 里的期望值来验证，而不必相信设备自己写下的"预期结果"——否则设备写错了期望值也能让校验通过，互操作就变成了自证。
      */
     @Test
     fun androidArtifactsAreExportedForDesktopVerification() {
@@ -267,8 +253,7 @@ class ImageCryptInteropTest {
     /**
      * 读取设备上的语料属性表。
      *
-     * 必须显式指定 UTF-8：`Properties.load(InputStream)` 默认按 ISO-8859-1 解码，会把
-     * 组合字符口令读成乱码，进而派生出不同的密钥并报出误导性的"文件已损坏"。
+     * 必须显式指定 UTF-8：`Properties.load(InputStream)` 默认按 ISO-8859-1 解码，会把组合字符口令读成乱码，进而派生出不同的密钥并报出误导性的"文件已损坏"。
      *
      * @return 语料属性表
      */
@@ -284,8 +269,7 @@ class ImageCryptInteropTest {
     /**
      * 把语料文件从 assets 解出到应用缓存，模拟"用户拿到一个文件"。
      *
-     * 真实流程里输入总是普通文件路径；核心的预检、临时文件与原子提交都建立在文件系统语义上，
-     * 因此这里不做内存流特例。
+     * 真实流程里输入总是普通文件路径；核心的预检、临时文件与原子提交都建立在文件系统语义上，因此这里不做内存流特例。
      *
      * @param name 语料文件名
      * @return 缓存中的文件
@@ -350,8 +334,7 @@ class ImageCryptInteropTest {
     /**
      * 记录一条导出条目，供桌面侧核对来源。
      *
-     * 期望的恢复结果直接取自冻结语料中该输入自身的 SHA-256，而不是设备重新计算的值——
-     * 后者只能证明"设备自己和自己一致"，证明不了"设备与桌面一致"。
+     * 期望的恢复结果直接取自冻结语料中该输入自身的 SHA-256，而不是设备重新计算的值——后者只能证明"设备自己和自己一致"，证明不了"设备与桌面一致"。
      *
      * @param exportDirectory 导出目录
      * @param index           条目序号
@@ -383,8 +366,7 @@ class ImageCryptInteropTest {
     /**
      * 写出导出清单，记录生成设备与运行环境。
      *
-     * 桌面侧只用它核对来源，**不用**它作为断言依据——期望值一律取自冻结的桌面语料，
-     * 否则设备写错了期望值也能让校验通过。
+     * 桌面侧只用它核对来源，**不用**它作为断言依据——期望值一律取自冻结的桌面语料，否则设备写错了期望值也能让校验通过。
      *
      * @param exportDirectory 导出目录
      * @param entryCount      导出条目数
@@ -433,9 +415,7 @@ class ImageCryptInteropTest {
     /**
      * 确保文件的上级目录存在。
      *
-     * 首次运行的测试进程中，应用的 cacheDir / filesDir 可能尚未被创建，此时直接
-     * `outputStream()` 会抛出 ENOENT。这里只创建不删除：上级目录往往是应用自己的工作目录，
-     * 清空它会连带删掉同一测试里已经解出的其它语料。
+     * 首次运行的测试进程中，应用的 cacheDir / filesDir 可能尚未被创建，此时直接`outputStream()` 会抛出 ENOENT。这里只创建不删除：上级目录往往是应用自己的工作目录，清空它会连带删掉同一测试里已经解出的其它语料。
      *
      * @param file 目标文件
      */

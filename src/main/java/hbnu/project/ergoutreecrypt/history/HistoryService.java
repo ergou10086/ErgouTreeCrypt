@@ -12,7 +12,6 @@ import java.util.List;
  * <p>本类与任何加解密模块无依赖，历史功能可独立演进。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 public final class HistoryService {
 

@@ -40,23 +40,18 @@ import java.util.zip.ZipOutputStream;
  * <p>覆盖三个层面：
  * <ol>
  *   <li><b>S1 档位记录</b>：桌面端按 {@link Argon2DesktopMode} 档位隐写时，
- *       {@code CarrierMetadata} 的 RESERVED 字段必须记录实际 Argon2 三元组
- *       （而非全零），使移动端提取时读到真实低内存档位、堆内秒级派生。</li>
+ *       {@code CarrierMetadata} 的 RESERVED 字段必须记录实际 Argon2 三元组（而非全零），使移动端提取时读到真实低内存档位、堆内秒级派生。</li>
  *   <li><b>跨端互通</b>：桌面端档位（均衡 256 MiB / 强 1 GiB）与移动端档位
- *       （256 / 64 / 32 MiB）隐写的产物，另一端均能逐字节还原——提取侧的
- *       Argon2 参数从载体元数据读取，与当前设备档位设置无关。</li>
+ *       （256 / 64 / 32 MiB）隐写的产物，另一端均能逐字节还原——提取侧的Argon2 参数从载体元数据读取，与当前设备档位设置无关。</li>
  *   <li><b>高级选项稳定性</b>：偏执 / 完整性 / 隐蔽 / 混淆大小 / PNG 两种嵌入
  *       落点（stEG chunk 与 IEND 追加）在跨端方向上均可正确提取。</li>
  * </ol>
  *
  * <p>真实数据用于端到端逐字节比对：秘密文件取自 {@code temp/test/原内容}
- * （含 {@code 原内容.zip} 内的真实 mp3），载体取自 {@code temp/test/载体}
- * （PNG / ZIP / PDF / WAV / FLAC / MP4 六种容器）。产物写入
- * {@code temp/test/test_output/stego}，可直接拷到真机做端到端确认。
+ * （含 {@code 原内容.zip} 内的真实 mp3），载体取自 {@code temp/test/载体}（PNG / ZIP / PDF / WAV / FLAC / MP4 六种容器）。产物写入{@code temp/test/test_output/stego}，可直接拷到真机做端到端确认。
  * 缺少真实数据时相关用例按 {@code Assumptions} 跳过，不影响 CI。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class FileStegoKdfInteropTest {
 
@@ -81,14 +76,12 @@ class FileStegoKdfInteropTest {
     private static final long MOBILE_THRESHOLD_BYTES = 64L << 20;
 
     /**
-     * 真实秘密文件切片大小（12 MiB）：小于 FLAC 载体 16 MiB 的容量上限，
-     * 使六种载体都能进入同一矩阵。
+     * 真实秘密文件切片大小（12 MiB）：小于 FLAC 载体 16 MiB 的容量上限，使六种载体都能进入同一矩阵。
      */
     private static final long SECRET_SLICE_BYTES = 12L << 20;
 
     /**
-     * 真实源文件整文件使用的上限（14 MiB）：小于 FLAC 载体 16 MiB 容量，
-     * 命中的小体积真实文件（如 mp3）直接整文件使用，覆盖真实文件名往返。
+     * 真实源文件整文件使用的上限（14 MiB）：小于 FLAC 载体 16 MiB 容量，命中的小体积真实文件（如 mp3）直接整文件使用，覆盖真实文件名往返。
      */
     private static final long WHOLE_FILE_MAX_BYTES = 14L << 20;
 
@@ -182,8 +175,7 @@ class FileStegoKdfInteropTest {
     }
 
     /**
-     * 向后兼容：不透传档位（S1 之前的桌面行为）时 RESERVED 全零、参数解析为 null，
-     * 提取侧回落默认 1 GiB 仍能逐字节还原。
+     * 向后兼容：不透传档位（S1 之前的桌面行为）时 RESERVED 全零、参数解析为 null，提取侧回落默认 1 GiB 仍能逐字节还原。
      *
      * @param dir JUnit 提供的临时目录
      * @throws Exception 隐写或提取失败
@@ -234,8 +226,7 @@ class FileStegoKdfInteropTest {
      * 桌面端隐写 → 移动端提取：六种真实载体容器 × 桌面默认均衡档 × 真实秘密文件。
      *
      * <p>模拟 {@code FileStegoController.doHide}（S1 后透传 {@link Argon2DesktopMode}）
-     * 产出，再以移动端 {@code StegoViewModel.extract} 的选项（低内存模式 + 大文件护栏）
-     * 提取，断言载体元数据记录 256 MiB 档且产物逐字节一致。
+     * 产出，再以移动端 {@code StegoViewModel.extract} 的选项（低内存模式 + 大文件护栏）提取，断言载体元数据记录 256 MiB 档且产物逐字节一致。
      *
      * @throws Exception 隐写或提取失败
      */
@@ -309,8 +300,7 @@ class FileStegoKdfInteropTest {
      * 高级选项跨端稳定性：偏执 / 隐蔽 / 完整性 / 混淆大小 / PNG 两种嵌入落点。
      *
      * <p>用真实 PNG 与 ZIP 载体 + 真实秘密文件，逐个组合验证「一端按该组合隐写、
-     * 另一端按默认提取」仍能逐字节还原。所有组合统一用移动端可承受的 64 MiB 档位，
-     * 以控制总时长（档位与选项正交，不影响结论）。
+     * 另一端按默认提取」仍能逐字节还原。所有组合统一用移动端可承受的 64 MiB 档位，以控制总时长（档位与选项正交，不影响结论）。
      *
      * @throws Exception 隐写或提取失败
      */
@@ -378,8 +368,7 @@ class FileStegoKdfInteropTest {
     }
 
     /**
-     * 桌面端「加密前压缩」真实数据往返（Phase S2）：压缩文件在桌面端（zstd 可用）
-     * 仍可提取逐字节一致；预检应识别 {@code compressed == true}（移动端据此拒绝）。
+     * 桌面端「加密前压缩」真实数据往返（Phase S2）：压缩文件在桌面端（zstd 可用）仍可提取逐字节一致；预检应识别 {@code compressed == true}（移动端据此拒绝）。
      *
      * <p>用真实 mp3 整文件 + 真实 ZIP 载体 + 移动省电档（64 MiB）压缩隐写，
      * 桌面端提取；产物留在 {@code test_output/stego} 供移动端预检复核。
@@ -541,9 +530,7 @@ class FileStegoKdfInteropTest {
      * 准备真实秘密文件：取最小真实源文件的前 {@link #SECRET_SLICE_BYTES} 字节。
      *
      * <p>真实源文件均为数百 MiB 量级，直接用于「六载体 × 双方向」矩阵会让单次
-     * 回归耗时不可控，且超出 FLAC 载体 16 MiB 的容量上限；故取真实字节前缀作为
-     * 秘密文件——内容仍是真实数据（保留原扩展名与非 ASCII 文件名，可覆盖
-     * Payload 元数据的文件名往返），体量则可控。整文件互通另见
+     * 回归耗时不可控，且超出 FLAC 载体 16 MiB 的容量上限；故取真实字节前缀作为秘密文件——内容仍是真实数据（保留原扩展名与非 ASCII 文件名，可覆盖Payload 元数据的文件名往返），体量则可控。整文件互通另见
      * {@link #realLargeFile_desktopHideMobileExtract}。
      *
      * @return 真实秘密文件切片路径；无可用真实数据时返回 null

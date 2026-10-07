@@ -19,8 +19,8 @@ import java.util.Locale;
  *
  * <h3>二进制布局（全部大端）</h3>
  * <pre>
- *   innerMagic       8    ASCII "EGTC-INR"
- *   innerVersion     1    1
+ *   innerMagic       8    ASCII 魔数 "EGTC-INR"
+ *   innerVersion     1    版本值 1
  *   formatId         1    见 {@link ImageFormat#id()}
  *   flags            2    bit0 动画 / bit1 多页 / bit2 携带名称
  *   manifestLength   4    描述区长度（= 28 + nameLength + mimeLength + extensionLength）
@@ -37,11 +37,9 @@ import java.util.Locale;
  *
  * <h3>路径安全</h3>
  * <p>写入侧只接受 basename 并拒绝任何路径分隔符；读取侧不信任文件内容，
- * {@link #safeBasename()} 会剥离目录、盘符与非法字符，平台侧仍需再过
- * {@code FileNameSanitizer} 与覆盖确认。
+ * {@link #safeBasename()} 会剥离目录、盘符与非法字符，平台侧仍需再过{@code FileNameSanitizer} 与覆盖确认。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class InnerManifest {
 
@@ -379,8 +377,7 @@ public final class InnerManifest {
      * 返回一个可安全用作恢复文件名的 basename。
      *
      * <p>不信任文件内容：剥离任何目录成分与盘符，移除平台非法字符，拒绝 {@code .}/{@code ..}，
-     * 并为 Windows 保留设备名追加前缀。调用方仍须再经过平台 {@code FileNameSanitizer}
-     * 与覆盖确认；本方法只保证"不会把路径穿越信息当成文件名"。
+     * 并为 Windows 保留设备名追加前缀。调用方仍须再经过平台 {@code FileNameSanitizer}与覆盖确认；本方法只保证"不会把路径穿越信息当成文件名"。
      *
      * @return 清洗后的 basename；原名不可用时返回空串，由调用方回退到格式兜底名
      */

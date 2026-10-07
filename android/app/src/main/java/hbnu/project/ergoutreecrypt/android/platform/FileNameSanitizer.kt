@@ -7,9 +7,7 @@ import java.util.Locale
  *
  * <p>移动端输入文件名可能是中文、日文、emoji 等各类 Unicode 字符的混合，也可能夹杂
  * {@code / \ : * ? " < > |} 等跨平台非法字符或控制字符。直接把这些字符写入输出路径，
- * 会导致文件落盘失败、被系统改名或跨平台乱码。本工具仅替换上述"危险 ASCII 字符"，
- * 完整保留所有合法 Unicode 字符（中文、日文、emoji 均不受影响），从而在保证文件名
- * 高兼容性的同时不产生乱码。
+ * 会导致文件落盘失败、被系统改名或跨平台乱码。本工具仅替换上述"危险 ASCII 字符"，完整保留所有合法 Unicode 字符（中文、日文、emoji 均不受影响），从而在保证文件名高兼容性的同时不产生乱码。
  *
  * <p>替换规则（仅作用于危险字符，绝不触碰非 ASCII 字符）：
  * <ul>
@@ -21,7 +19,6 @@ import java.util.Locale
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 object FileNameSanitizer {
 
@@ -71,9 +68,7 @@ object FileNameSanitizer {
      * 将相对路径按 {@code /} 逐段安全化（保留段间分隔符）。
      *
      * <p>用于文件夹加密时镜像输出相对路径：源文件名/目录名在 Android 上可含
-     * {@code : ?} 等跨平台危险字符，逐段清洗后可保证整个输出目录树也兼容
-     * Windows 等目标系统。每个段内的 {@code /} 不可能存在（来自真实文件名），
-     * {@code \} 等危险字符由 {@link #sanitize(String)} 统一替换。
+     * {@code : ?} 等跨平台危险字符，逐段清洗后可保证整个输出目录树也兼容Windows 等目标系统。每个段内的 {@code /} 不可能存在（来自真实文件名），{@code \} 等危险字符由 {@link #sanitize(String)} 统一替换。
      *
      * @param path 以 {@code /} 分隔的相对路径（如 {@code subdir/报告.docx}）
      * @return 逐段安全化后、以 {@code /} 重新拼接的路径

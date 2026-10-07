@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
  * <p>支持的格式：MP3 / MP4 / WAV — 加密后文件仍可被播放器打开，内容为噪声。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun MediaCryptScreen() {

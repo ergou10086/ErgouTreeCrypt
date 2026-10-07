@@ -14,8 +14,7 @@ import java.nio.file.StandardOpenOption;
  * MP4 加密元数据载体：自定义 {@code uuid} box，追加在文件末尾。
  *
  * <p>{@code uuid} box 是 ISO-BMFF 标准的用户扩展 box（{@code [size:4][type='uuid'][usertype:16][data]}）。
- * 标准解析器会跳过未知 {@code uuid} box，因此不影响播放/解析。追加在末尾可保持 {@code mdat} 偏移不变，
- * 使加解密区间一致。
+ * 标准解析器会跳过未知 {@code uuid} box，因此不影响播放/解析。追加在末尾可保持 {@code mdat} 偏移不变，使加解密区间一致。
  *
  * <p>本 box payload 布局：{@code [META_UUID:16B][metadata 字节]}。
  *
@@ -35,7 +34,7 @@ public final class Mp4UuidMetadata {
      */
     public static long append(Path file, byte[] metadata) throws IOException {
         int payloadLen = BoxParser.META_UUID.length + metadata.length;
-        long boxSize = 8L + payloadLen; // size(4)+type(4)+payload
+        long boxSize = 8L + payloadLen; // 大小(4)+类型(4)+载荷
         ByteBuffer bb = ByteBuffer.allocate((int) boxSize).order(ByteOrder.BIG_ENDIAN);
         bb.putInt((int) boxSize);
         bb.put(UUID_TYPE.getBytes(StandardCharsets.US_ASCII));

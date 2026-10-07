@@ -13,7 +13,6 @@ import java.util.Locale;
  * 恢复只需要正确的扩展名，而"是否动画"只是清单里的一条展示性提示。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public enum ImageFormat {
 

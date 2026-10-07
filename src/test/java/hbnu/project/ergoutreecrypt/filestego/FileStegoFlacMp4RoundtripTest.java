@@ -28,8 +28,7 @@ import java.util.Arrays;
  * 文件隐写 FLAC / MP4 载体端到端往返测试（M3.1 / M3.2）。
  *
  * <p>覆盖 FLAC（APPLICATION/EGTC metadata block）与 MP4（末尾 uuid box）在
- * normal / paranoid / stealth 三种模式下的 hide → extract 数据一致性、
- * 检测能力与容器结构完整性。
+ * normal / paranoid / stealth 三种模式下的 hide → extract 数据一致性、检测能力与容器结构完整性。
  *
  * @author ErgouTree
  */
@@ -37,7 +36,7 @@ class FileStegoFlacMp4RoundtripTest {
 
     private static final byte[] PASSWORD = "flac-mp4-test-pwd".getBytes(StandardCharsets.UTF_8);
 
-    /** FLAC Application ID。 */
+    /** FLAC 应用标识符。 */
     private static final byte[] FLAC_APP_ID = "EGTC".getBytes(StandardCharsets.US_ASCII);
 
     private final FileStegoCodec codec = new FileStegoCodec();
@@ -59,7 +58,7 @@ class FileStegoFlacMp4RoundtripTest {
      */
     private static Path createFlac(final Path dir, final String name) throws Exception {
         byte[] streamInfo = new byte[34];
-        // min/max block size
+        // 最小和最大数据块大小
         streamInfo[0] = 0x00;
         streamInfo[1] = 0x10;
         streamInfo[2] = 0x00;
@@ -70,7 +69,7 @@ class FileStegoFlacMp4RoundtripTest {
         streamInfo[12] = 0x42;
         // MD5 置零
 
-        // STREAMINFO header: LAST=1, type=0, size=34
+        // STREAMINFO 头：末块标志=1，类型=0，大小=34
         int header = 0x80000000 | 34;
         ByteBuffer bb = ByteBuffer.allocate(4 + 4 + 34 + 16);
         bb.put("fLaC".getBytes(StandardCharsets.US_ASCII));
@@ -343,7 +342,7 @@ class FileStegoFlacMp4RoundtripTest {
      * 判断顶层是否存在匹配指定 usertype 的 uuid box。
      *
      * @param mp4  MP4 文件
-     * @param uuid usertype
+     * @param uuid 用户类型标识符
      * @return 是否存在
      */
     private static boolean hasUuid(final Path mp4, final byte[] uuid) throws Exception {
@@ -383,7 +382,7 @@ class FileStegoFlacMp4RoundtripTest {
      *
      * @param out     输出流
      * @param type    4 字符类型
-     * @param payload payload
+     * @param payload 载荷
      */
     private static void writeBox(final ByteArrayOutputStream out, final String type,
                                  final byte[] payload) throws Exception {

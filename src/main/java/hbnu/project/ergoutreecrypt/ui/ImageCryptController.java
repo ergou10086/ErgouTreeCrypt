@@ -68,7 +68,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * 文件探测和所有图片处理都在 {@link TaskRunner} 的后台线程执行，用户切换主标签页不会终止任务。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class ImageCryptController {
 

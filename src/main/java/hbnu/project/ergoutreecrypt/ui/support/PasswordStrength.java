@@ -1,8 +1,7 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
 /**
- * 简易密码强度评估
- * 仅用于 UI 反馈，不参与任何密码学计算
+ * 简易密码强度评估仅用于 UI 反馈，不参与任何密码学计算
  *
  * @author ErgouTree
  */

@@ -30,7 +30,6 @@ import java.util.zip.ZipException;
  * 只解压到协议头读完为止，供路由与预检做有界只读探测；它不做任何认证，也不能替代 {@code readFrame}。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class PixelPngReader {
 
@@ -88,8 +87,7 @@ public final class PixelPngReader {
      * 协议头本身在公开恢复模式下就是明文，在密码保护模式下也从未被认证。
      *
      * <p>停止条件由画布几何决定：所需行数约为 {@code ceil(184 / (3 × width))}，对常规宽度
-     * 只需 1–2 行，因此耗时与内存都不随图片分辨率增长。输入流保持在协议头之后的位置，
-     * 调用方若需要完整校验应重新打开文件并走 {@link #readFrame(InputStream, OutputStream)}。
+     * 只需 1–2 行，因此耗时与内存都不随图片分辨率增长。输入流保持在协议头之后的位置，调用方若需要完整校验应重新打开文件并走 {@link #readFrame(InputStream, OutputStream)}。
      *
      * @param input PNG 输入流；本方法不会关闭
      * @return 已通过结构校验、且画布与 IHDR 一致的外层协议头
@@ -456,7 +454,6 @@ public final class PixelPngReader {
      * 明确识别为「IDAT 不连续」。每个 IDAT 的 CRC 都由 {@link PngChunkReader} 在边界验证。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class IdatSequenceInputStream extends InputStream {
 
@@ -567,7 +564,6 @@ public final class PixelPngReader {
      * 在 {@link InputStream} 接口中暂存结构化 PNG 异常的 IOException 包装。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class PngStreamException extends IOException {
 
@@ -594,7 +590,6 @@ public final class PixelPngReader {
      * 从反滤波 RGB 样本中抽取固定前缀或 EGTC-IMG 精确帧。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class LogicalExtractor {
 

@@ -48,7 +48,7 @@ import java.util.List;
  *   <li>preprocess — 合并分卷 + 去可否认加密层</li>
  *   <li>readHeader — RS 解码 header 各字段</li>
  *   <li>deriveKeys → processKeyfiles → verifyAuth（三态密码候选尝试）</li>
- *   <li>decryptPayload — fastDecode → XChaCha20 → Serpent</li>
+ *   <li>decryptPayload — 快速解码 → XChaCha20 → Serpent</li>
  *   <li>finalize — MAC 校验 + 全 RS 重试 + 原子重命名</li>
  * </ol>
  *
@@ -120,7 +120,7 @@ public final class Decryptor {
         LogService.info("Decryptor", "解密完成", (System.nanoTime() - t0) / 1_000_000L);
     }
 
-    // ==================== Phase 1: Preprocess ====================
+    // ==================== 阶段一：预处理 ====================
 
     /**
      * 解密预处理：合并分卷碎片、检测双卷可否认加密、检测并剥离旧版可否认加密外层。
@@ -181,7 +181,7 @@ public final class Decryptor {
         ctx.inputFile = inputFile;
     }
 
-    // ==================== Phase 2: Read header ====================
+    // ==================== 阶段二：读取卷头 ====================
 
     /**
      * 读取并 RS 解码卷头各字段。
@@ -204,7 +204,7 @@ public final class Decryptor {
         ctx.useKeyfiles = ctx.header.getFlags().isUseKeyfiles();
     }
 
-    // ==================== Phase 3-5: Derive + Keyfile + Verify ====================
+    // ==================== 阶段三至五：派生、密钥文件与认证 ====================
 
     /**
      * 依次尝试密码候选形态进行密钥派生、keyfile 处理与 header 认证。
@@ -341,7 +341,7 @@ public final class Decryptor {
         }
     }
 
-    // ==================== Phase 6: Decrypt payload ====================
+    // ==================== 阶段六：解密载荷 ====================
 
     /**
      * 解密载荷：RS 解码 → XChaCha20(+Serpent) 解密，每 60 GiB rekey 一次。
@@ -429,7 +429,7 @@ public final class Decryptor {
         SecureZero.zero(serpentKey);
     }
 
-    // ==================== Phase 7: Finalize ====================
+    // ==================== 阶段七：最终处理 ====================
 
     /**
      * 最终化：MAC 校验，必要时全 RS 重试，原子重命名为最终输出。

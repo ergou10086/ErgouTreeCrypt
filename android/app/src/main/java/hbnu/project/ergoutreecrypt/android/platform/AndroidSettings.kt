@@ -11,8 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import hbnu.project.ergoutreecrypt.log.JvmDiagnostics
 import hbnu.project.ergoutreecrypt.log.LogLevel
 import hbnu.project.ergoutreecrypt.log.LogService
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookCsv
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookCsv
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookEntry
 import hbnu.project.ergoutreecrypt.settings.SettingsManager
 import hbnu.project.ergoutreecrypt.settings.SplitMetadataMode
 import kotlinx.coroutines.flow.Flow
@@ -26,11 +26,9 @@ import kotlinx.coroutines.flow.map
  * 配置键名与桌面端 SettingsManager 保持一致，确保逻辑兼容。
  *
  * <p>每次 DataStore 值变更时，除了更新自身的 Flow 外，还会同步调用
- * {@link SettingsManager} 的 setter，确保共享核心代码（如 {@code ArchivePacker}、
- * {@code CryptoThreadPool}）能够读取到最新设置。
+ * {@link SettingsManager} 的 setter，确保共享核心代码（如 {@code ArchivePacker}、{@code CryptoThreadPool}）能够读取到最新设置。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 
 /** DataStore 单例扩展属性 */

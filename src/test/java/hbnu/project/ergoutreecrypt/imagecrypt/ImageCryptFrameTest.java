@@ -20,11 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link ImageCryptFrame} 的编解码与字段边界测试。
  *
  * <p>覆盖每个字段的合法/非法取值、未知 version/ID/flag、头 CRC 错误、非规范 KDF 组合与
- * 画布容量越界。篡改一律通过 {@code rewriteField}/{@code rewriteByte} 重算 CRC，使每个
- * 用例只隔离一个缺陷，不依赖校验顺序的偶然性。
+ * 画布容量越界。篡改一律通过 {@code rewriteField}/{@code rewriteByte} 重算 CRC，使每个用例只隔离一个缺陷，不依赖校验顺序的偶然性。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptFrameTest {
 

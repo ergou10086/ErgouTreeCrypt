@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Reproduce the real-file JVM/Android ART ZIPX four-direction matrix.
+"""复现真实文件的 JVM 与 Android ART ZIPX 四种生产端／读取端组合。
 
-Usage: python scripts/test_zipx_interop.py --adb PATH [--serial DEVICE]
+用法：python scripts/test_zipx_interop.py --adb PATH [--serial DEVICE]
        [--sevenzip PATH] [--source FILE] [--skip-generate] [--skip-build] [--refresh-raw]
-Transfers only task-owned artifacts via the debug app's private storage, without root.
+仅通过调试应用的私有目录搬运本任务产物，无需 root 权限。
 """
 import argparse
 import hashlib
@@ -23,12 +23,12 @@ OUTPUT = ROOT / "target/zipx-interop"
 
 
 def run(args, cwd=ROOT):
-    """Run a checked argument-vector command."""
+    """执行参数列表形式的命令，并检查退出状态。"""
     subprocess.run([str(arg) for arg in args], cwd=cwd, check=True)
 
 
 def transfer_to_app(adb, source):
-    """Stream a complete corpus into the task-owned debug application directory."""
+    """把完整语料以流方式传入本任务的调试应用目录。"""
     run(adb + ["shell", "run-as", PACKAGE, "mkdir", "-p", "files/zipx-interop/desktop"])
     process = subprocess.Popen(adb + ["exec-in", "run-as", PACKAGE, "tar", "-xf", "-", "-C", "files/zipx-interop/desktop"], stdin=subprocess.PIPE)
     try:
@@ -46,7 +46,7 @@ def transfer_to_app(adb, source):
 
 
 def transfer_from_app(adb, output):
-    """Retrieve artifacts without accepting symlinks or paths outside the output directory."""
+    """取回产物，拒绝符号链接和越出输出目录的路径。"""
     output.mkdir(parents=True, exist_ok=True)
     exported = "files/zipx-interop/android-export.tar"
     run(adb + ["shell", "run-as", PACKAGE, "tar", "-cf", exported, "-C", "files/zipx-interop/android", "."])
@@ -76,7 +76,7 @@ def transfer_from_app(adb, output):
 
 
 def external_verification(sevenzip, corpus):
-    """Use an external decoder to verify produced codecs and standard AES envelopes."""
+    """用外部解码器校验生成的编解码格式与标准 AES 封装。"""
     archives = sorted(corpus.glob("archive-*.zipx"))
     if len(archives) != 6:
         raise RuntimeError("Expected all six plain/AES production archives: " + str(corpus))
@@ -97,12 +97,12 @@ def external_verification(sevenzip, corpus):
 
 
 def sevenzip_password_bytes(password):
-    """Preserve UTF-8 password bytes through Windows 7-Zip's documented CP_ACP conversion.
+    """通过 Windows 7-Zip 文档描述的 CP_ACP 转换保持 UTF-8 密码字节。
 
-    This is a test adapter, not a claim that typing the same Unicode text in the
-    Windows 7-Zip UI is interoperable. Production passwords remain UTF-8 on both
-    runtimes. Fail rather than replace any bytes that the active code page cannot
-    represent. ASCII passwords need no adaptation.
+    这是测试适配器；它不表示在 Windows 7-Zip 界面键入相同 Unicode 文本即可互通。两端生产密码始终使用 UTF-8，当前代码页无法表示任一字节时直接失败，ASCII 密码无需适配。
+
+
+
     """
     if os.name != "nt" or password.isascii():
         return password

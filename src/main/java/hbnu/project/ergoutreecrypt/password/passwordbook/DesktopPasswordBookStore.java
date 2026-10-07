@@ -1,4 +1,4 @@
-package hbnu.project.ergoutreecrypt.passwordbook;
+package hbnu.project.ergoutreecrypt.password.passwordbook;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -17,7 +17,6 @@ import java.util.List;
  * <p>密码本保存在当前用户专用配置目录中；导入与导出均复用相同 CSV 格式。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class DesktopPasswordBookStore {
 

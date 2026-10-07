@@ -25,7 +25,6 @@ import androidx.core.content.ContextCompat
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/25
  */
 object PermissionManager {
 

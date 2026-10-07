@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 任何一条失败都说明 v1 契约被破坏，而不是说明测试需要更新。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptProtocolTest {
 

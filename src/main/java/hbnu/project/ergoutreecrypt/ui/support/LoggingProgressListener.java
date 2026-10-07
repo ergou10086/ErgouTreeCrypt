@@ -7,7 +7,6 @@ import hbnu.project.ergoutreecrypt.log.LogService;
  * 将文件隐写 {@link ProgressListener} 进度镜像到诊断日志。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class LoggingProgressListener implements ProgressListener {
 

@@ -11,7 +11,6 @@ import org.junit.Test
  * 以及线程数范围校验等不依赖 Context 的逻辑。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class AndroidSettingsTest {
 

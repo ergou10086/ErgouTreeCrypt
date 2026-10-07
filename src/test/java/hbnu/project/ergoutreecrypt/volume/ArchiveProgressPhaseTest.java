@@ -15,8 +15,7 @@ import java.util.Locale;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 验证加密后压缩路径中，压缩进度以 {@link ProgressPhase#ARCHIVE} 独立上报，
- * 且状态文案跟随当前语言。
+ * 验证加密后压缩路径中，压缩进度以 {@link ProgressPhase#ARCHIVE} 独立上报，且状态文案跟随当前语言。
  *
  * @author ErgouTree
  */

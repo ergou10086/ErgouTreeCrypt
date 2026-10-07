@@ -13,8 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ISO-BMFF（MP4）顶层 box 扫描器
- * 遍历文件的顶层 box 序列，定位 {@code ftyp}/{@code moov}/{@code mdat}及自定义 {@code uuid} 元数据 box。
+ * ISO-BMFF（MP4）顶层 box 扫描器遍历文件的顶层 box 序列，定位 {@code ftyp}/{@code moov}/{@code mdat}及自定义 {@code uuid} 元数据 box。
  *
  * <p>支持 32 位 size、64 位 largesize（size==1）、延伸至文件尾（size==0）。仅扫描顶层 box（V-MDAT 档只需定位 {@code mdat}）；子 box（如 {@code stbl}）的深入解析留待 V-SAMPLE 档。
  *

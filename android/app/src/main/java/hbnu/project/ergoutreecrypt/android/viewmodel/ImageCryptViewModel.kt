@@ -133,11 +133,9 @@ data class ImageCryptUiState(
  * EGTC-IMG Android 工作流 ViewModel。
  *
  * <p>ViewModel 处于 Activity 作用域，页面切换与旋转不会清空表单或中断任务。所有图片字节
- * 都以流式文件形式交给共享 {@link ImageCryptCodec}，不创建原图 Bitmap。输出在 SAF 或
- * MediaStore 场景下一律先写应用私有目录；还原只有在共享核心完成 MAC 校验并提交最终文件后，
- * 才复制到公共位置。
+ * 都以流式文件形式交给共享 {@link ImageCryptCodec}，不创建原图 Bitmap。输出在 SAF 或MediaStore 场景下一律先写应用私有目录；还原只有在共享核心完成 MAC 校验并提交最终文件后，才复制到公共位置。
  *
- * @param application Android Application
+ * @param application Android 应用实例
  */
 class ImageCryptViewModel(application: Application) : AndroidViewModel(application) {
 

@@ -8,7 +8,6 @@ import java.util.prefs.Preferences;
  * 应用设置持久化管理器，基于 Java Preferences API。
  *
  * @author ErgouTree
- * @since 2026/6/23
  */
 public final class SettingsManager {
 

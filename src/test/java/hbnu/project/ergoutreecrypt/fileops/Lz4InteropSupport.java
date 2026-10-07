@@ -8,7 +8,7 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
 
-/** Cross-runtime harness: desktop JVM and Android ART exchange the same files. */
+/** 跨运行时测试入口：桌面 JVM 与 Android ART 交换同一批文件。 */
 public final class Lz4InteropSupport {
     public static final String VOLUME_PASSWORD = "volume-密码🔑";
     public static final String ARCHIVE_PASSWORD = "archive-密码🔑";
@@ -74,7 +74,7 @@ public final class Lz4InteropSupport {
         EncryptRequest req = new EncryptRequest();
         req.setInputFile(source.toString()); req.setOutputFile(root.resolve(id + ".ergou").toString());
         req.setPassword(VOLUME_PASSWORD); req.setRsCodecs(new RsCodecs());
-        // Small but distinct test KDF profiles; production defaults remain unchanged.
+        // 小型且不同的测试 KDF 档位；生产默认参数保持不变。
         req.setArgon2MemoryKib(mobile ? 8192 : 16384); req.setArgon2Passes(1); req.setArgon2Threads(1);
         if (workflow.equals("pre")) {
             if (fmt == ArchivePacker.Format.TAR_LZ4) req.setInputFiles(List.of(source.toString(), notes.toString()));

@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * 隐写的既有文件将无法解密。本测试用"等价形态比较 + 冻结向量"两道防线守住这一点。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class HkdfStreamInfoTest {
 

@@ -11,7 +11,6 @@ import hbnu.project.ergoutreecrypt.volume.ProgressReporter;
  * 本装饰器不改变委托对象的取消语义。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class LoggingProgressReporter implements ProgressReporter {
 

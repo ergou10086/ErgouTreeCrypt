@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 看图软件打开。它们不依赖文件系统与密码学，因此可以逐条穷举边界，而不必跑完整流程。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptNamingAndCanvasTest {
 
@@ -56,8 +55,7 @@ final class ImageCryptNamingAndCanvasTest {
      * 对<b>已经清洗过</b>的清单基名，恢复命名必须产出一个普通文件名。
      *
      * <p>路径穿越防护不在本函数里：清单侧 {@code InnerManifest.safeBasename()} 负责剥离目录与
-     * 盘符，{@code ImageCryptCodec} 侧还会复查解析出的父目录是否就是目标目录。这里只确认
-     * 正常输入下的拼接形态，避免把安全责任错误地摊到命名函数上。
+     * 盘符，{@code ImageCryptCodec} 侧还会复查解析出的父目录是否就是目标目录。这里只确认正常输入下的拼接形态，避免把安全责任错误地摊到命名函数上。
      */
     @Test
     void restoredOutputNameUsesSanitizedBasenameAsIs() {

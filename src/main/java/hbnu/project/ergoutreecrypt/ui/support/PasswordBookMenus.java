@@ -1,8 +1,8 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
-import hbnu.project.ergoutreecrypt.passwordbook.DesktopPasswordBookStore;
+import hbnu.project.ergoutreecrypt.password.passwordbook.DesktopPasswordBookStore;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry;
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookEntry;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextInputControl;
@@ -16,7 +16,6 @@ import java.util.List;
  * 为桌面端密码输入框安装密码本下拉菜单。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class PasswordBookMenus {
 

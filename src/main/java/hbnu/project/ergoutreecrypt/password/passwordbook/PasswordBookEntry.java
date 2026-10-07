@@ -1,4 +1,4 @@
-package hbnu.project.ergoutreecrypt.passwordbook;
+package hbnu.project.ergoutreecrypt.password.passwordbook;
 
 import java.util.Objects;
 
@@ -6,7 +6,6 @@ import java.util.Objects;
  * 密码本中的一条名称与密码记录。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class PasswordBookEntry {
 

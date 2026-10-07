@@ -83,7 +83,7 @@ public final class HeaderReader {
         boolean nonCommentDecodeError = false;
         int bytesRead = 0;
 
-        // 1. version: RS5(15→5)
+        // 1. 版本：RS5(15→5)
         byte[] versionEnc = new byte[HeaderLayout.VERSION_ENC_SIZE];
         int n = readFull(versionEnc);
         bytesRead += n;
@@ -99,7 +99,7 @@ public final class HeaderReader {
             throw new CryptoException(ErrorKind.INVALID_HEADER, ERR_INVALID_VERSION);
         }
 
-        // 2. comment length: RS5(15→5)
+        // 2. 注释长度：RS5(15→5)
         byte[] commentLenEnc = new byte[HeaderLayout.COMMENT_LEN_ENC_SIZE];
         n = readFull(commentLenEnc);
         bytesRead += n;
@@ -143,7 +143,7 @@ public final class HeaderReader {
         }
         h.setComments(new String(commentBytes, StandardCharsets.UTF_8));
 
-        // 4. flags: RS5(15→5)
+        // 4. 标志位：RS5(15→5)
         byte[] flagsEnc = new byte[HeaderLayout.FLAGS_ENC_SIZE];
         n = readFull(flagsEnc);
         bytesRead += n;
@@ -155,7 +155,7 @@ public final class HeaderReader {
         }
         h.setFlags(Flags.fromBytes(fd.data));
 
-        // 5. salt: RS16(48→16)
+        // 5. 盐值：RS16(48→16)
         byte[] saltEnc = new byte[HeaderLayout.SALT_ENC_SIZE];
         n = readFull(saltEnc);
         bytesRead += n;
@@ -167,7 +167,7 @@ public final class HeaderReader {
         }
         h.setSalt(sd.data);
 
-        // 6. hkdfSalt: RS32(96→32)
+        // 6. HKDF 盐值：RS32(96→32)
         byte[] hkdfSaltEnc = new byte[HeaderLayout.HKDF_SALT_ENC_SIZE];
         n = readFull(hkdfSaltEnc);
         bytesRead += n;
@@ -179,7 +179,7 @@ public final class HeaderReader {
         }
         h.setHkdfSalt(hd.data);
 
-        // 7. serpentIV: RS16(48→16)
+        // 7. Serpent 初始化向量：RS16(48→16)
         byte[] serpentIVEnc = new byte[HeaderLayout.SERPENT_IV_ENC_SIZE];
         n = readFull(serpentIVEnc);
         bytesRead += n;
@@ -191,7 +191,7 @@ public final class HeaderReader {
         }
         h.setSerpentIV(sid.data);
 
-        // 8. nonce: RS24(72→24)
+        // 8. 随机数：RS24(72→24)
         byte[] nonceEnc = new byte[HeaderLayout.NONCE_ENC_SIZE];
         n = readFull(nonceEnc);
         bytesRead += n;
@@ -220,7 +220,7 @@ public final class HeaderReader {
             h.setCompressed(cd.data.length > 0 && cd.data[0] == 1);
         }
 
-        // 9. keyHash: RS64(192→64)
+        // 9. 密钥哈希：RS64(192→64)
         byte[] keyHashEnc = new byte[HeaderLayout.KEY_HASH_ENC_SIZE];
         n = readFull(keyHashEnc);
         bytesRead += n;
@@ -232,7 +232,7 @@ public final class HeaderReader {
         }
         h.setKeyHash(khd.data);
 
-        // 10. keyfileHash: RS32(96→32)
+        // 10. 密钥文件哈希：RS32(96→32)
         byte[] keyfileHashEnc = new byte[HeaderLayout.KEYFILE_HASH_ENC_SIZE];
         n = readFull(keyfileHashEnc);
         bytesRead += n;
@@ -244,7 +244,7 @@ public final class HeaderReader {
         }
         h.setKeyfileHash(kfhd.data);
 
-        // 11. authTag: RS64(192→64)
+        // 11. 认证标签：RS64(192→64)
         byte[] authTagEnc = new byte[HeaderLayout.AUTH_TAG_ENC_SIZE];
         n = readFull(authTagEnc);
         bytesRead += n;
@@ -288,9 +288,7 @@ public final class HeaderReader {
      * 只读判断输入流开头是否为合法卷头（version 字段可解码且形如 {@code v\d.\d\d}）。
      *
      * <p>供文件选择预检使用：仅消费 version 字段、不读取后续数据。与直接调用
-     * {@link #peekVersion} 的区别在于，本方法还会校验解码结果是否真的形如版本号——
-     * 任意字节经 RS 解码后可能得到一个"看起来没损坏"的字符串，必须再比对格式，
-     * 否则会把普通文件误判为加密卷。任何探测失败一律返回 {@code false}。
+     * {@link #peekVersion} 的区别在于，本方法还会校验解码结果是否真的形如版本号——任意字节经 RS 解码后可能得到一个"看起来没损坏"的字符串，必须再比对格式，否则会把普通文件误判为加密卷。任何探测失败一律返回 {@code false}。
      *
      * @param in header 数据的输入流
      * @param rs 预初始化的 RS 编解码器集合
@@ -318,7 +316,7 @@ public final class HeaderReader {
      * 从原始 6 字节解码 Argon2 参数并填充到 VolumeHeader。
      *
      * <p>使用 RS6 解码 18 字节编码数据 → 6 字节原始数据，然后按布局解析：
-     * memoryKib（4B, BE int32）+ passes（1B, uint8）+ threads（1B, uint8）。
+     * 内存（4 字节，大端 int32）+ 迭代次数（1 字节，uint8）+ 并行线程（1 字节，uint8）。
      *
      * <p>RS 解码失败时（数据损坏），参数置 0（等效于使用默认值）。
      *

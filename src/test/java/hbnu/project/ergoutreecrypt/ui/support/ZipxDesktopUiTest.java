@@ -10,17 +10,17 @@ import java.util.List;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Exercises ZIPX format and native password controls in both actual desktop FXML views. */
+/** 在两个真实桌面 FXML 页面中验证 ZIPX 格式与原生密码控件。 */
 @EnabledIfSystemProperty(named = "ergoutreecrypt.uiTests", matches = "true")
 class ZipxDesktopUiTest {
-    /** Starts JavaFX for the opt-in UI regression. */
+    /** 启动 JavaFX，执行显式启用的界面回归。 */
     @BeforeAll static void toolkit() throws Exception {
         CountDownLatch ready = new CountDownLatch(1);
         Platform.startup(() -> { Platform.setImplicitExit(false); ready.countDown(); });
         assertTrue(ready.await(15, TimeUnit.SECONDS));
     }
 
-    /** ZIPX password fields remain visible independently of the custom encryption switch. */
+    /** ZIPX 密码输入框的可见性不受自定义加密开关影响。 */
     @Test void generalAndMediaViewsExposeNativeZipx() throws Exception {
         boolean saved = SettingsManager.isArchiveCustomEncryption();
         SettingsManager.setArchiveCustomEncryption(false);

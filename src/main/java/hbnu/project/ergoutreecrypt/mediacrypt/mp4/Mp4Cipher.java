@@ -23,8 +23,7 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * <p>元数据载体：文件末尾追加自定义 {@code uuid} box（{@link Mp4UuidMetadata}），不改变 {@code mdat} 偏移。
  *
  * <p>对 {@code mdat} 使用 size==0（ISO-BMFF"延伸至文件尾"）的源文件，
- * 解密时通过回退扫描（{@link BoxParser#scanForMetaUuidBox}）定位被 mdat 吞并的 uuid box，
- * 不会修改原文件的 mdat 头，因此解密可逐字节还原原始文件。
+ * 解密时通过回退扫描（{@link BoxParser#scanForMetaUuidBox}）定位被 mdat 吞并的 uuid box，不会修改原文件的 mdat 头，因此解密可逐字节还原原始文件。
  *
  * @author ErgouTree
  */

@@ -7,11 +7,9 @@ import java.util.List;
  * JVM 层诊断采集。
  *
  * <p>默认关闭。开启后记录堆快照、GC 累计次数/耗时，并把未捕获异常写入 {@link LogService}。
- * 实现仅依赖 JDK 反射探测 MXBean，Android 上缺失 {@code java.management} 时自动降级为
- * {@link Runtime} 堆信息，不引入 SLF4J / Logback（桌面端由独立模块接入）。
+ * 实现仅依赖 JDK 反射探测 MXBean，Android 上缺失 {@code java.management} 时自动降级为{@link Runtime} 堆信息，不引入 SLF4J / Logback（桌面端由独立模块接入）。
  *
  * @author ErgouTree
- * @since 2026/8/27
  */
 public final class JvmDiagnostics {
 

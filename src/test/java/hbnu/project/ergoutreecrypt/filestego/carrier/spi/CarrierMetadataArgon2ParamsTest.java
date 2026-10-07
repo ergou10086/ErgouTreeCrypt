@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * 全零字段向后兼容（默认参数）、非法组合拒绝、旧格式字节布局不变。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class CarrierMetadataArgon2ParamsTest {
 

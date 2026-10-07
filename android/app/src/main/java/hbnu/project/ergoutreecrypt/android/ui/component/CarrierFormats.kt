@@ -7,7 +7,6 @@ package hbnu.project.ergoutreecrypt.android.ui.component
  * 避免多处重复定义导致不一致。
  *
  * @author ErgouTree
- * @since 2026/8/13
  */
 
 /** 支持的所有载体文件扩展名（含 "." 前缀，小写） */

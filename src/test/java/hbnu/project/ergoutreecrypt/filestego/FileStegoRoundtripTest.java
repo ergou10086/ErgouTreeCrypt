@@ -25,8 +25,7 @@ import java.util.zip.ZipOutputStream;
  * 文件隐写 PNG / ZIP 载体端到端往返测试（M1.1 / M1.2）。
  *
  * <p>覆盖 PNG（stEG chunk 与 IEND 追加两套不受限方案）与 ZIP（EOCD 末尾追加），
- * 并在 normal / paranoid / stealth 三种模式下验证 hide → extract 数据一致性、
- * 检测能力与容器可读性。
+ * 并在 normal / paranoid / stealth 三种模式下验证 hide → extract 数据一致性、检测能力与容器可读性。
  *
  * @author ErgouTree
  */

@@ -27,7 +27,6 @@ import hbnu.project.ergoutreecrypt.i18n.Messages
  * @param iconSize 旋转圆圈直径
  * @param vertical 为 true 时垂直居中排列（用于空状态卡片），否则水平排列（用于行内提示）
  * @author ErgouTree
- * @since 2026/8/15
  */
 @Composable
 fun PickerLoadingIndicator(

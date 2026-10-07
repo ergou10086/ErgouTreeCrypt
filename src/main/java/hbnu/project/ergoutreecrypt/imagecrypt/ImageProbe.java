@@ -10,8 +10,7 @@ import java.nio.file.Path;
  *
  * <h3>职责边界</h3>
  * <p>本类只回答两件事：输入是不是受支持的图片，以及它的原始宽高提示是多少。
- * 它<b>不解码像素</b>、不创建 {@code BufferedImage}/Bitmap、不遍历任意长度的元数据，
- * 因此调用开销固定且与图片分辨率无关。
+ * 它<b>不解码像素</b>、不创建 {@code BufferedImage}/Bitmap、不遍历任意长度的元数据，因此调用开销固定且与图片分辨率无关。
  *
  * <h3>判定规则</h3>
  * <ul>
@@ -22,13 +21,11 @@ import java.nio.file.Path;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class ImageProbe {
 
     /**
-     * 探测读取的前缀字节上限。足以覆盖 PNG IHDR、GIF 逻辑屏幕描述符、BMP DIB 头、
-     * WebP 首个 chunk，以及带常见 EXIF/ICC 段的 JPEG 首个 SOF marker。
+     * 探测读取的前缀字节上限。足以覆盖 PNG IHDR、GIF 逻辑屏幕描述符、BMP DIB 头、WebP 首个 chunk，以及带常见 EXIF/ICC 段的 JPEG 首个 SOF marker。
      */
     public static final int PROBE_PREFIX_BYTES = 8192;
 
@@ -134,8 +131,7 @@ public final class ImageProbe {
      *
      * <p>刻意不用 {@code InputStream#readNBytes(int)}：它自 Android 13（API 33）才存在，而本项目
      * minSdk 为 26，依赖它会让共享核心在旧设备上崩溃——这类问题在宿主 JVM 测试中完全不可见。
-     * 这里只使用 JDK 8 就已具备的 {@code read(byte[], int, int)}。文件短于上限时返回实际长度，
-     * 与 {@code readNBytes} 的语义一致。
+     * 这里只使用 JDK 8 就已具备的 {@code read(byte[], int, int)}。文件短于上限时返回实际长度，与 {@code readNBytes} 的语义一致。
      *
      * @param input 输入流；本方法不会关闭
      * @param limit 读取上限

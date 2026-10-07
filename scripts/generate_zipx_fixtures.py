@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate independent small ZIPX fixtures with Python codecs and optional 7-Zip.
+"""使用 Python 编解码器和可选的 7-Zip 生成独立的小型 ZIPX 样例。
 
-Usage: python scripts/generate_zipx_fixtures.py [--sevenzip PATH]
-The golden files contain synthetic text only. The production Java writer is never used.
+用法：python scripts/generate_zipx_fixtures.py [--sevenzip PATH]
+黄金样例只包含合成文本，不调用生产环境的 Java 写入器。
 """
 import argparse
 import binascii
@@ -20,7 +20,7 @@ PAYLOAD = b"Independent ZIPX reference\n" * 32
 
 
 class NonSeekable(io.BytesIO):
-    """Force Python's ZIP data-descriptor path."""
+    """强制走 Python 的 ZIP 数据描述符路径。"""
     def seekable(self):
         return False
 
@@ -29,7 +29,7 @@ class NonSeekable(io.BytesIO):
 
 
 def raw_zip(name, method, data, extra=b"", flags=0, crc=None):
-    """Serialize ZIP records independently of Commons Compress and the Java writer."""
+    """独立序列化 ZIP 记录，不依赖 Commons Compress 或 Java 写入器。"""
     filename = b"payload.txt"
     crc = binascii.crc32(PAYLOAD) if crc is None else crc
     local = struct.pack("<I5H3I2H", 0x04034b50, 63, flags, method, 0, 0x21,
@@ -43,7 +43,7 @@ def raw_zip(name, method, data, extra=b"", flags=0, crc=None):
 
 
 def aes_fixtures():
-    """Use independent PBKDF2, AES-ECB counter blocks and HMAC for AE-1 and AE-2."""
+    """使用独立的 PBKDF2、AES-ECB 计数器块和 HMAC 生成 AE-1、AE-2 样例。"""
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     import hmac
     compressed = lzma.compress(PAYLOAD, format=lzma.FORMAT_XZ, preset=3)

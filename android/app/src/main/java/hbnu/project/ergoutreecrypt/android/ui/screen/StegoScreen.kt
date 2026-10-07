@@ -134,7 +134,6 @@ private val TIP_STEGO_ZSTD = "在隐写加密前使用 Zstandard 压缩原文件
  * <p>注意：移动端不使用 LSB 像素域隐写（依赖 java.awt），仅使用 Chunk/追加模式。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable

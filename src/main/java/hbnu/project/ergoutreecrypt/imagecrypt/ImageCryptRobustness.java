@@ -7,7 +7,6 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * 2×2 像素块重复。代价是可承载的恢复副本更小，超过上限的原图会先转成有损 JPEG。
  *
  * @author ErgouTree
- * @since 2026/9/18
  */
 public enum ImageCryptRobustness {
 

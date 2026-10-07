@@ -67,7 +67,7 @@ public final class CryptoThreadPool {
      */
     private ThreadPoolExecutor build() {
         ThreadPoolExecutor pool = new ThreadPoolExecutor(
-                threadCount,               // corePoolSize
+                threadCount,               // 核心线程池大小
                 threadCount,               // maximumPoolSize（固定大小）
                 0L,                        // keepAliveTime（无超出核心的线程需要回收）
                 TimeUnit.MILLISECONDS,

@@ -250,8 +250,7 @@ public class ImageStegoController {
 
     /**
      * 更新 LSB 标签页选项联动：
-     * - 隐蔽模式：需要密码
-     * - 防暴力破解：需要密码（无密码时无法区分正确/错误）
+     * - 隐蔽模式：需要密码- 防暴力破解：需要密码（无密码时无法区分正确/错误）
      */
     private void updateOptionLinkage() {
         boolean hasPassword = getLsbPasswordLength() > 0;
@@ -893,7 +892,7 @@ public class ImageStegoController {
         stegoExtractTab.setText(Messages.get("stego.mode.extract"));
         stegoChunkHideTab.setText(Messages.get("stego.mode.hide"));
         stegoChunkExtractTab.setText(Messages.get("stego.mode.extract"));
-        // LSB
+        // 最低有效位
         stegoImageLabel.setText(Messages.get("stego.image.label"));
         stegoImageBtn.setText(Messages.get("stego.image.choose"));
         stegoClearImageBtn.setText(Messages.get("stego.image.clear"));
@@ -911,7 +910,7 @@ public class ImageStegoController {
         stegoObfuscateSizeLabel.setText(Messages.get("stego.option.obfuscateSize"));
         stegoBruteForceLabel.setText(Messages.get("stego.option.bruteForce"));
         stegoCapacityLabel.setText(Messages.get("stego.capacity.label"));
-        // Chunk
+        // 数据块
         stegoChunkImageLabel.setText(Messages.get("stego.image.label"));
         stegoChunkImageBtn.setText(Messages.get("stego.image.choose"));
         stegoChunkClearImageBtn.setText(Messages.get("stego.image.clear"));

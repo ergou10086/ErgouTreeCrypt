@@ -48,16 +48,13 @@ import java.util.List;
  * 主窗口右侧的翻书式日志伴生窗。
  *
  * <p>以与主窗同等尺寸的无边框窗口贴靠在右侧（空间不足则改贴左侧），
- * 主窗移动或缩放时跟随，形成「两页书」的观感。内容为实时刷新的只读日志，
- * 支持按级别着色、多选行复制、清空与导出。关闭本窗不影响主窗。
+ * 主窗移动或缩放时跟随，形成「两页书」的观感。内容为实时刷新的只读日志，支持按级别着色、多选行复制、清空与导出。关闭本窗不影响主窗。
  *
  * <p>正文用 {@link ListView} 而非 {@code TextArea}：JavaFX 的 {@code TextArea}
- * 无法为同一段落内的不同片段着色，而日志需要按级别区分颜色（TRACE 灰、WARN 琥珀、
- * ERROR 红）；{@code TextFlow} 在 JavaFX 21 上又没有选区与复制能力。
+ * 无法为同一段落内的不同片段着色，而日志需要按级别区分颜色（TRACE 灰、WARN 琥珀、ERROR 红）；{@code TextFlow} 在 JavaFX 21 上又没有选区与复制能力。
  * 列表自带虚拟化，长时间开启 TRACE 也不会因行数增长而卡顿。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class LogCompanionWindow {
 

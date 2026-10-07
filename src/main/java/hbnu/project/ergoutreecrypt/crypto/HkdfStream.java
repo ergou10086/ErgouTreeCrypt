@@ -12,12 +12,9 @@ import org.bouncycastle.crypto.params.HKDFParameters;
  * 哈希函数为 SHA3-256。
  *
  * <p><b>info 参数</b>：RFC 5869 用 info 把派生密钥绑定到应用与协议上下文。两参构造器沿用
- * 历史行为（info 为空），仅供卷、媒体与隐写的既有文件使用，<b>不可修改</b>；新协议必须使用
- * {@link #HkdfStream(byte[], byte[], byte[])} 传入自己的上下文，避免同一输入密钥在不同
- * 场景派生出相同材料。
+ * 历史行为（info 为空），仅供卷、媒体与隐写的既有文件使用，<b>不可修改</b>；新协议必须使用{@link #HkdfStream(byte[], byte[], byte[])} 传入自己的上下文，避免同一输入密钥在不同场景派生出相同材料。
  *
  * @author ErgouTree
- * @since 2026/6/16
  */
 public final class HkdfStream {
 

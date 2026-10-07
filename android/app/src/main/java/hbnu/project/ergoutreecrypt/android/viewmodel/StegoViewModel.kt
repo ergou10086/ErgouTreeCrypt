@@ -36,7 +36,6 @@ import java.nio.file.Paths
  * 侧车数据库目录，确保提取操作中的密码验证限速正常工作。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 class StegoViewModel(private val appContext: Context) : ViewModel() {
 

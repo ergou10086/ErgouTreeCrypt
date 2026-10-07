@@ -41,13 +41,13 @@ class EncryptDepthTest {
      * 创建三层目录结构：
      * <pre>
      * in/
-     *   f0.txt          (depth 1)
-     *   sub1/            (depth 1)
-     *     f1.txt         (depth 2)
-     *     sub2/           (depth 2)
-     *       f2.txt        (depth 3)
-     *       sub3/          (depth 3)
-     *         f3.txt       (depth 4)
+     *   f0.txt          （深度一）
+     *   sub1/            （深度一）
+     *     f1.txt         （深度二）
+     *     sub2/           （深度二）
+     *       f2.txt        （深度三）
+     *       sub3/          （深度三）
+     *         f3.txt       （深度四）
      * </pre>
      */
     private static Path createDeepTree(Path tmp) throws Exception {
@@ -305,7 +305,7 @@ class EncryptDepthTest {
     }
 
     // ================================================================
-    // Helper
+    // 辅助方法
     // ================================================================
 
     private static byte[] findFile(Path root, String name) throws Exception {

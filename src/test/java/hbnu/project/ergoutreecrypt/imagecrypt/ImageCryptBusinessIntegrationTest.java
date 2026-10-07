@@ -29,11 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Phase 5 共享业务接入测试。
  *
  * <p>覆盖图片加密三类输入护栏、通用入口分流、历史类型和双语阶段文案。测试只生成一个
- * 极小公开恢复产物，不执行 Argon2，也不依赖平台 UI，因此桌面与 Android 同步源码采用的是
- * 同一组稳定业务契约。
+ * 极小公开恢复产物，不执行 Argon2，也不依赖平台 UI，因此桌面与 Android 同步源码采用的是同一组稳定业务契约。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptBusinessIntegrationTest {
 

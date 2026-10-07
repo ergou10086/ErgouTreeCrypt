@@ -10,11 +10,9 @@ import org.junit.Test
  * Argon2id 移动端参数档位测试。
  *
  * <p>验证 AUTO / BALANCED / LIGHT 档位的参数正确性、AUTO 按堆自动降档、
- * 未知键回退 AUTO 等行为。自 2026/8/28 起移除 1 GiB 的 STANDARD 档，
- * 移动端默认使用 AUTO（保证堆内派生）。
+ * 未知键回退 AUTO 等行为。自 2026/8/28 起移除 1 GiB 的 STANDARD 档，移动端默认使用 AUTO（保证堆内派生）。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class Argon2MobileModeTest {
 

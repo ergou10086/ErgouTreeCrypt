@@ -109,8 +109,7 @@ data class BottomNavItem(
  * 应用一级导航图。
  *
  * <p>{@code PagerState} 是选中页面唯一真值。目的地数量完全从集合推导，底栏最多展示六项，
- * 已稳定页面驱动最小窗口移动。Pager 仅保留相邻一页，表单和长任务由 Activity 作用域
- * ViewModel 保存，页面数增长不会线性增加首帧与内存开销。
+ * 已稳定页面驱动最小窗口移动。Pager 仅保留相邻一页，表单和长任务由 Activity 作用域ViewModel 保存，页面数增长不会线性增加首帧与内存开销。
  */
 @Composable
 fun ErgouNavGraph() {

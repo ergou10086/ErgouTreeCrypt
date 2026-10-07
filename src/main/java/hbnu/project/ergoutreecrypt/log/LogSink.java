@@ -6,7 +6,6 @@ package hbnu.project.ergoutreecrypt.log;
  * <p>实现必须线程安全；写入失败应自行消化，不得向上抛出，以免干扰主流程。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public interface LogSink {
 

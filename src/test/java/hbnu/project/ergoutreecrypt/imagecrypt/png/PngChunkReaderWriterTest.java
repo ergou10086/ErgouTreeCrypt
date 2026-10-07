@@ -18,7 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link PngChunkWriter} 与 {@link PngChunkReader} 的块级流式测试。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PngChunkReaderWriterTest {
 

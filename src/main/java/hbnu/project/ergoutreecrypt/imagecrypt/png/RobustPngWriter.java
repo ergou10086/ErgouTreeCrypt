@@ -23,7 +23,6 @@ import java.util.zip.DeflaterOutputStream;
  * 为 JPEG 引入的亮度偏移保留最大判决余量；极强档还把每个符号复制到 2×2 像素块。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class RobustPngWriter {
 
@@ -213,7 +212,6 @@ public final class RobustPngWriter {
      * 把连续 zlib 数据切成有限大小的 IDAT 块。
      *
      * @author ErgouTree
-     * @since 2026/9/17
      */
     private static final class ChunkedIdatOutputStream extends OutputStream {
 

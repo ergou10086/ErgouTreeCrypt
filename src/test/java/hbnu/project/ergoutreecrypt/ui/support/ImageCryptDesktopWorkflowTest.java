@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 不启动 JavaFX 工具包，因此可在常规 Maven 与 CI 环境稳定运行。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptDesktopWorkflowTest {
 

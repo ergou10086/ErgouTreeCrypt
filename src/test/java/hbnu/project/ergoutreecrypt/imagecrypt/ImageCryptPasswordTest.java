@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * 就不会导致同一口令派生出两把密钥。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptPasswordTest {
 

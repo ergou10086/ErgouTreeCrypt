@@ -5,7 +5,7 @@ import java.nio.file.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.*;
 
-/** Opt-in real-file corpus exchange with Android instrumentation (not a simulated mobile JVM). */
+/** 显式启用的真实文件与 Android 设备语料交换，不用 JVM 模拟移动端。 */
 class Lz4InteropTest {
     @Test void desktopCorpusAndDesktopSelfRead() throws Exception {
         assumeTrue(Boolean.getBoolean("lz4.interop.generate"), "Opt-in corpus generation");

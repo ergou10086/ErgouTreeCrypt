@@ -23,7 +23,6 @@ import java.nio.file.NoSuchFileException;
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/9/13
  */
 public final class ExceptionMapper {
 

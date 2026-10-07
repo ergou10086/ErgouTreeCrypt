@@ -7,7 +7,6 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaProgress;
  * 将 {@link MediaProgress} 进度镜像到诊断日志。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class LoggingMediaProgress implements MediaProgress {
 

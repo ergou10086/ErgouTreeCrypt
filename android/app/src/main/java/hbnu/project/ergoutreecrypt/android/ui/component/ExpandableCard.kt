@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.dp
  * @param modifier   修饰符
  * @param content    折叠区域内的 Composable 内容
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun ExpandableCard(

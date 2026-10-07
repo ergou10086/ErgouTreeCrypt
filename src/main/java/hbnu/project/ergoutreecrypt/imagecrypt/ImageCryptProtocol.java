@@ -7,8 +7,7 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  *
  * <h3>定位</h3>
  * <p>本类冻结 v1 的全部字节偏移、长度、字节序、算法 ID、认证覆盖范围、KDF 参数与硬上限。
- * 桌面端（JavaFX）与 Android 端（Compose）共享同一份纯 Java 核心，两端都必须从本类取值，
- * 禁止任一端自行定义第二套常量或按平台默认值推断。
+ * 桌面端（JavaFX）与 Android 端（Compose）共享同一份纯 Java 核心，两端都必须从本类取值，禁止任一端自行定义第二套常量或按平台默认值推断。
  *
  * <h3>冻结规则</h3>
  * <p>本类中任何随稳定版发布的取值，其语义、偏移与字节序都<b>不可原位修改</b>。
@@ -21,7 +20,6 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * 只有密码保护模式通过 Argon2id 派生密钥提供机密性与完整性。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class ImageCryptProtocol {
 
@@ -366,11 +364,10 @@ public final class ImageCryptProtocol {
      */
     public static final int ARGON2_OUTPUT_LENGTH = 32;
 
-    // ==================== InnerManifest v1 ====================
+    // ==================== 内部清单 v1 ====================
 
     /**
-     * InnerManifest 固定描述区长度（字节）：魔数 8 + 版本 1 + 格式 1 + flags 2 +
-     * 描述长度 4 + 原文件长度 8 + 名称长度 2 + MIME 长度 1 + 扩展名长度 1。
+     * InnerManifest 固定描述区长度（字节）：魔数 8 + 版本 1 + 格式 1 + flags 2 +描述长度 4 + 原文件长度 8 + 名称长度 2 + MIME 长度 1 + 扩展名长度 1。
      */
     public static final int INNER_MANIFEST_FIXED_LENGTH = 28;
 
@@ -532,9 +529,7 @@ public final class ImageCryptProtocol {
      * 为给定载荷挑选外层 PNG 画布尺寸。
      *
      * <p>规则见协议规范"画布尺寸"一节：优先按原图长宽比挑选接近 {@code requiredPixels} 的矩形，
-     * 长宽比先裁剪到 {@code [1/16, 16]}，避免极端长条图产生无法打开的画布；当某一维触碰
-     * {@link #LIMIT_CANVAS_SIDE} 时按上限回退重算另一维。所有运算使用 {@code long} 且带显式
-     * 溢出检查，因此伪造的超大载荷不会导致整数回绕或数组分配。
+     * 长宽比先裁剪到 {@code [1/16, 16]}，避免极端长条图产生无法打开的画布；当某一维触碰{@link #LIMIT_CANVAS_SIDE} 时按上限回退重算另一维。所有运算使用 {@code long} 且带显式溢出检查，因此伪造的超大载荷不会导致整数回绕或数组分配。
      *
      * <p>返回的画布保证 {@code 3 × width × height ≥ frameBytes}，因此调用方无需再做容量判定；
      * 但画布仍需由 writer 写入 IHDR，并由 reader 复核与协议头 {@code canvasWidth/Height} 一致。

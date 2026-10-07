@@ -18,10 +18,10 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Checks the real mobile media ViewModel's ZIPX format and native password propagation. */
+/** 检查真实移动端媒体 ViewModel 的 ZIPX 格式与原生密码传递。 */
 @RunWith(AndroidJUnit4::class)
 class ZipxMediaArchiveTest {
-    /** Plain and password-protected ZIPX media output restores the original WAV bytes. */
+    /** 普通及带密码的 ZIPX 媒体输出均逐字节还原原始 WAV。 */
     @Test fun mediaViewModelUsesNativeZipx() {
         val instrument = InstrumentationRegistry.getInstrumentation()
         val root = File(instrument.targetContext.cacheDir, "zipx-media").apply { mkdirs() }

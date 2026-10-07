@@ -1,9 +1,9 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
 import hbnu.project.ergoutreecrypt.i18n.Messages;
-import hbnu.project.ergoutreecrypt.passwordbook.DesktopPasswordBookStore;
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry;
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookCsv;
+import hbnu.project.ergoutreecrypt.password.passwordbook.DesktopPasswordBookStore;
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookEntry;
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookCsv;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -41,7 +41,6 @@ import java.util.function.Function;
  * 桌面端密码本编辑、导入与导出对话框。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class PasswordBookDialog {
 

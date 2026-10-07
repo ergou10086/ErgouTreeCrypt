@@ -32,8 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import hbnu.project.ergoutreecrypt.android.platform.AndroidSettings
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookCsv
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookCsv
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

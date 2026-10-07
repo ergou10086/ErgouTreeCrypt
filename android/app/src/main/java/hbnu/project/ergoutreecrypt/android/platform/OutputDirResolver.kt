@@ -9,9 +9,7 @@ import java.io.File
  * 移动端默认输出目录解析器。
  *
  * <p>桌面端习惯把产物写到输入文件同级目录，但 Android 10+ 分区存储下
- * 应用默认无权直写公共目录（澎湃OS/MIUI 等国产 ROM 上更严格），直接写
- * {@code /storage/emulated/0/...} 会抛 AccessDeniedException，表现为
- * "解密失败"。本类按当前权限能力决定默认输出策略：
+ * 应用默认无权直写公共目录（澎湃OS/MIUI 等国产 ROM 上更严格），直接写{@code /storage/emulated/0/...} 会抛 AccessDeniedException，表现为"解密失败"。本类按当前权限能力决定默认输出策略：
  * <ul>
  *   <li>API 30+ 且已授予"所有文件访问权限"→ 直写公共 下载/ErgouTreeCrypt</li>
  *   <li>API 26–28 且有旧版写入权限 → 直写公共 下载/ErgouTreeCrypt</li>
@@ -21,7 +19,6 @@ import java.io.File
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/25
  */
 object OutputDirResolver {
 
@@ -79,8 +76,7 @@ object OutputDirResolver {
      * 解析图片加解密的默认相册输出策略。
      *
      * <p>Android 10 及以上始终交给 {@code MediaStore.Images} 提交到
-     * {@code Pictures/ErgouTreeCrypt}，确保相册应用能立即索引。Android 8–9 在具备旧版
-     * 写权限时直写公共 Pictures；无权限时只能退回应用专属 Pictures 目录。
+     * {@code Pictures/ErgouTreeCrypt}，确保相册应用能立即索引。Android 8–9 在具备旧版写权限时直写公共 Pictures；无权限时只能退回应用专属 Pictures 目录。
      *
      * @param context 应用上下文
      * @return 图片输出策略

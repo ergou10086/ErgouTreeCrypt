@@ -37,7 +37,6 @@ enum class StrengthLevel(val label: String, val fraction: Float, val color: Colo
  * @param password 当前密码文本
  * @param modifier 修饰符
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun PasswordStrengthMeter(

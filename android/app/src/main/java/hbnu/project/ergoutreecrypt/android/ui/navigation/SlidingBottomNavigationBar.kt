@@ -56,8 +56,7 @@ fun nextWindowStart(
  * 一次最多展示六项、支持手动拖动与条目吸附的底部导航栏。
  *
  * <p>手动拖动只改变可见窗口；点击条目才请求切换 Pager。自动窗口移动由已稳定页面
- * {@code settledPage} 驱动，选中高亮则立即读取 {@code selectedPage}，因此动画途中不会出现
- * 第二份选中状态。
+ * {@code settledPage} 驱动，选中高亮则立即读取 {@code selectedPage}，因此动画途中不会出现第二份选中状态。
  *
  * @param items 全部一级目的地
  * @param selectedPage Pager 当前页

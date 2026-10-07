@@ -48,7 +48,6 @@ import java.util.Optional;
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class FileStegoCodec {
 
@@ -69,14 +68,12 @@ public final class FileStegoCodec {
             "ErgouTree-stego-default-passphrase".getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
     /**
-     * 低内存模式下大文件护栏阈值（64 MiB）：超过此大小的载荷仅在
-     * 适配器支持流式嵌入/提取时才允许处理。
+     * 低内存模式下大文件护栏阈值（64 MiB）：超过此大小的载荷仅在适配器支持流式嵌入/提取时才允许处理。
      */
     private static final long LARGE_PAYLOAD_THRESHOLD_BYTES = 64L << 20;
 
     /**
-     * 只读预检的载体大小上限（64 MiB）：非流式适配器（PDF/WAV/FLAC）读取元数据
-     * 会整读文件，超过此大小的文件跳过预检，避免移动端在「选择文件」阶段 OOM。
+     * 只读预检的载体大小上限（64 MiB）：非流式适配器（PDF/WAV/FLAC）读取元数据会整读文件，超过此大小的文件跳过预检，避免移动端在「选择文件」阶段 OOM。
      */
     private static final long PREFLIGHT_MAX_BYTES = 64L << 20;
 
@@ -84,10 +81,7 @@ public final class FileStegoCodec {
      * 将文件加密后嵌入到载体文件中。
      *
      * <p>载荷以流式（1 MiB 分块）加密到临时文件，再经
-     * {@link CarrierAdapter#embedFromFile} 嵌入，全程内存占用恒定，
-     * 支持 1GB 级大文件。低内存模式下，载荷超过
-     * {@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式嵌入时，
-     * 提前抛出友好错误而非 OOM。
+     * {@link CarrierAdapter#embedFromFile} 嵌入，全程内存占用恒定，支持 1GB 级大文件。低内存模式下，载荷超过{@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式嵌入时，提前抛出友好错误而非 OOM。
      *
      * @param carrierFile 载体文件（PNG/ZIP/PDF/WAV/FLAC/MP4...）
      * @param secretFile  待隐藏的文件
@@ -254,9 +248,7 @@ public final class FileStegoCodec {
      * 从载体文件中提取并解密隐藏的文件。
      *
      * <p>提取与解密全程流式（恒定内存）：Payload 提取到临时文件后经
-     * {@code PayloadCodec.decodeToFile} 解密写出。低内存模式下，载体文件超过
-     * {@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式提取时，
-     * 提前抛出友好错误而非 OOM。
+     * {@code PayloadCodec.decodeToFile} 解密写出。低内存模式下，载体文件超过{@link #LARGE_PAYLOAD_THRESHOLD_BYTES} 且适配器不支持流式提取时，提前抛出友好错误而非 OOM。
      *
      * @param stegoFile 隐写载体文件
      * @param outputDir 输出目录
@@ -401,8 +393,7 @@ public final class FileStegoCodec {
      * 只读预检隐写载体：读取元数据中的 Argon2 档位与 Payload 头的压缩标志。
      *
      * <p>供移动端在提取前调用（对齐卷路径的「加密前压缩」防护策略）：无需完整
-     * 提取 Payload，只读元数据（判定 KDF 档位）与 Payload 头前 10 字节（判定
-     * 「加密前压缩」标志）。非隐写文件或读取失败返回 {@link StegoPreflight#UNKNOWN}。
+     * 提取 Payload，只读元数据（判定 KDF 档位）与 Payload 头前 10 字节（判定「加密前压缩」标志）。非隐写文件或读取失败返回 {@link StegoPreflight#UNKNOWN}。
      *
      * @param stegoFile 隐写载体文件
      * @param password  密码（可为 null；文件隐写载体定位不依赖密码）

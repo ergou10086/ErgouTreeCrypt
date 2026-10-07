@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 单个用例约需数百毫秒，属于协议要求而非测试配置。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageKeyScheduleTest {
 
@@ -93,7 +92,7 @@ final class ImageKeyScheduleTest {
     }
 
     // ================================================================
-    // keyConfirm
+    // 密钥确认值
     // ================================================================
 
     @Test
@@ -262,7 +261,7 @@ final class ImageKeyScheduleTest {
      * 直接用 {@code Argon2Kdf} 的固定档参数复算主密钥，作为密钥编排的独立参照。
      *
      * @param password 规范化后的密码字节
-     * @param salt     Argon2id salt
+     * @param salt Argon2id 盐值
      * @return 32 字节主密钥
      * @throws Exception 派生失败
      */

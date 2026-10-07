@@ -14,13 +14,13 @@ import java.util.Arrays;
  * <pre>
  *   [加密载荷]
  *   ─────────── trailer 正文 ───────────
- *   encryptedSize 8B  long
- *   fileNameLen   2B  short
- *   fileName     var  UTF-8
+ *   encryptedSize 8字节  长整数
+ *   fileNameLen   2字节  短整数
+ *   fileName     变长    UTF-8
  *   salt         16B
  *   hkdfSalt     32B
  *   nonce        24B
- *   flags         1B   bit0=paranoid, bit1=hasMac, bit2=stealth
+ *   flags         1字节   位0=偏执，位1=消息认证，位2=隐蔽
  *   serpentIv    16B   (仅 paranoid 时)
  *   payloadMac   64B   (仅 hasMac 时)
  *   ─────────── trailer 后缀 ───────────

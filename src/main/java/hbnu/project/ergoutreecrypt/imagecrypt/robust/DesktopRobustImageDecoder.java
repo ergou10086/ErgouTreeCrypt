@@ -14,7 +14,6 @@ import java.nio.file.Path;
  * <p>该类由共享核心反射加载，使不具备 {@code java.desktop} 的平台仍可编译核心协议代码。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class DesktopRobustImageDecoder {
 

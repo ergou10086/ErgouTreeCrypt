@@ -100,14 +100,12 @@ import java.nio.file.Paths
  * 隐写提取页面。
  *
  * <p>用户选择一个包含隐写数据的载体文件（PNG/ZIP/PDF/WAV/FLAC/MP4 等），
- * 输入密码后提取隐藏的文件内容。支持所有 {@link hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter}
- * 注册的载体格式。
+ * 输入密码后提取隐藏的文件内容。支持所有 {@link hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter}注册的载体格式。
  *
  * <p>提取过程自动检测载体格式并匹配对应的适配器，通过
  * {@link hbnu.project.ergoutreecrypt.filestego.FileStegoCodec#extract} 完成解密与还原。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable

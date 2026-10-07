@@ -14,14 +14,9 @@ import org.junit.jupiter.api.io.TempDir;
  * 验证桌面端 LSB 图种元数据魔数可从像素 LSB 中提取。
  *
  * <p>移动端 {@code LsbStegoDetector} 用与 {@link #extractLsbFirstBytes} 完全一致的
- * 算法（R/G/B 三通道、每通道取 {@code lsbDepth} 个最低位、LSB 优先装入字节流）在
- * Android {@code Bitmap.getPixels} 上探测首 16 字节是否等于
- * {@link StegoMetadata#MAGIC}。本测试在桌面端用真实 {@link PngLsbStego#embed} 产物
- * 验证：该算法确实能在任意合法 LSB 深度（1–4）下还原出魔数，从而证明移动端探测逻辑
- * 的算法与魔数常量正确。
+ * 算法（R/G/B 三通道、每通道取 {@code lsbDepth} 个最低位、LSB 优先装入字节流）在Android {@code Bitmap.getPixels} 上探测首 16 字节是否等于{@link StegoMetadata#MAGIC}。本测试在桌面端用真实 {@link PngLsbStego#embed} 产物验证：该算法确实能在任意合法 LSB 深度（1–4）下还原出魔数，从而证明移动端探测逻辑的算法与魔数常量正确。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class LsbStegoMagicDetectionTest {
 
@@ -54,9 +49,7 @@ class LsbStegoMagicDetectionTest {
     }
 
     /**
-     * 从位图顶部像素提取前 {@code numBytes} 字节的 LSB 流（与移动端
-     * {@code LsbStegoDetector.extractFirstBytes} 及桌面端
-     * {@code PngLsbStego.extractFromPixels} 逐位一致）。
+     * 从位图顶部像素提取前 {@code numBytes} 字节的 LSB 流（与移动端{@code LsbStegoDetector.extractFirstBytes} 及桌面端{@code PngLsbStego.extractFromPixels} 逐位一致）。
      */
     private static byte[] extractLsbFirstBytes(BufferedImage img, int lsbDepth, int numBytes) {
         int w = img.getWidth();

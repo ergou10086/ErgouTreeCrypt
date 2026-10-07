@@ -22,8 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * FXML 与控制器接线测试。
  *
  * <p>{@code FXMLLoader} 只在真正加载界面时才解析 {@code fx:id} 与事件处理器，任何拼写
- * 不一致都要到启动那一刻才会炸。这里用静态解析替代：把每个视图里的 {@code fx:id} 与
- * {@code onXxx="#handler"} 逐个对照控制器的字段与方法，让接线错误在单元测试阶段就暴露。
+ * 不一致都要到启动那一刻才会炸。这里用静态解析替代：把每个视图里的 {@code fx:id} 与{@code onXxx="#handler"} 逐个对照控制器的字段与方法，让接线错误在单元测试阶段就暴露。
  *
  * <p>不开启 JavaFX 工具包，因此可在无显示环境（CI）下运行。
  *
@@ -62,8 +61,7 @@ final class FxmlWiringTest {
      *
      * <p>JavaFX 允许 {@code fx:id} 只作为 FXML 内部的引用锚点（例如被 {@code $id} 引用
      * 的分组、被样式或布局引用的容器），因此这些 id 没有对应字段是合法的。
-     * 把它们显式列出，可以让本测试继续拦住「新写错名字的 fx:id」——
-     * 拼错的 id 不会报错，只会让控制器字段静默为 null，直到运行时才 NPE。
+     * 把它们显式列出，可以让本测试继续拦住「新写错名字的 fx:id」——拼错的 id 不会报错，只会让控制器字段静默为 null，直到运行时才 NPE。
      */
     private static final Set<String> KNOWN_UNINJECTED_IDS = Set.of(
             "imageOperationGroup", "imageProtectionGroup",
@@ -72,8 +70,7 @@ final class FxmlWiringTest {
             "stegoView", "fileStegoView");
 
     /**
-     * 每个视图声明的 {@code fx:id} 都必须能在控制器里找到同名字段
-     * （{@link #KNOWN_UNINJECTED_IDS} 中的历史遗留项除外）。
+     * 每个视图声明的 {@code fx:id} 都必须能在控制器里找到同名字段（{@link #KNOWN_UNINJECTED_IDS} 中的历史遗留项除外）。
      */
     @Test
     void everyFxIdHasAControllerField() throws IOException {

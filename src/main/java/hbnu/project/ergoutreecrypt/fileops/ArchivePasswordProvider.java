@@ -3,8 +3,7 @@ package hbnu.project.ergoutreecrypt.fileops;
 import java.nio.file.Path;
 
 /**
- * 归档密码提供者：当解压遇到受密码保护的归档但当前没有可用密码时，
- * 由调用方（桌面 / 移动端）提供密码，通常通过弹窗询问用户。
+ * 归档密码提供者：当解压遇到受密码保护的归档但当前没有可用密码时，由调用方（桌面 / 移动端）提供密码，通常通过弹窗询问用户。
  *
  * <p>核心层不感知具体 UI，仅通过该回调获取密码；返回 null 或空表示放弃
  * （跳过该归档或终止解压），由调用方决定后续行为。
@@ -24,7 +23,7 @@ public interface ArchivePasswordProvider {
      */
     String providePassword(Path archive, boolean retry);
 
-    /** Use an explicit password first; request UI input only when absent or rejected. */
+    /** 优先使用明确提供的密码；仅在缺少密码或密码被拒绝时请求界面输入。 */
     static ArchivePasswordProvider withPassword(String password, ArchivePasswordProvider fallback) {
         if (password == null || password.isEmpty()) return fallback;
         return (archive, retry) -> !retry ? password

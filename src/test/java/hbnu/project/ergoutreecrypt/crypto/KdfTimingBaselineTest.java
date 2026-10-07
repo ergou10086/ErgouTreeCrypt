@@ -11,8 +11,7 @@ import java.nio.charset.StandardCharsets;
  * KDF 派生耗时基线测量（Phase 0.2）。
  *
  * <p>在同一台 JVM 上分别测量「堆内 BouncyCastle」与「离堆纯 Java」两条路径在
- * 桌面端常见档位下的派生耗时，作为 A2（native 加速）的对照基线。结果仅打印，
- * 不做断言（计时易受环境抖动影响）。
+ * 桌面端常见档位下的派生耗时，作为 A2（native 加速）的对照基线。结果仅打印，不做断言（计时易受环境抖动影响）。
  *
  * @author ErgouTree
  */

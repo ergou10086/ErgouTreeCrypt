@@ -11,8 +11,7 @@ import hbnu.project.ergoutreecrypt.crypto.MacFactory;
 import hbnu.project.ergoutreecrypt.crypto.XChaCha20;
 
 /**
- * 载荷流加密引擎：对一组 {@link ByteRange} 区间用单一连续 XChaCha20 keystream 做等长 XOR
- * 区间之间逻辑上拼成一条流（keystream 连续推进），与各格式无关。
+ * 载荷流加密引擎：对一组 {@link ByteRange} 区间用单一连续 XChaCha20 keystream 做等长 XOR区间之间逻辑上拼成一条流（keystream 连续推进），与各格式无关。
  *
  * <p>这是音视频加密的"等长、可逆、对内容损伤小"特性的核心
  * 流密码 XOR 保证密文长度 == 明文长度，解密用同一 key/nonce 再 XOR 一次即逐字节还原。

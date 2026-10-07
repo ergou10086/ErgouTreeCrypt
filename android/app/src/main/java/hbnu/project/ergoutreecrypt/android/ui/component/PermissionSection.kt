@@ -30,12 +30,9 @@ import hbnu.project.ergoutreecrypt.android.platform.PermissionManager
  * 权限管理区块。
  *
  * <p>在设置页展示通知权限（API 33+）与"所有文件访问权限"（API 30+）的
- * 当前状态，并提供授权/跳转按钮。返回应用（从系统设置页切回）时自动刷新
- * 状态。所有文件访问权限为可选增强：未授予时应用自动降级为 SAF/MediaStore
- * 流程，不影响加解密功能。
+ * 当前状态，并提供授权/跳转按钮。返回应用（从系统设置页切回）时自动刷新状态。所有文件访问权限为可选增强：未授予时应用自动降级为 SAF/MediaStore流程，不影响加解密功能。
  *
  * @author ErgouTree
- * @since 2026/8/25
  */
 @Composable
 fun PermissionSection() {

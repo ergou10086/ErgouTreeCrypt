@@ -16,8 +16,7 @@ import java.nio.charset.StandardCharsets;
  * 原生 Argon2 桥接的一致性测试。
  *
  * <p>在桌面端（无 native 库）验证 {@link NativeArgon2#isAvailable()} 为 {@code false}
- * 且 {@link Argon2Kdf} 正确回退纯 Java；在 Android 真机（有 native 库）验证原生实现
- * 与 BouncyCastle、{@link Argon2OffHeap} 三者的输出逐字节一致（RFC 9106 确定性）。
+ * 且 {@link Argon2Kdf} 正确回退纯 Java；在 Android 真机（有 native 库）验证原生实现与 BouncyCastle、{@link Argon2OffHeap} 三者的输出逐字节一致（RFC 9106 确定性）。
  *
  * @author ErgouTree
  */

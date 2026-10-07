@@ -1,4 +1,4 @@
-package hbnu.project.ergoutreecrypt.passwordbook;
+package hbnu.project.ergoutreecrypt.password.passwordbook;
 
 import org.junit.jupiter.api.Test;
 

@@ -9,7 +9,6 @@ import java.util.List;
  * （如文件存储、数据库、云同步等），历史功能本身不依赖任何具体存储介质。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 public interface HistoryStore {
 

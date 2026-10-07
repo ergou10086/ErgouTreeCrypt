@@ -15,9 +15,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <h3>为什么必须集中</h3>
  * <p>密码只有经过"有效 Unicode 检查 → NFC → UTF-8"这条固定链路，桌面端与 Android 端才能
- * 派生出同一把密钥。若由 JavaFX Controller 或 Android ViewModel 各自调用平台默认编码，
- * 两端在组合字符、代理对与默认字符集不一致时会导出不同密钥，直接破坏"任意端生成、
- * 任意端恢复"的硬约束。
+ * 派生出同一把密钥。若由 JavaFX Controller 或 Android ViewModel 各自调用平台默认编码，两端在组合字符、代理对与默认字符集不一致时会导出不同密钥，直接破坏"任意端生成、任意端恢复"的硬约束。
  *
  * <h3>规范化口径</h3>
  * <ol>
@@ -37,7 +35,6 @@ import java.nio.charset.StandardCharsets;
  * <p>返回的 {@code byte[]} 由调用方负责在 finally 中清零；核心内部在使用完毕后同样清零。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class ImageCryptPassword {
 

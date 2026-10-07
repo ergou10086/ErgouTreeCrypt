@@ -24,8 +24,7 @@ import java.util.Random;
  * 文件隐写进度回调测试。
  *
  * <p>验证 hide/extract 的 {@code ProgressListener} 在流式处理期间按实际已处理
- * 字节数持续回调，而非仅在开始与结束时各回调一次（旧缺陷：0% 长时间停滞、
- * 完成后瞬间跳到 100%）。断言回调序列：
+ * 字节数持续回调，而非仅在开始与结束时各回调一次（旧缺陷：0% 长时间停滞、完成后瞬间跳到 100%）。断言回调序列：
  * <ul>
  *   <li>单调不减且始终落在 [0.0, 1.0] 区间</li>
  *   <li>存在严格介于 0 与 1 的中间进度</li>
@@ -33,7 +32,6 @@ import java.util.Random;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class FileStegoProgressTest {
 

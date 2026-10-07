@@ -7,8 +7,7 @@ import java.util.Map;
  * 博福特密码（Beaufort Cipher）。
  *
  * <p>一种自反多表替换密码：加密操作与解密操作完全相同。
- * 变换公式为 {@code cipherPos = (keyPos - plainPos) mod SAFE_RANGE}，
- * 两次变换还原原文。支持所有 Unicode 字符。
+ * 变换公式为 {@code cipherPos = (keyPos - plainPos) mod SAFE_RANGE}，两次变换还原原文。支持所有 Unicode 字符。
  *
  * <p>参数：
  * <ul>

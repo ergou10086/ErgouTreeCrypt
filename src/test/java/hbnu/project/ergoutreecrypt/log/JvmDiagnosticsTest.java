@@ -13,7 +13,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@link JvmDiagnostics}、{@link LogEvent#stackDump} 与 {@link CompositeLogSink} 测试。
  *
  * @author ErgouTree
- * @since 2026/8/27
  */
 public final class JvmDiagnosticsTest {
 

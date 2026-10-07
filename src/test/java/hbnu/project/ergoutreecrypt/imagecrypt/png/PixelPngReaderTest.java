@@ -18,7 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * {@link PixelPngReader} 的过滤、长度、块次序与帧边界测试。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PixelPngReaderTest {
 

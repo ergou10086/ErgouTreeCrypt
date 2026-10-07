@@ -8,12 +8,12 @@ import java.nio.file.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Verifies ordinary ASCII passwords with an unmodified external 7-Zip decoder. */
+/** 使用未经修改的外部 7-Zip 解码器验证普通 ASCII 密码。 */
 @EnabledIfSystemProperty(named = "zipx.external.7zip", matches = ".+")
 class ZipxExternalDecoderTest {
     @TempDir Path root;
 
-    /** Each production codec authenticates and restores through the external CLI without a password adapter. */
+    /** 每种生产编解码器均由外部命令行直接认证并还原，无需密码适配器。 */
     @Test void asciiPasswordsWorkWithExternalDecoder() throws Exception {
         Path source = root.resolve("source.txt");
         Files.writeString(source, "Independent external restoration / 真实 Unicode 文件名\n".repeat(256));
@@ -33,9 +33,9 @@ class ZipxExternalDecoderTest {
     }
 
     /**
-     * Runs the explicitly configured decoder and checks its independent result.
-     * @param command executable and argument vector
-     * @throws Exception external decoding failed
+     * 运行明确配置的解码器，检查其独立结果。
+     * @param command 可执行程序及参数列表
+     * @throws Exception 外部解码失败
      */
     private static void run(String... command) throws Exception {
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();

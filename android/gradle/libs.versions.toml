@@ -1,5 +1,5 @@
 [versions]
-# --- Build ---
+# --- 构建 ---
 agp = "8.13.2"
 kotlin = "2.0.21"
 
@@ -16,19 +16,19 @@ biometric = "1.1.0"
 # --- Compose ---
 compose-bom = "2025.07.00"
 
-# --- Shared core (keep versions aligned with desktop pom.xml) ---
+# --- 共享核心（版本与桌面 pom.xml 保持一致） ---
 bouncycastle = "1.78.1"
 commons-compress = "1.27.1"
 zip4j = "2.11.5"
 tukaani-xz = "1.10"
 zstd-jni = "1.5.7-12"
 
-# --- Testing ---
+# --- 测试 ---
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 
-# --- Desugar ---
+# --- 低版本 API 兼容 ---
 desugar = "2.1.4"
 
 [libraries]
@@ -53,20 +53,20 @@ compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
-# --- Android UI testing ---
+# --- Android 界面测试 ---
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 
-# --- Shared core (crypto / file ops) ---
+# --- 共享核心（加密与文件操作） ---
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commons-compress" }
 zip4j = { group = "net.lingala.zip4j", name = "zip4j", version.ref = "zip4j" }
 tukaani-xz = { group = "org.tukaani", name = "xz", version.ref = "tukaani-xz" }
 zstd-jni = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstd-jni" }
 
-# --- Coroutines ---
+# --- 协程 ---
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version = "1.9.0" }
 
-# --- Testing ---
+# --- 测试 ---
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

@@ -25,7 +25,6 @@ import android.os.IBinder
  * }</pre>
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 class CryptoForegroundService : Service() {
 

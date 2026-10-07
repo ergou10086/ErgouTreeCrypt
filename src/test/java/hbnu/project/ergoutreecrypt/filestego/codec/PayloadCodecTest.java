@@ -184,7 +184,7 @@ class PayloadCodecTest {
 
     @Test
     void isStegV2TooShort() {
-        byte[] shortData = new byte[]{0x53, 0x54}; // Only "ST"
+        byte[] shortData = new byte[]{0x53, 0x54}; // 只有 "ST" 前缀
         assertFalse(PayloadCodec.isStegV2(shortData));
     }
 
@@ -198,10 +198,10 @@ class PayloadCodecTest {
     @Test
     void badMagicThrows() throws Exception {
         byte[] garbage = new byte[200];
-        // FIXME: garbage bytes won't match STG2 magic
+        // 待修复：垃圾字节不应匹配 STG2 魔数。
         java.security.SecureRandom rng = new java.security.SecureRandom();
         rng.nextBytes(garbage);
-        // Ensure first bytes are NOT STG2
+        // 保证开头字节不是 STG2。
         garbage[0] = 0x00;
         garbage[1] = 0x00;
         garbage[2] = 0x00;

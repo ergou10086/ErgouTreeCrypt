@@ -21,7 +21,6 @@ import java.util.Optional;
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class CarrierRegistry {
 

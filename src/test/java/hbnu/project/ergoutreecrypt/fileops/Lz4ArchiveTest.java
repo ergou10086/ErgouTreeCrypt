@@ -42,8 +42,8 @@ class Lz4ArchiveTest {
                 } else {
                     byte[] bytes = Files.readAllBytes(archive);
                     assertTrue(FramedLZ4CompressorInputStream.matches(bytes, bytes.length));
-                    assertEquals(0x64, bytes[4] & 255); // independent blocks, content checksum
-                    assertEquals(0x70, bytes[5] & 255); // 4 MiB blocks
+                    assertEquals(0x64, bytes[4] & 255); // 独立数据块，内容校验和
+                    assertEquals(0x70, bytes[5] & 255); // 4 MiB 数据块
                 }
                 Path out = ArchiveExtractor.extractPreserving(archive, dir.resolve("ok"), pwd).getFirst();
                 assertEquals("音频.bin", out.getFileName().toString());

@@ -40,7 +40,6 @@ import java.nio.charset.StandardCharsets
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class MediaCryptViewModel : ViewModel() {
 

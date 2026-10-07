@@ -39,7 +39,6 @@ import java.nio.file.Paths
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class DecryptViewModel : ViewModel() {
 
@@ -263,8 +262,7 @@ class DecryptViewModel : ViewModel() {
      * {@link FolderCrypt#decryptAuto}，避免把归档文件误当作单卷送入 {@link hbnu.project.ergoutreecrypt.volume.Decryptor}。
      *
      * <p>单个输入走 {@link FolderCrypt#decryptAuto}；多个输入走
-     * {@link FolderCrypt#decryptFiles}（把一批选中的文件视为互不相关的多个卷逐个处理，
-     * 产物平铺到输出目录，失败与跳过统一在结果弹窗中汇报）。
+     * {@link FolderCrypt#decryptFiles}（把一批选中的文件视为互不相关的多个卷逐个处理，产物平铺到输出目录，失败与跳过统一在结果弹窗中汇报）。
      *
      * @param inputs                 输入路径列表（归档 / 目录 / 分卷碎片 / 加密卷）
      * @param outputDir              输出目录

@@ -26,7 +26,6 @@ import java.util.zip.CRC32;
  * <p>返回 {@code byte[]} 的访问器返回内部引用以避免复制密钥材料，调用方不得修改。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class ImageCryptFrame {
 
@@ -536,8 +535,7 @@ public final class ImageCryptFrame {
      * 序列化不含 headerCrc32 的前缀区，供认证输入构造使用。
      *
      * <p>写出 {@code [0, 180)}：keyConfirm 已写入时同样落在其中，因为它是被认证的字段；
-     * 只有 headerCrc32 被排除在外。keyConfirm 尚未写入时该区段保持为零，此时
-     * {@link #keyConfirmPrefixBytes()} 仍可取到正确的 {@code [0, 164)} 前缀。
+     * 只有 headerCrc32 被排除在外。keyConfirm 尚未写入时该区段保持为零，此时{@link #keyConfirmPrefixBytes()} 仍可取到正确的 {@code [0, 164)} 前缀。
      *
      * @return 184 字节缓冲区，{@code [180, 184)} 区段为零
      */
@@ -615,7 +613,7 @@ public final class ImageCryptFrame {
     /**
      * 返回 flags 字节。
      *
-     * @return flags
+     * @return 标志位
      */
     public int flags() {
         return flags;

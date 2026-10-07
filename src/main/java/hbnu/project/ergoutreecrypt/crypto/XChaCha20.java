@@ -76,8 +76,7 @@ public final class XChaCha20 {
     // ==================== HChaCha20 核心实现 ====================
 
     /**
-     * HChaCha20：对 ChaCha20 块函数执行 20 轮（10 次双轮），不做最终加法，
-     * 取首尾各 4 个 32-bit 字作为 32 字节输出。
+     * HChaCha20：对 ChaCha20 块函数执行 20 轮（10 次双轮），不做最终加法，取首尾各 4 个 32-bit 字作为 32 字节输出。
      *
      * @param key     32 字节密钥
      * @param nonce16 16 字节 nonce（XNonce 的前 16 字节）

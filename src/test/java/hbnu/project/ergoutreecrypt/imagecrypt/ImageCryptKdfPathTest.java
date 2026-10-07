@@ -26,8 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <h3>为什么"同一份源码"还不够</h3>
  * <p>共享核心只有一份，但 {@code Argon2Kdf} 在运行时会按可用堆内存选择三条完全不同的执行路径：
  * BouncyCastle 的堆内实现、Java 离堆实现（{@code Argon2OffHeap}）与 native libargon2。
- * "任意端生成、任意端恢复"要求这三条路径在<b>同一组输入下产出逐字节相同的 32 字节密钥</b>——
- * 只要有一条在某个参数组合上偏移一位，密码模式的文件就会变成"只有本机能打开"。
+ * "任意端生成、任意端恢复"要求这三条路径在<b>同一组输入下产出逐字节相同的 32 字节密钥</b>——只要有一条在某个参数组合上偏移一位，密码模式的文件就会变成"只有本机能打开"。
  *
  * <h3>v1 只使用一组固定参数</h3>
  * <p>因此本测试不复用通用的参数扫描（那属于 Argon2 原语自身的回归），而是钉住 v1 的规范性
@@ -38,7 +37,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 就会跑在不同版本的 Argon2 实现上，而所有在单一构建里通过的测试都不会有任何异常表现。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptKdfPathTest {
 

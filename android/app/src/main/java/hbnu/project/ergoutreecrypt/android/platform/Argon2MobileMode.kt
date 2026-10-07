@@ -6,19 +6,16 @@ import hbnu.project.ergoutreecrypt.filestego.api.Argon2Params
  * Argon2 移动模式档位——从全局设置映射为 KDF 覆写参数。
  *
  * <p>移动端应用堆受限（largeHeap 通常 256~512 MiB），无法像桌面端一样默认使用
- * 1 GiB 内存参数。档位作为设置存储在 DataStore（{@code mobile.argon2.mode}），
- * 文件加密与隐写共用；隐写侧会把档位参数持久化进载体元数据（见
+ * 1 GiB 内存参数。档位作为设置存储在 DataStore（{@code mobile.argon2.mode}），文件加密与隐写共用；隐写侧会把档位参数持久化进载体元数据（见
  * {@link hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierMetadata}）。
  *
  * <p>为消除"离堆 Argon2 派生慢 / 原生内存不足闪退 / 卡在 0%"等移动端适配问题，
  * 本枚举自 2026/8/28 起<b>移除 1 GiB 的 STANDARD 档</b>，并新增 {@link #AUTO}：
- * 运行时按设备当前可用堆自动选取能<b>在堆内完成</b>（秒级）的最大档位，
- * 使移动端加解密默认不再进入离堆路径。
+ * 运行时按设备当前可用堆自动选取能<b>在堆内完成</b>（秒级）的最大档位，使移动端加解密默认不再进入离堆路径。
  *
  * @property key       DataStore 中存储的档位键值
  * @property label     档位显示名称
  * @author ErgouTree
- * @since 2026/8/14
  */
 enum class Argon2MobileMode(
     val key: String,
@@ -106,9 +103,7 @@ enum class Argon2MobileMode(
          * 判断某档位是否能在给定可用堆内派生（无需离堆回退）。
          *
          * <p>除 Argon2 内存本身外预留 32 MiB 固定余量（与共享核心预检一致）。
-         * 注意：返回 false 不代表该档位不可用——共享核心的
-         * {@code Argon2Kdf.deriveKey} 会自动回退到离堆（native 内存）实现完成
-         * 派生，只是速度较慢。UI 可据此提示"将使用离堆内存"。
+         * 注意：返回 false 不代表该档位不可用——共享核心的{@code Argon2Kdf.deriveKey} 会自动回退到离堆（native 内存）实现完成派生，只是速度较慢。UI 可据此提示"将使用离堆内存"。
          *
          * @param mode 待判断的档位
          * @param availableHeapBytes 当前应用可用堆字节数（默认取实时值）

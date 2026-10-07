@@ -18,7 +18,6 @@ import java.util.zip.DeflaterOutputStream;
  * writer 对过滤策略与分块位置的实现选择。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PngContainerTestSupport {
 
@@ -130,7 +129,7 @@ final class PngContainerTestSupport {
     /**
      * 把一行原始样本编码为指定 PNG filter 的差分字节。
      *
-     * @param filterType   filter 0–4
+     * @param filterType 过滤类型，取值零至四
      * @param raw          当前行原始样本
      * @param previous     上一行原始样本；首行可为 {@code null}
      * @param bytesPerPixel 像素步长
@@ -202,7 +201,6 @@ final class PngContainerTestSupport {
      * 测试用 PNG 块描述。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     static final class ChunkSpec {
 

@@ -27,7 +27,6 @@ import javafx.util.Duration;
  * 主题修改即时生效，其他设置通过 {@link SettingsManager} 持久化。
  *
  * @author ErgouTree
- * @since 2026/6/23
  */
 public final class SettingsDialog {
 

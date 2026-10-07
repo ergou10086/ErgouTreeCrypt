@@ -14,7 +14,6 @@ import java.util.List;
  * 时轮转为 {@code app.log.1}，仅保留两代。写入失败静默忽略，不影响主流程。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class FileLogSink implements LogSink {
 

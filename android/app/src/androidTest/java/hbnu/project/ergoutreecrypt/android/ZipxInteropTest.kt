@@ -11,10 +11,10 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.io.IOException
 
-/** Exchanges the same real file between desktop JVM and an actual Android ART process. */
+/** 在桌面 JVM 与真实 Android ART 进程间交换同一真实文件。 */
 @RunWith(AndroidJUnit4::class)
 class ZipxInteropTest {
-    /** Reads desktop artifacts, then produces and self-verifies Android artifacts. */
+    /** 读取桌面产物，再生成并自校验 Android 产物。 */
     @Test fun desktopToAndroidAndAndroidToAndroidThenExport() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.filesDir, "zipx-interop")
@@ -24,7 +24,7 @@ class ZipxInteropTest {
         ZipxInteropSupport.generate(File(root, "android").toPath(), File(desktop, "source.m4a").toPath(), true)
     }
 
-    /** Independent fixtures validate codec/AES interoperability and failure handling on ART. */
+    /** 独立样例在 ART 上验证编解码、AES 互通与失败处理。 */
     @Test fun independentFixturesAndFailuresOnArt() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val root = File(instrumentation.targetContext.cacheDir, "zipx-golden").apply { mkdirs() }

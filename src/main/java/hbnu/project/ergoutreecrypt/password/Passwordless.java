@@ -33,8 +33,7 @@ public final class Passwordless {
     }
 
     /**
-     * 返回实际用于加解密的密码：无密码时回退为 {@link #DEFAULT_PASSWORD}，
-     * 否则返回原始密码。
+     * 返回实际用于加解密的密码：无密码时回退为 {@link #DEFAULT_PASSWORD}，否则返回原始密码。
      *
      * <p>这保证了"无密码"模式等价于使用公开默认密码加密——拿到文件即可用，使用默认密码解密，无需记住任何口令。
      */

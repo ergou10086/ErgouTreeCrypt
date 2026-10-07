@@ -7,16 +7,12 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * 图片加密子系统的受检异常。
  *
  * <p>用于区分"协议解析 / 帧校验 / 密钥编排"中的可预期错误（非法帧、未知版本、
- * 非规范 KDF 组合、密码错误、载荷损坏），便于 UI 层通过 {@link ErrorKind} 做类型化
- * 映射，而不与运行时编程错误混淆。
+ * 非规范 KDF 组合、密码错误、载荷损坏），便于 UI 层通过 {@link ErrorKind} 做类型化映射，而不与运行时编程错误混淆。
  *
  * <p>默认归类为 {@link ErrorKind#UNSUPPORTED_FORMAT}，抛点应按语义覆盖：
- * 密码模式 keyConfirm 失败用 {@link ErrorKind#WRONG_PASSWORD}，MAC 失败用
- * {@link ErrorKind#TAMPERED_DATA}，未知协议版本用 {@link ErrorKind#UNSUPPORTED_VERSION}，
- * 输入不是 EGTC-IMG 用 {@link ErrorKind#NOT_IMAGE_CRYPT}。
+ * 密码模式 keyConfirm 失败用 {@link ErrorKind#WRONG_PASSWORD}，MAC 失败用{@link ErrorKind#TAMPERED_DATA}，未知协议版本用 {@link ErrorKind#UNSUPPORTED_VERSION}，输入不是 EGTC-IMG 用 {@link ErrorKind#NOT_IMAGE_CRYPT}。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public class ImageCryptException extends CryptoException {
 

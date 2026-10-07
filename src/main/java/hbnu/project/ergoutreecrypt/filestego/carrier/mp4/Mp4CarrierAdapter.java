@@ -27,19 +27,16 @@ import java.util.List;
  * MP4 / ISO-BMFF 载体适配器。
  *
  * <p>在文件末尾追加自定义 {@code uuid} box，usertype 为工具专属
- * {@code EGTC-STEGO-MP401}（与媒体加密用的 {@code EGTC-AVE-MEDIA01} 严格分离），
- * box payload 为门面组合好的 {@code [CarrierMetadata + STEG-V2 Payload]}：
+ * {@code EGTC-STEGO-MP401}（与媒体加密用的 {@code EGTC-AVE-MEDIA01} 严格分离），box payload 为门面组合好的 {@code [CarrierMetadata + STEG-V2 Payload]}：
  * <pre>
  *   ftyp / moov / mdat / ...
  *   [size:4 BE][uuid][EGTC-STEGO-MP401:16][combined]
  * </pre>
  *
  * <p>解析复用 {@link BoxParser}；写入不调用 {@code Mp4UuidMetadata.append}，
- * 避免绑定媒体加密 UUID。当前置 box 使用 {@code size==0}（延伸至 EOF）导致
- * 顶层扫描吞并末尾 uuid 时，从文件尾部窗口回退扫描定位隐写 uuid。
+ * 避免绑定媒体加密 UUID。当前置 box 使用 {@code size==0}（延伸至 EOF）导致顶层扫描吞并末尾 uuid 时，从文件尾部窗口回退扫描定位隐写 uuid。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
 
@@ -155,8 +152,7 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入：复制载体后，在文件末尾追加隐写 uuid box（box 头 + usertype +
-     * 元数据 + Payload 文件分块写入），不将 Payload 读入内存。
+     * 流式嵌入：复制载体后，在文件末尾追加隐写 uuid box（box 头 + usertype +元数据 + Payload 文件分块写入），不将 Payload 读入内存。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -175,9 +171,7 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入（带进度回调）：分块复制载体后，在文件末尾追加隐写 uuid box
-     * （box 头 + usertype + 元数据 + Payload 分块写入），并按已复制字节数占
-     * 载体与 Payload 总字节数的比例逐块回调进度。
+     * 流式嵌入（带进度回调）：分块复制载体后，在文件末尾追加隐写 uuid box（box 头 + usertype + 元数据 + Payload 分块写入），并按已复制字节数占载体与 Payload 总字节数的比例逐块回调进度。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -222,8 +216,7 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取：定位隐写 uuid box，定点读取元数据，再按
-     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
+     * 流式提取：定位隐写 uuid box，定点读取元数据，再按{@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（MP4 uuid box 方案不使用）
@@ -238,9 +231,7 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取（带进度回调）：定位隐写 uuid box，定点读取元数据，再按
-     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝
-     * 字节数逐块回调进度。
+     * 流式提取（带进度回调）：定位隐写 uuid box，定点读取元数据，再按{@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝字节数逐块回调进度。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（MP4 uuid box 方案不使用）
@@ -591,8 +582,7 @@ public final class Mp4CarrierAdapter extends AbstractCarrierAdapter {
      * 流式追加隐写 uuid box：box 头 + usertype + 元数据 + Payload 文件分块写入。
      *
      * <p>与 {@link #appendStegUuidBox} 产出相同的 box 布局，但 Payload 从文件
-     * 分块读入，不分配整块内存。box size 在写入前可预知
-     * （8 + 16 + metaLen + payloadFileSize），须满足 32-bit size 上限。
+     * 分块读入，不分配整块内存。box size 在写入前可预知（8 + 16 + metaLen + payloadFileSize），须满足 32-bit size 上限。
      *
      * @param file        目标文件（通常为已复制的载体）
      * @param meta        序列化后的 CarrierMetadata 字节数组

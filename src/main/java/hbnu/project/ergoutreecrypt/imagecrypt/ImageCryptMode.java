@@ -4,8 +4,7 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * EGTC-IMG 的保护模式。
  *
  * <p>模式由加密方显式选择，<b>不</b>用"密码是否为空"隐式推断；解密方的模式完全来自
- * 文件头（{@code protectionMode} 字段），UI 不得覆写。该字段已纳入 MAC 覆盖范围，
- * 因此篡改保护模式会导致认证失败，无法把密码文件降级为公开文件。
+ * 文件头（{@code protectionMode} 字段），UI 不得覆写。该字段已纳入 MAC 覆盖范围，因此篡改保护模式会导致认证失败，无法把密码文件降级为公开文件。
  *
  * <table border="1">
  *   <caption>模式语义</caption>
@@ -23,7 +22,6 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * </table>
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public enum ImageCryptMode {
 

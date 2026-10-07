@@ -20,7 +20,6 @@ import androidx.core.view.WindowCompat
  * <p>Android 12+ 支持动态取色（Material You），低版本回退到自定义配色。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 
 /** 亮色方案 */

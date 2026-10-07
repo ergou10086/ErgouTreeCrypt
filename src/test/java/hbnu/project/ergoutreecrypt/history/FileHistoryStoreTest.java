@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * 损坏行容错、清空与未注册服务降级等关键行为。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 public final class FileHistoryStoreTest {
 

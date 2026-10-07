@@ -13,12 +13,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Verifies ZIPX is selectable and retains native password controls in the actual Compose screen. */
+/** 在真实 Compose 页面验证 ZIPX 可选且保留原生密码控件。 */
 @RunWith(AndroidJUnit4::class)
 class ZipxArchiveUiTest {
     @get:Rule val compose = createComposeRule()
 
-    /** Native ZIPX AES stays available with custom archive encryption disabled. */
+    /** 关闭自定义归档加密时，仍可使用 ZIPX 原生 AES。 */
     @Test fun nativeZipxPasswordControl() {
         val settings = AndroidSettings(InstrumentationRegistry.getInstrumentation().targetContext)
         val saved = runBlocking { settings.isArchiveCustomEncryption.first() }

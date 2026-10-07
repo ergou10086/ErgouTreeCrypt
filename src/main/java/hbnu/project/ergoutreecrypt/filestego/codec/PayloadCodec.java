@@ -23,11 +23,11 @@ import java.util.Arrays;
  *
  * <h3>二进制布局</h3>
  * <pre>
- *   MAGIC         4 bytes   "STG2" (0x53544732)
- *   VERSION       2 bytes   uint16 big-endian (1)
- *   FLAGS         2 bytes   bitfield big-endian
- *   META_LENGTH   2 bytes   uint16 big-endian (N)
- *   METADATA      N bytes   UTF-8 JSON
+ *   MAGIC         4 字节   "STG2" (0x53544732)
+ *   VERSION       2 字节   大端无符号十六位整数 (1)
+ *   FLAGS         2 字节   大端标志位
+ *   META_LENGTH   2 字节   大端无符号十六位整数 (N)
+ *   METADATA      N 字节   UTF-8 JSON
  *   HEADER_MAC    64 bytes  可选，对 Header 部分的 MAC
  *   CIPHERTEXT    variable  加密后的文件数据
  *   PAYLOAD_MAC   64 bytes  可选，对密文的 MAC
@@ -43,7 +43,6 @@ import java.util.Arrays;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class PayloadCodec {
 
@@ -188,13 +187,13 @@ public final class PayloadCodec {
         buf.putShort((short) flags);
         buf.putShort((short) metadataBytes.length);
         buf.put(metadataBytes);
-        // Header MAC
+        // 头部消息认证码
         if (options.hasHeaderMac() && headerMacBytes != null) {
             buf.put(headerMacBytes);
         }
         // 密文
         buf.put(ciphertext);
-        // Payload MAC
+        // 载荷消息认证码
         if (options.hasIntegrity() && payloadMacBytes != null) {
             buf.put(payloadMacBytes);
         }
@@ -229,8 +228,7 @@ public final class PayloadCodec {
      * 从 STEG-V2 Payload 中解密还原原始文件。
      *
      * <p>密码学参数（salt、hkdfSalt、nonce 等）需从载体层的
-     * {@code CarrierMetadata} 获取；Argon2 参数覆写同样来自
-     * {@code CarrierMetadata}（null 表示使用默认参数）。
+     * {@code CarrierMetadata} 获取；Argon2 参数覆写同样来自{@code CarrierMetadata}（null 表示使用默认参数）。
      *
      * @param payload      完整的 STEG-V2 Payload 字节数组
      * @param password     密码
@@ -436,8 +434,7 @@ public final class PayloadCodec {
      * 将原始文件流式加密为 STEG-V2 Payload 并写入文件（带进度回调）。
      *
      * <p>与 {@link #encodeToFile} 相同，另在流式加密阶段按已加密字节数占
-     * 明文总字节数的比例逐块回调 {@link ProgressListener}（密钥派生阶段
-     * 不产生回调）。
+     * 明文总字节数的比例逐块回调 {@link ProgressListener}（密钥派生阶段不产生回调）。
      *
      * @param plaintextFile 原始文件路径
      * @param payloadOut    Payload 输出路径
@@ -567,8 +564,7 @@ public final class PayloadCodec {
      * 从 STEG-V2 Payload 文件流式解密还原原始文件（带进度回调）。
      *
      * <p>与 {@link #decodeToFile} 相同，另在流式解密阶段按已解密字节数占
-     * 密文总字节数的比例逐块回调 {@link ProgressListener}（密钥派生与
-     * Header MAC 校验阶段不产生回调）。
+     * 密文总字节数的比例逐块回调 {@link ProgressListener}（密钥派生与Header MAC 校验阶段不产生回调）。
      *
      * @param payloadFile   Payload 文件路径
      * @param plaintextOut  明文输出路径
@@ -711,8 +707,7 @@ public final class PayloadCodec {
      * 从 Payload 头的前缀字节解析「加密前压缩」标志。
      *
      * <p>供只读预检使用：调用方只需提供 Payload 头的前 {@link #HEADER_FIXED_SIZE}
-     * 字节（MAGIC + VERSION + FLAGS + META_LENGTH），无需解析完整 Payload。字节
-     * 不足或魔数不匹配（非 STEG-V2）时返回 false，由调用方按「非隐写文件」处理。
+     * 字节（MAGIC + VERSION + FLAGS + META_LENGTH），无需解析完整 Payload。字节不足或魔数不匹配（非 STEG-V2）时返回 false，由调用方按「非隐写文件」处理。
      *
      * @param payloadPrefix Payload 头前缀字节（至少 10 字节）
      * @return true 表示该 Payload 使用了「加密前压缩」
@@ -837,10 +832,7 @@ public final class PayloadCodec {
      * 派生 Argon2id 主密钥，并将内存不足等致命失败包装为 {@link PayloadException}。
      *
      * <p>{@link Argon2Kdf#deriveKey} 会先按设备可用堆预检：堆内放不下时自动
-     * 回退到离堆（native 内存）实现，因此 1 GiB 参数的桌面端文件也能在移动
-     * 端派生；只有堆与离堆内存均不足时才抛 {@link OutOfMemoryError}。解码侧
-     * 的 Argon2 参数来自载体元数据（编码时烘焙进文件），与当前设备的内存档位
-     * 设置无关。
+     * 回退到离堆（native 内存）实现，因此 1 GiB 参数的桌面端文件也能在移动端派生；只有堆与离堆内存均不足时才抛 {@link OutOfMemoryError}。解码侧的 Argon2 参数来自载体元数据（编码时烘焙进文件），与当前设备的内存档位设置无关。
      *
      * @param password     密码
      * @param salt         Argon2id 盐
@@ -1104,7 +1096,7 @@ public final class PayloadCodec {
      * @param plaintextFile 明文文件
      * @param out           密文输出流
      * @param encKey        XChaCha20 密钥
-     * @param nonce         XChaCha20 nonce
+     * @param nonce XChaCha20 随机数
      * @param serpentKey    Serpent 密钥（非 paranoid 为 null）
      * @param serpentIv     Serpent IV（非 paranoid 为 null）
      * @param payloadMac    密文 MAC 累积器（可为 null）
@@ -1149,14 +1141,13 @@ public final class PayloadCodec {
     }
 
     /**
-     * 流式解密：密文 → XChaCha20 → [Serpent-CTR（paranoid）] → 明文文件，
-     * 同时增量累积密文 MAC。
+     * 流式解密：密文 → XChaCha20 → [Serpent-CTR（paranoid）] → 明文文件，同时增量累积密文 MAC。
      *
      * @param in           密文输入流（已定位到密文起点）
      * @param length       密文字节数
      * @param plaintextOut 明文输出路径
      * @param encKey       XChaCha20 密钥
-     * @param nonce        XChaCha20 nonce
+     * @param nonce XChaCha20 随机数
      * @param serpentKey   Serpent 密钥（非 paranoid 为 null）
      * @param serpentIv    Serpent IV（非 paranoid 为 null）
      * @param payloadMac   密文 MAC 累积器（可为 null）

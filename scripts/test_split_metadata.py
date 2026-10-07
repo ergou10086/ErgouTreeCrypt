@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Scoped embedded split metadata regression: desktop/Android four producer-reader pairs,
-with separate authentication and decryption in every pair (eight directions).
-Uses the existing real test file and a connected ART emulator/device.
+"""嵌入式分卷元数据专项回归：桌面与 Android 四种生产端／读取端组合，每种分别认证和解密，共八方向。
+
+使用现有真实文件及已连接的 ART 模拟器或设备。
 """
 import argparse
 import os

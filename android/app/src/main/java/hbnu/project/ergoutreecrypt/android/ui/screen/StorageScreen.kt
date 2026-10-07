@@ -64,7 +64,6 @@ import kotlinx.coroutines.withContext
  *
  * @param onBack 返回上一页回调
  * @author ErgouTree
- * @since 2026/9/20
  */
 @Composable
 fun StorageScreen(onBack: () -> Unit) {

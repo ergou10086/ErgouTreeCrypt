@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
  * @param pickFileLabel "换文件"按钮的文案，可自定义（如"换载体"）
  * @param modifier      修饰符
  * @author ErgouTree
- * @since 2026/8/13
  */
 @Composable
 fun FileActionRow(

@@ -24,7 +24,6 @@ import java.util.Arrays;
  * 构建/解析元数据、错误处理等通用逻辑。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public abstract class AbstractCarrierAdapter implements CarrierAdapter {
 
@@ -109,8 +108,7 @@ public abstract class AbstractCarrierAdapter implements CarrierAdapter {
      * 从载体文件提取 Payload 到文件（带进度回调）。
      *
      * <p>默认实现回退到 {@link #extractFull}（读入内存后分块写出），写出阶段
-     * 按已写字节数回调进度 0~1.0；支持大文件的适配器应覆写为按
-     * {@code meta.payloadSize()} 精确读取并流式写入，同时逐块回调进度。
+     * 按已写字节数回调进度 0~1.0；支持大文件的适配器应覆写为按{@code meta.payloadSize()} 精确读取并流式写入，同时逐块回调进度。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（可为 null）
@@ -166,8 +164,7 @@ public abstract class AbstractCarrierAdapter implements CarrierAdapter {
      * 只读取 Payload 头的前若干字节，不读取完整 Payload。
      *
      * <p>供移动端提取前预检使用：只需 Payload 头的前 10 字节即可判定「加密前压缩」
-     * 标志，无需提取整个 Payload。默认实现读取完整 Payload 后截断；支持大文件的
-     * 适配器应覆写为定点读取，避免把大 Payload 全量读入内存。
+     * 标志，无需提取整个 Payload。默认实现读取完整 Payload 后截断；支持大文件的适配器应覆写为定点读取，避免把大 Payload 全量读入内存。
      *
      * @param stegoFile 隐写载体文件
      * @param meta      已解析的载体元数据（含 payloadSize）

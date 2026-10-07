@@ -14,14 +14,12 @@ import java.util.zip.CRC32;
  * 有界、流式的 PNG 块读取器。
  *
  * <p>读取器不会按块声明长度分配数组。调用方先取得 {@link ChunkHeader}，再流式读取或跳过
- * 当前块数据；CRC32 在数据消费完毕时立即验证。这样即使输入伪造了接近 2 GiB 的块长度，
- * 也只会使用固定大小缓冲，不会触发等长内存分配。
+ * 当前块数据；CRC32 在数据消费完毕时立即验证。这样即使输入伪造了接近 2 GiB 的块长度，也只会使用固定大小缓冲，不会触发等长内存分配。
  *
  * <p>本类不解释 IHDR 或块次序，协议子集约束由 {@link PixelPngReader} 负责。调用方持有并
  * 负责关闭底层输入流。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class PngChunkReader {
 
@@ -356,7 +354,6 @@ public final class PngChunkReader {
      * {@code 0..Integer.MAX_VALUE} 范围。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     public static final class ChunkHeader {
 

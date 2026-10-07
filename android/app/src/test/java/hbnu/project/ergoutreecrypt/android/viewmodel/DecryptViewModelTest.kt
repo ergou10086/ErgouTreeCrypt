@@ -10,7 +10,6 @@ import org.junit.Test
  * <p>验证进度状态流的初始状态和状态转换。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class DecryptViewModelTest {
 

@@ -9,7 +9,6 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * <p>枚举名为稳定契约：UI 按名称映射 i18n key，发布后不可随意改名。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public enum ImageCryptPhase {
 

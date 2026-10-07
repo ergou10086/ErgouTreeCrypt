@@ -9,7 +9,6 @@ import java.util.Objects;
  * @param height 图片高度
  * @param luminance 按行存放的亮度样本
  * @author ErgouTree
- * @since 2026/9/17
  */
 public record RobustRaster(int width, int height, byte[] luminance) {
 

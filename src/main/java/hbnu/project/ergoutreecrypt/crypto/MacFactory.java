@@ -16,7 +16,6 @@ import org.bouncycastle.crypto.params.KeyParameter;
  * 两者输出均为 64 字节。
  *
  * @author ErgouTree
- * @since 2026/6/16
  */
 public final class MacFactory {
 

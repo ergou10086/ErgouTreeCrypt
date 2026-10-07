@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 使用 Phase 0 真实尺寸图片夹具验证文件级流式 PNG 往返。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PixelPngStreamingFileTest {
 

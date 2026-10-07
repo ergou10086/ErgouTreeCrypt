@@ -8,20 +8,15 @@ import java.nio.file.Path
  * 桌面端「图像隐写」LSB 模式产物的只读探测器。
  *
  * <p>桌面端「图像隐写」标签页的 LSB 方案（{@code stego/PngLsbStego}，依赖
- * {@code java.awt}，移动端被 {@code syncCoreLibs} 排除）把元数据头（首 16 字节为
- * 固定魔数 {@code "EGTC-STEGO-IMG01"}）按 R→G→B 通道的最低有效位（LSB）逐位嵌入
- * 像素。移动端不实现 LSB 提取，故在「隐写提取」前探测该魔数以给出明确报错，
- * 而非让用户看到"未找到隐写数据"的泛化错误。
+ * {@code java.awt}，移动端被 {@code syncCoreLibs} 排除）把元数据头（首 16 字节为固定魔数 {@code "EGTC-STEGO-IMG01"}）按 R→G→B 通道的最低有效位（LSB）逐位嵌入像素。移动端不实现 LSB 提取，故在「隐写提取」前探测该魔数以给出明确报错，而非让用户看到"未找到隐写数据"的泛化错误。
  *
  * <p>探测算法与桌面端 {@code PngLsbStego.extractFromPixels} 逐位一致：每像素取
- * R/G/B 三通道（{@code 16/8/0} 位移），每通道取 {@code lsbDepth}（1–4）个最低位，
- * 按 LSB 优先顺序装入字节流，与桌面端嵌入顺序镜像，故可正确还原首 16 字节魔数。
+ * R/G/B 三通道（{@code 16/8/0} 位移），每通道取 {@code lsbDepth}（1–4）个最低位，按 LSB 优先顺序装入字节流，与桌面端嵌入顺序镜像，故可正确还原首 16 字节魔数。
  *
  * <p>探测失败（非 PNG、解码失败、OOM 等）一律返回 {@code false}，由调用方回退到
  * 正常提取流程（其会给出各自的错误），本类只做"尽力而为"的精确识别。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 object LsbStegoDetector {
 

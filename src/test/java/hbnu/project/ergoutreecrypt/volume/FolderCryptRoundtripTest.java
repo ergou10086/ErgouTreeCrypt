@@ -157,8 +157,7 @@ class FolderCryptRoundtripTest {
     }
 
     /**
-     * 用普通 DEFLATE ZIP 打包多个独立加密文件（来自"加密后压缩"得到的多个 .ergou），
-     * 再用第三方方式套一层 zip 的典型场景。解密该 zip 应输出一个文件夹，内部为解密结果。
+     * 用普通 DEFLATE ZIP 打包多个独立加密文件（来自"加密后压缩"得到的多个 .ergou），再用第三方方式套一层 zip 的典型场景。解密该 zip 应输出一个文件夹，内部为解密结果。
      */
     @Test
     void zipOfMultipleEncryptedFilesRoundtrip() throws Exception {

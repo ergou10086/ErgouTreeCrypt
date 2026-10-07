@@ -17,18 +17,14 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * ZIP 载体适配器
- * 不受限方案
+ * ZIP 载体适配器不受限方案
  *
  * <p>ZIP 解析器从文件末尾向前扫描 EOCD（End Of Central Directory，签名
- * {@code 0x06054B50}）作为解析起点，因此在 ZIP 逻辑末尾（EOCD 记录及其注释之后）
- * 追加的任意数据会被解压工具完全忽略。本适配器据此把
- * {@code [CarrierMetadata + STEG-V2 Payload]} 组合块追加到 ZIP 末尾。
+ * {@code 0x06054B50}）作为解析起点，因此在 ZIP 逻辑末尾（EOCD 记录及其注释之后）追加的任意数据会被解压工具完全忽略。本适配器据此把{@code [CarrierMetadata + STEG-V2 Payload]} 组合块追加到 ZIP 末尾。
  *
  * <p>ZIP 压缩位流没有稳定可注入的有效负载冗余，故采用末尾追加的容量无关方案。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
 
@@ -139,8 +135,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入：分块复制载体后依次追加元数据与 Payload 文件，不将任何部分
-     * 全量读入内存。
+     * 流式嵌入：分块复制载体后依次追加元数据与 Payload 文件，不将任何部分全量读入内存。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -159,8 +154,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入（带进度回调）：分块复制载体后依次追加元数据与 Payload 文件，
-     * 并按已复制字节数占载体与 Payload 总字节数的比例逐块回调进度。
+     * 流式嵌入（带进度回调）：分块复制载体后依次追加元数据与 Payload 文件，并按已复制字节数占载体与 Payload 总字节数的比例逐块回调进度。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -216,8 +210,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取：倒扫定位 trailer 起点，定点读取元数据，再按
-     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
+     * 流式提取：倒扫定位 trailer 起点，定点读取元数据，再按{@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（ZIP 末尾追加方案不使用）
@@ -232,9 +225,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取（带进度回调）：倒扫定位 trailer 起点，定点读取元数据，再按
-     * {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝
-     * 字节数逐块回调进度。
+     * 流式提取（带进度回调）：倒扫定位 trailer 起点，定点读取元数据，再按{@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝字节数逐块回调进度。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（ZIP 末尾追加方案不使用）
@@ -351,11 +342,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
      * 流式定位隐写 ZIP 的 trailer 起点（EOCD 记录含注释之后）。
      *
      * <p>嵌入布局为 [zip][EOCD+注释][EGFS meta][payload]，payload 在文件末尾，
-     * 因此 EOCD 距离物理文件尾可能超过 64KB 注释窗口。从文件尾向前按
-     * {@value #STREAM_CHUNK_BYTES} 字节分块倒扫 EOCD 签名（块间 3 字节重叠处理
-     * 跨块签名）；每个候选定点读取 commentLen 并对"注释末尾"做完整
-     * {@link CarrierMetadata#fromBytes} 校验（魔数 + 版本 + 字段合法性，
-     * 假阳性概率可忽略）。首个通过校验的候选即真实 EOCD。
+     * 因此 EOCD 距离物理文件尾可能超过 64KB 注释窗口。从文件尾向前按{@value #STREAM_CHUNK_BYTES} 字节分块倒扫 EOCD 签名（块间 3 字节重叠处理跨块签名）；每个候选定点读取 commentLen 并对"注释末尾"做完整{@link CarrierMetadata#fromBytes} 校验（魔数 + 版本 + 字段合法性，假阳性概率可忽略）。首个通过校验的候选即真实 EOCD。
      *
      * @param stegoFile 隐写 ZIP 文件
      * @return trailer 起点偏移（EGFS 元数据起始位置），未找到返回 -1
@@ -436,8 +423,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式校验干净 ZIP：EOCD（含注释）必须位于文件末尾 64KB 窗口内且注释末尾
-     * 恰好等于文件末尾（无追加数据）。
+     * 流式校验干净 ZIP：EOCD（含注释）必须位于文件末尾 64KB 窗口内且注释末尾恰好等于文件末尾（无追加数据）。
      *
      * @param file ZIP 文件路径
      * @return true 表示尾部存在合法 EOCD
@@ -523,8 +509,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
      * 计算追加数据（组合块）的起始偏移——即 EOCD 记录（含注释）之后的位置。
      *
      * <p>优先选择"注释末尾之后恰好是 EGFS 隐写魔数"的 EOCD 候选，其次退回到
-     * "注释末尾正好等于文件末尾"（无隐写数据）的候选，从而在追加了加密尾部数据的
-     * 情况下也能稳定定位真实 EOCD。
+     * "注释末尾正好等于文件末尾"（无隐写数据）的候选，从而在追加了加密尾部数据的情况下也能稳定定位真实 EOCD。
      *
      * @param bytes ZIP 文件字节
      * @return 追加数据起始偏移，未找到有效 EOCD 返回 -1
@@ -543,8 +528,7 @@ public final class ZipCarrierAdapter extends AbstractCarrierAdapter {
      *
      * <p>对于嵌入了隐写数据的 ZIP：EOCD 记录在逻辑末尾（嵌入数据之前），
      * 因此距离物理文件末尾可能超过注释长度上限（64KB），需要扫描整个文件。
-     * 对于未嵌入隐写数据的原始 ZIP：EOCD 必须在文件末尾，只需回溯
-     * {@code EOCD_MIN_LEN + MAX_COMMENT_LEN} 字节。
+     * 对于未嵌入隐写数据的原始 ZIP：EOCD 必须在文件末尾，只需回溯{@code EOCD_MIN_LEN + MAX_COMMENT_LEN} 字节。
      *
      * <p>采用两轮筛选以避免压缩数据或加密载荷中的 EOCD 伪匹配：
      * <ol>

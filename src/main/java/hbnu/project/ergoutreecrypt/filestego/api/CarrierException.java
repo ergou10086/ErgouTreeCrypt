@@ -18,7 +18,6 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * <p>默认归类为 {@link ErrorKind#CARRIER_INVALID}。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public class CarrierException extends CryptoException {
 

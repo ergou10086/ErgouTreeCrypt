@@ -25,7 +25,6 @@ import java.util.zip.DeflaterOutputStream;
  * 字节都会失败，以防上层长度字段和实际帧发生分歧。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class PixelPngWriter {
 
@@ -35,7 +34,7 @@ public final class PixelPngWriter {
     private static final int PADDING_POOL_BYTES = 8192;
 
     /**
-     * PNG sRGB rendering intent：Perceptual。
+     * PNG 的 sRGB 渲染意图：感知。
      */
     private static final byte SRGB_RENDERING_INTENT = 0;
 
@@ -228,7 +227,6 @@ public final class PixelPngWriter {
      * 也避免最后只缺 1 字节时出现 1/256 的无意义故障概率。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class PaddingPool {
 
@@ -290,7 +288,6 @@ public final class PixelPngWriter {
      * 把连续 zlib 字节切分成连续 IDAT 块的输出流。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class ChunkedIdatOutputStream extends OutputStream {
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Test both split metadata settings in eight desktop / native Android directions.
-Keeps only reusable test code in Git; generated corpora and logs live under target/.
+"""验证两种分卷元数据设置下，桌面与原生 Android 的八方向互操作。
+Git 只保留可复用测试代码，生成的语料与日志放在 target/ 下。
 """
 import argparse
 import os

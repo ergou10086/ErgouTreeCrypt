@@ -19,9 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h3>这些断言代表什么</h3>
  * <p>每一条十六进制常量都是 v1 协议的跨语言契约：把同一张协议表实现在 Kotlin、C 或
- * Rust 中，只要按 {@link ImageCryptProtocol} 的偏移与算法参数计算，就应当得到完全相同的
- * 字节。任何一条断言失败都说明 v1 契约被破坏，需要提升协议版本，<b>而不是</b>更新这里的
- * 常量。
+ * Rust 中，只要按 {@link ImageCryptProtocol} 的偏移与算法参数计算，就应当得到完全相同的字节。任何一条断言失败都说明 v1 契约被破坏，需要提升协议版本，<b>而不是</b>更新这里的常量。
  *
  * <h3>为什么只冻结"逻辑字节"</h3>
  * <p>这里冻结的是反滤波后的 EGTC-IMG 帧（协议头、密文、认证标签）与密码学中间值，
@@ -36,7 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptGoldenVectorTest {
 
@@ -318,7 +315,7 @@ final class ImageCryptGoldenVectorTest {
      * 用给定 nonce 加密明文。
      *
      * @param schedule 密钥编排
-     * @param nonce    XChaCha20 nonce
+     * @param nonce XChaCha20 随机数
      * @param plain    明文
      * @return 密文
      */

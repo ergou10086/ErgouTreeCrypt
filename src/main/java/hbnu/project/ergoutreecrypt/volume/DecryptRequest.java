@@ -33,8 +33,7 @@ public final class DecryptRequest {
     private String archivePassword;
 
     /**
-     * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，
-     * 通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
+     * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
      */
     private ArchivePasswordProvider archivePasswordProvider;
 

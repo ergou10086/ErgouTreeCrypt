@@ -3,8 +3,7 @@ package hbnu.project.ergoutreecrypt.mediacrypt.wav;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 一个 RIFF chunk 的定位信息
- * 不含 payload 内容，仅记录位置与长度
+ * 一个 RIFF chunk 的定位信息不含 payload 内容，仅记录位置与长度
  *
  * <p>RIFF chunk 结构：4 字节 ID + 4 字节小端 size + size 字节 payload（+ size 为奇数时 1 字节填充）。
  *

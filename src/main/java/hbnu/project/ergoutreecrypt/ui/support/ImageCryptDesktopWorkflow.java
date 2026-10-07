@@ -21,7 +21,6 @@ import java.util.Objects;
  * 视图状态。所有方法都同步执行，调用方必须放入后台执行器，不能直接在 JavaFX 线程调用。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class ImageCryptDesktopWorkflow {
 
@@ -123,7 +122,7 @@ public final class ImageCryptDesktopWorkflow {
     /**
      * 还原 EGTC-IMG PNG，并依据协议头自动决定是否规范化密码。
      *
-     * @param input             EGTC-IMG PNG
+     * @param input EGTC-IMG 格式的 PNG 图像
      * @param outputDirectory   恢复目录
      * @param password          用户输入的密码；公开恢复产物会忽略该值
      * @param overwriteExisting 是否覆盖已有恢复文件
@@ -172,7 +171,7 @@ public final class ImageCryptDesktopWorkflow {
     /**
      * 完整校验 EGTC-IMG PNG，并依据协议头自动决定是否规范化密码。
      *
-     * @param input    EGTC-IMG PNG
+     * @param input EGTC-IMG 格式的 PNG 图像
      * @param password 用户输入的密码；公开恢复产物会忽略该值
      * @param progress 进度与取消回调
      * @throws ImageCryptException 协议、密码或认证失败

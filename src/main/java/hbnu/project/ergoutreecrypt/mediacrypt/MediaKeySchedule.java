@@ -5,8 +5,7 @@ import hbnu.project.ergoutreecrypt.crypto.HkdfStream;
 import hbnu.project.ergoutreecrypt.crypto.SecureZero;
 
 /**
- * 音视频加密的密钥编排
- * 从密码派生独立的加密子密钥与 MAC 子密钥
+ * 音视频加密的密钥编排从密码派生独立的加密子密钥与 MAC 子密钥
  *
  * <p>流程复用主线 {@code crypto} 层原语：
  * <ol>

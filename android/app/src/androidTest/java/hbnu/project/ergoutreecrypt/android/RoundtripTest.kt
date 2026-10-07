@@ -36,7 +36,6 @@ import java.nio.file.Files
  * <p>需要 BouncyCastle 已注册（由 ErgouApp 在 Application.onCreate 中完成）。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 @RunWith(JUnit4::class)
 class RoundtripTest {
@@ -96,7 +95,7 @@ class RoundtripTest {
      */
     @Test
     fun passwordNormalizer_nfc() {
-        val composed = "é" // é NFC (single codepoint)
+        val composed = "é" // é 的 NFC 形式（单个码点）
         val nfcResult = PasswordNormalizer.encodeForKdf(composed)
         assertTrue(nfcResult.isNotEmpty())
     }

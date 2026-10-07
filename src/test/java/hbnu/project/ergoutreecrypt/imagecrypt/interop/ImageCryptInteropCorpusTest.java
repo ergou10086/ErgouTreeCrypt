@@ -46,7 +46,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code ImageCryptInteropTest}（instrumentation）在真实设备或模拟器上给出，两者不可互相替代。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptInteropCorpusTest {
 
@@ -208,8 +207,7 @@ final class ImageCryptInteropCorpusTest {
      * 组合字符口令的 NFC 与 NFD 两种形态必须导出完全相同的 UTF-8 字节。
      *
      * <p>这是"密码规范化口径双端一致"的可执行定义：同一段文本在 macOS（习惯 NFD）与
-     * Windows（习惯 NFC）上输入时，必须派生同一把密钥。语料里记下了两种形态的规范化结果，
-     * 因此任何一端漏掉 NFC 都会在这里失败，而不是等到用户投诉"同一个密码有的机器打不开"。
+     * Windows（习惯 NFC）上输入时，必须派生同一把密钥。语料里记下了两种形态的规范化结果，因此任何一端漏掉 NFC 都会在这里失败，而不是等到用户投诉"同一个密码有的机器打不开"。
      *
      * @throws Exception 读取或规范化失败
      */

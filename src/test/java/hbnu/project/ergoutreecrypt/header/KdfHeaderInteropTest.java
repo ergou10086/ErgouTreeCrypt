@@ -16,17 +16,14 @@ import java.nio.file.Path;
  * 桌面端与移动端真实加密文件的卷头互通基线测试（Phase 0.1）。
  *
  * <p>读取 {@code temp/test} 下的真实加密文件卷头，断言两端在「Argon2 参数是否
- * 落盘」上的不对称：桌面端加密的文件不记录有效 Argon2 参数（解密端回落到默认
- * 1 GiB），移动端加密的文件则把档位参数显式写入卷头（v2.15）。测试文件缺失时
- * 自动跳过（CI 环境不携带这些大文件）。
+ * 落盘」上的不对称：桌面端加密的文件不记录有效 Argon2 参数（解密端回落到默认1 GiB），移动端加密的文件则把档位参数显式写入卷头（v2.15）。测试文件缺失时自动跳过（CI 环境不携带这些大文件）。
  *
  * @author ErgouTree
  */
 class KdfHeaderInteropTest {
 
     /**
-     * 桌面端加密的卷（启用加密前压缩）：卷头版本 v2.16，但 Argon2 参数块全零，
-     * 故 {@code hasArgon2Params()} 为假——解密端会回落到 1 GiB 默认档。
+     * 桌面端加密的卷（启用加密前压缩）：卷头版本 v2.16，但 Argon2 参数块全零，故 {@code hasArgon2Params()} 为假——解密端会回落到 1 GiB 默认档。
      */
     @Test
     void desktopVolume_hasNoEffectiveArgon2Params() throws Exception {

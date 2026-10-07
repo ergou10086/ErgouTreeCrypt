@@ -50,7 +50,6 @@ private val ICON_SIZE = 18.dp
  * @param text     提示文本内容
  * @param modifier 修饰符
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun InfoTooltip(
@@ -194,7 +193,6 @@ fun InfoTooltip(
  * @param label 标签文本
  * @param tip   提示文本
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun LabelWithTip(

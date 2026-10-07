@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * Keyfile 处理器测试，覆盖 Go {@code internal/keyfile/processor_test.go} 所有场景。
  *
  * @author ErgouTree
- * @since 2026/6/16
  */
 public final class KeyfileProcessorTest {
 
@@ -24,7 +23,7 @@ public final class KeyfileProcessorTest {
         try (KeyfileProcessor r = KeyfileProcessor.process(null, true, null)) {
             assertEquals(32, r.key().length);
             assertEquals(32, r.hash().length);
-            // Both should be all zeros
+            // 两者都应为全零
             for (byte b : r.key()) {
                 assertEquals(0, b);
             }
@@ -53,7 +52,7 @@ public final class KeyfileProcessorTest {
         try (KeyfileProcessor rabc = KeyfileProcessor.process(abc, true, null);
              KeyfileProcessor rcba = KeyfileProcessor.process(cba, true, null)) {
 
-            // Ordered: different order → different keys
+            // 有序模式：不同顺序应产生不同密钥
             assertFalse(Arrays.equals(rabc.key(), rcba.key()),
                     "ordered: different order should produce different keys");
 
@@ -74,7 +73,7 @@ public final class KeyfileProcessorTest {
         try (KeyfileProcessor rabc = KeyfileProcessor.process(abc, false, null);
              KeyfileProcessor rcba = KeyfileProcessor.process(cba, false, null)) {
 
-            // Unordered: XOR is commutative → same key regardless of order
+            // 无序模式：异或满足交换律，顺序不影响密钥
             assertArrayEquals(rabc.key(), rcba.key(),
                     "unordered: different order should produce same keys (XOR commutativity)");
         }
@@ -128,7 +127,7 @@ public final class KeyfileProcessorTest {
             assertEquals((byte) (i ^ (255 - i)), result[i], "result[" + i + "]");
         }
 
-        // XOR with self → all zeros
+        // 与自身异或得到全零
         byte[] selfResult = KeyfileProcessor.xorWithKey(passwordKey, passwordKey);
         for (byte b : selfResult) {
             assertEquals(0, b);
@@ -147,7 +146,7 @@ public final class KeyfileProcessorTest {
     void testDuplicateKeyfilesCancelOut(@TempDir Path tempDir) throws IOException {
         byte[] content = "same-content-in-all-files".getBytes();
         Path a = createFile(tempDir, "a.key", content);
-        Path b = createFile(tempDir, "b.key", content); // duplicate
+        Path b = createFile(tempDir, "b.key", content); // 重复项
 
         try (KeyfileProcessor r = KeyfileProcessor.process(List.of(a, b), false, null)) {
             assertTrue(KeyfileProcessor.isDuplicateKeyfileKey(r.key()),
@@ -182,14 +181,14 @@ public final class KeyfileProcessorTest {
         assertNull(r.key(), "key should be null after close()");
         assertArrayEquals(hashBefore, r.hash(), "hash should be preserved after close()");
 
-        // Multiple close() should be safe
+        // 多次关闭应安全
         r.close();
         r.close();
     }
 
     @Test
     void testCloseOnNullSafe() {
-        // Should not NPE
+        // 不应抛出空指针异常
         new KeyfileProcessor(new byte[32], new byte[32]).close();
     }
 
@@ -201,7 +200,7 @@ public final class KeyfileProcessorTest {
                         true, null));
     }
 
-    // ---- helpers ----
+    // ---- 辅助方法 ----
 
     private static Path createFile(Path dir, String name, byte[] data) throws IOException {
         Path path = dir.resolve(name);

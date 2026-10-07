@@ -18,7 +18,6 @@ import java.time.format.DateTimeFormatter;
  * @param elapsedMillis        可选耗时（毫秒）；无则 {@code null}
  * @param exceptionSummary     可选异常摘要（类型 + message）；无则 {@code null}
  * @author ErgouTree
- * @since 2026/8/26
  */
 public record LogEvent(
         long timestampEpochMillis,

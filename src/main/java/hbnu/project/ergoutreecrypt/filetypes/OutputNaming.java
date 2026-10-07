@@ -8,9 +8,7 @@ import java.util.Locale;
  *
  * <p>此前命名逻辑散落在桌面端 {@code MainController.computeDefaultOutput}、
  * {@code MediaCryptController.computeDefaultOutput}、{@code MainViewSupport.deriveDecryptOutput}
- * 与移动端 {@code EncryptScreen}/{@code DecryptScreen}/{@code StegoScreen} 中，各写各的
- * 后缀拼接，是「{@code .enc.ext} 被误判为普通卷」之类问题的根源之一。此处集中为
- * 无副作用的纯函数，两端共用同一套规则：
+ * 与移动端 {@code EncryptScreen}/{@code DecryptScreen}/{@code StegoScreen} 中，各写各的后缀拼接，是「{@code .enc.ext} 被误判为普通卷」之类问题的根源之一。此处集中为无副作用的纯函数，两端共用同一套规则：
  * <ul>
  *   <li>通用加密：{@code 原名.ergou}；</li>
  *   <li>格式保持加密：{@code 基名.enc.扩展名}；</li>
@@ -23,7 +21,6 @@ import java.util.Locale;
  * {@code FileNameSanitizer}，桌面端无此限制。因此本类返回的名字可直接用作文件名。
  *
  * @author ErgouTree
- * @since 2026/9/14
  */
 public final class OutputNaming {
 
@@ -134,8 +131,7 @@ public final class OutputNaming {
      * 计算「压缩后加密」的输出文件名。
      *
      * <p>形如 {@code song.mp3.ergou → song.mp3.zip.ergou}：先剥掉输入自带
-     * {@code .ergou}/{@code .pcv} 卷后缀（调用方默认给的就是它），再插入归档扩展名并补回
-     * {@code .ergou}——卷后缀必须在最外层，因为加密对象是内层的归档。
+     * {@code .ergou}/{@code .pcv} 卷后缀（调用方默认给的就是它），再插入归档扩展名并补回{@code .ergou}——卷后缀必须在最外层，因为加密对象是内层的归档。
      *
      * <p>与「加密后压缩」的 {@code 原名.ergou.归档扩展名} 顺序相反，两端都必须走本方法，
      * 避免各自拼字符串而漂移。
@@ -162,8 +158,7 @@ public final class OutputNaming {
      * 计算通用解密的输出文件名。
      *
      * <p>剥离 {@code .ergou} 或 {@code .pcv} 后缀；两者皆无时追加
-     * {@link #DECRYPT_FALLBACK_SUFFIX}，与原 {@code MainViewSupport.deriveDecryptOutput}
-     * 的兜底行为一致。
+     * {@link #DECRYPT_FALLBACK_SUFFIX}，与原 {@code MainViewSupport.deriveDecryptOutput}的兜底行为一致。
      *
      * @param fileName 输入加密卷文件名（不含路径）
      * @return 剥离卷后缀后的文件名
@@ -193,8 +188,7 @@ public final class OutputNaming {
      * 计算格式保持解密的输出文件名。
      *
      * <p>剥掉基名末尾的 {@code .enc} 标记后插入 {@code .dec}，保留原媒体扩展名，
-     * 形如 {@code song.enc.mp3 → song.dec.mp3}；输入本身无 {@code .enc} 标记时
-     * 按噪声媒体处理，直接得到 {@code song.dec.mp3}。
+     * 形如 {@code song.enc.mp3 → song.dec.mp3}；输入本身无 {@code .enc} 标记时按噪声媒体处理，直接得到 {@code song.dec.mp3}。
      *
      * @param fileName 输入媒体文件名（不含路径）
      * @return 形如 {@code 基名.dec.扩展名} 的文件名
@@ -247,8 +241,7 @@ public final class OutputNaming {
      * 计算图片加密产物的输出文件名。
      *
      * <p>形如 {@code holiday.jpg → holiday.egimg.png}：丢掉原扩展名并追加
-     * {@link #IMAGE_CRYPT_MARKER}，因为产物统一是 PNG 外壳，而原始格式身份由加密区内的
-     * InnerManifest 保存，不依赖文件名。
+     * {@link #IMAGE_CRYPT_MARKER}，因为产物统一是 PNG 外壳，而原始格式身份由加密区内的InnerManifest 保存，不依赖文件名。
      *
      * @param fileName 输入图片文件名（不含路径）
      * @return 形如 {@code 基名.egimg.png} 的文件名
@@ -279,8 +272,7 @@ public final class OutputNaming {
      * </ul>
      *
      * <p>插入 {@code .restored} 标记使恢复产物不会覆盖用户手里那份原始文件；调用方仍须
-     * 按覆盖设置做最终确认。清单名称必须先经 {@code InnerManifest.safeBasename()} 清洗，
-     * 本方法<b>不</b>承担路径穿越防护。
+     * 按覆盖设置做最终确认。清单名称必须先经 {@code InnerManifest.safeBasename()} 清洗，本方法<b>不</b>承担路径穿越防护。
      *
      * @param originalName 清单中的 basename，可为空串
      * @param extension    规范化小写扩展名（不含点），可为空串

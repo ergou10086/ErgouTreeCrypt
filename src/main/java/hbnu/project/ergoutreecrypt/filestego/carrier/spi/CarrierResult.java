@@ -9,7 +9,6 @@ package hbnu.project.ergoutreecrypt.filestego.carrier.spi;
  * @param metadata 载体元数据（含密码学参数）
  * @param payload  提取的 STEG-V2 Payload 字节数组
  * @author ErgouTree
- * @since 2026/8/5
  */
 public record CarrierResult(CarrierMetadata metadata, byte[] payload) {
 }

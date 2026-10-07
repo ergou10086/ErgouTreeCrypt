@@ -50,16 +50,13 @@ import java.util.Properties;
  *   <li>{@code corpus-input.png} / {@code corpus-input.jpg}：确定性生成的原始输入；</li>
  *   <li>{@code desktop-*.egimg.png}：桌面 JVM 生成的公开恢复与密码保护产物；</li>
  *   <li>{@code corpus.properties}：输入、密码（含 NFC/NFD 两种形态的规范化后字节）、
- *       协议中间值、恢复名与全部 SHA-256。文件以 <b>UTF-8</b> 写出，读取方必须显式指定
- *       UTF-8 —— {@code Properties.load(InputStream)} 的默认编码是 ISO-8859-1，
- *       会把组合字符口令读成乱码并让 keyConfirm 无声失败。</li>
+ *       协议中间值、恢复名与全部 SHA-256。文件以 <b>UTF-8</b> 写出，读取方必须显式指定UTF-8 —— {@code Properties.load(InputStream)} 的默认编码是 ISO-8859-1，会把组合字符口令读成乱码并让 keyConfirm 无声失败。</li>
  * </ul>
  *
  * <p>Android 侧通过 Gradle 同步任务读取同一份目录，作为 instrumentation 的 assets，
  * 因此两端看到的是<b>同一批字节</b>，不存在"两边各生成一份再互相比对"的伪互操作。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class InteropCorpusGenerator {
 
@@ -94,8 +91,7 @@ public final class InteropCorpusGenerator {
      * 同一口令的 NFD 形态（é 拆成 e + U+0301 组合音标）。
      *
      * <p>它存在的意义是证明"密码必须经 NFC 规范化"这条约束在两端都成立：NFC 与 NFD 是同一段
-     * 文本的两种合法编码，若某一端漏了归一化，两端就会派生出不同的密钥。语料里同时记下两种
-     * 形态的规范化结果，两端各自断言它们相等。
+     * 文本的两种合法编码，若某一端漏了归一化，两端就会派生出不同的密钥。语料里同时记下两种形态的规范化结果，两端各自断言它们相等。
      */
     private static final String UNICODE_PASSWORD_NFD =
             "café-中文";
@@ -182,8 +178,7 @@ public final class InteropCorpusGenerator {
      * 以确定性格式写出语料属性表。
      *
      * <p>刻意不用 {@link Properties#store(OutputStream, String)}：它会写入当前时间戳，
-     * 使每次重新生成的 diff 都包含一行无意义的噪声，掩盖真正的字节变化。这里按键名排序输出，
-     * 同一份语料无论何时生成都得到逐字节相同的文本。
+     * 使每次重新生成的 diff 都包含一行无意义的噪声，掩盖真正的字节变化。这里按键名排序输出，同一份语料无论何时生成都得到逐字节相同的文本。
      *
      * @param properties 属性表
      * @param target     目标文件

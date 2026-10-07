@@ -35,7 +35,6 @@ data class OptionItem(
  * @param onOptionToggle  选项切换回调（传入选项 key）
  * @param modifier        修饰符
  * @author ErgouTree
- * @since 2026/8/11
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

@@ -17,7 +17,6 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * @param robustness         抗图片重编码强度
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
                                 ImageCryptRobustness robustness) {
@@ -137,8 +136,7 @@ public record ImageCryptOptions(ImageCryptMode mode, boolean overwriteExisting,
      * 校验调用方给出的密码字节与当前模式是否匹配。
      *
      * <p>两个方向都属于调用错误，必须在进入 KDF 或写出任何字节之前发现：密码模式缺少密码会
-     * 派生出一把无意义的密钥；公开模式却给了密码则说明调用方混淆了模式，若被忽略就会写出
-     * 一份没有保密性的产物。
+     * 派生出一把无意义的密钥；公开模式却给了密码则说明调用方混淆了模式，若被忽略就会写出一份没有保密性的产物。
      *
      * @param password 调用方提供的密码 UTF-8 字节，可为 {@code null}
      * @throws ImageCryptException 模式与密码的存在性不匹配

@@ -16,7 +16,6 @@ package hbnu.project.ergoutreecrypt.filestego.api;
  * @param compressed      是否使用了「加密前压缩」（Zstandard）；{@code null} 表示
  *                        无法判定（Payload 头读取失败）
  * @author ErgouTree
- * @since 2026/8/31
  */
 public record StegoPreflight(Integer argon2MemoryKib, Boolean compressed) {
 

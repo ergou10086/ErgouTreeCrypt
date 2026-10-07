@@ -27,7 +27,7 @@ class Mp3HeaderTablesTest {
         assertTrue(h.isMono());
         // 帧长 = 144 * 128000 / 44100 = 417。
         assertEquals(417, h.frameLength());
-        // side info：MPEG-1 mono = 17。
+        // 附加信息：MPEG-1 单声道为十七字节。
         assertEquals(17, Mp3HeaderTables.sideInfoLength(h.version(), h.channelMode()));
     }
 
@@ -50,7 +50,7 @@ class Mp3HeaderTablesTest {
         assertFalse(h.isMono());
         // 帧长 = 144 * 320000 / 48000 = 960。
         assertEquals(960, h.frameLength());
-        // side info：MPEG-1 stereo = 32。
+        // 附加信息：MPEG-1 立体声为三十二字节。
         assertEquals(32, Mp3HeaderTables.sideInfoLength(h.version(), h.channelMode()));
     }
 
@@ -62,8 +62,8 @@ class Mp3HeaderTablesTest {
 
     @Test
     void rejectsFreeAndReservedBitrate() {
-        assertFalse(Mp3HeaderTables.parse(0xFF, 0xFB, 0x00, 0xC0).valid()); // bitrate idx 0 = free
-        assertFalse(Mp3HeaderTables.parse(0xFF, 0xFB, 0xF0, 0xC0).valid()); // bitrate idx 15 = bad
+        assertFalse(Mp3HeaderTables.parse(0xFF, 0xFB, 0x00, 0xC0).valid()); // 码率索引零，表示自由格式
+        assertFalse(Mp3HeaderTables.parse(0xFF, 0xFB, 0xF0, 0xC0).valid()); // 码率索引十五，表示无效
     }
 
     @Test

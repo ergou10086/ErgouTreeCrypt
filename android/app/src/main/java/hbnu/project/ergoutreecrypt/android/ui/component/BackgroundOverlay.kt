@@ -31,7 +31,6 @@ import kotlinx.coroutines.withContext
  * <p>用法：在内容区域的最外层 Box 中，将此组件置于最底层。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 @Composable
 fun BackgroundOverlay(modifier: Modifier = Modifier) {

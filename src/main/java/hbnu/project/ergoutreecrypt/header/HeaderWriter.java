@@ -64,7 +64,7 @@ public final class HeaderWriter {
 
         int totalWritten = 0;
 
-        // 1. version: RS5(5→15)
+        // 1. 版本：RS5(5→15)
         byte[] versionRaw = toFixedBytes(h.getVersion(), HeaderLayout.VERSION_SRC_SIZE);
         byte[] versionEnc = ReedSolomon.encode(rs.rs5, versionRaw);
         totalWritten += writeAll(versionEnc);
@@ -81,21 +81,21 @@ public final class HeaderWriter {
             totalWritten += writeAll(charEnc);
         }
 
-        // 4. flags: RS5(5→15)
+        // 4. 标志位：RS5(5→15)
         byte[] flagsRaw = h.getFlags().toBytes();
         byte[] flagsEnc = ReedSolomon.encode(rs.rs5, flagsRaw);
         totalWritten += writeAll(flagsEnc);
 
-        // 5. salt: RS16(16→48)
+        // 5. 盐值：RS16(16→48)
         totalWritten += writeAll(ReedSolomon.encode(rs.rs16, h.getSalt()));
 
-        // 6. hkdfSalt: RS32(32→96)
+        // 6. HKDF 盐值：RS32(32→96)
         totalWritten += writeAll(ReedSolomon.encode(rs.rs32, h.getHkdfSalt()));
 
-        // 7. serpentIV: RS16(16→48)
+        // 7. Serpent 初始化向量：RS16(16→48)
         totalWritten += writeAll(ReedSolomon.encode(rs.rs16, h.getSerpentIV()));
 
-        // 8. nonce: RS24(24→72)
+        // 8. 随机数：RS24(24→72)
         totalWritten += writeAll(ReedSolomon.encode(rs.rs24, h.getNonce()));
 
         // 8b. Argon2 参数（仅 v2.15+）：RS6(6→18)

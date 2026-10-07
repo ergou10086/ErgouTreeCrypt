@@ -19,12 +19,11 @@ import java.util.List;
  * PDF 载体适配器（不受限方案）。
  *
  * <p>PDF 阅读器从文件末尾的 {@code startxref} 读取交叉引用表偏移，{@code %%EOF}
- * 之后的内容通常被忽略。本适配器据此在 {@code %%EOF} 之后追加一段以注释标记包裹的
- * Base64 数据块：
+ * 之后的内容通常被忽略。本适配器据此在 {@code %%EOF} 之后追加一段以注释标记包裹的Base64 数据块：
  * <pre>
  *   [完整 PDF，以 %%EOF 结尾]
  *   \n%STEG-BEGIN\n
- *   Base64([CarrierMetadata + Payload])
+ *   Base64 编码的 [CarrierMetadata + Payload]
  *   \n%STEG-END\n
  * </pre>
  *
@@ -32,7 +31,6 @@ import java.util.List;
  * PDF 内容位流无稳定冗余，故采用 %%EOF 后追加的容量无关方案。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class PdfCarrierAdapter extends AbstractCarrierAdapter {
 

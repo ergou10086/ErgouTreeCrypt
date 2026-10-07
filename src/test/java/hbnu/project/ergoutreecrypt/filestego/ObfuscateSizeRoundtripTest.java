@@ -22,11 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 文件大小混淆（obfuscateSize）与提取的回归测试。
  *
  * <p>obfuscateSize 会在隐写文件末尾追加随机填充字节，末尾追加型载体
- * （ZIP、PNG-trailer）的提取必须按 {@code meta.payloadSize()} 精确截断，
- * 否则 Payload MAC 校验会把填充字节算入密文而失败。本测试锚定该修复。
+ * （ZIP、PNG-trailer）的提取必须按 {@code meta.payloadSize()} 精确截断，否则 Payload MAC 校验会把填充字节算入密文而失败。本测试锚定该修复。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class ObfuscateSizeRoundtripTest {
 

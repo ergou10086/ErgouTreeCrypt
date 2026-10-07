@@ -448,8 +448,7 @@ public final class FolderCrypt {
      *
      * <p>多个分卷碎片通过 {@link Splitter#isSplitChunkPath} 与
      * {@link Splitter#splitChunkBase} 归一：同属一个卷的碎片只处理一次，避免重复合并。
-     * 每个输入的产物落在输出目录下，互不嵌套。失败与跳过都记入
-     * {@link DecryptOptions#batchResult}，由调用方在结束弹窗中汇报。
+     * 每个输入的产物落在输出目录下，互不嵌套。失败与跳过都记入{@link DecryptOptions#batchResult}，由调用方在结束弹窗中汇报。
      *
      * @param inputs    输入路径列表
      * @param outputDir 输出目录
@@ -633,8 +632,7 @@ public final class FolderCrypt {
      * 解密压缩包：解压（可带密码）后逐个解密内部加密文件。
      *
      * <p>嵌套压缩包的处理深度由 {@link DecryptOptions#recursiveExtract} 决定：
-     * 未勾选最多 {@link ArchivePostExtract#DEFAULT_MAX_DEPTH} 层，
-     * 勾选最多 {@link ArchivePostExtract#RECURSIVE_MAX_DEPTH} 层。
+     * 未勾选最多 {@link ArchivePostExtract#DEFAULT_MAX_DEPTH} 层，勾选最多 {@link ArchivePostExtract#RECURSIVE_MAX_DEPTH} 层。
      *
      * @param depth 当前解压深度（最外层为 0）
      */
@@ -678,8 +676,7 @@ public final class FolderCrypt {
     }
 
     /**
-     * 解析解压归档所需密码：优先取选项中的归档密码（含回退到加密密码），
-     * 为空且归档需要密码时通过密码提供者（弹窗）获取；用户放弃时抛出异常。
+     * 解析解压归档所需密码：优先取选项中的归档密码（含回退到加密密码），为空且归档需要密码时通过密码提供者（弹窗）获取；用户放弃时抛出异常。
      *
      * @param archive 待解压的归档路径
      * @param opts    解密选项
@@ -905,7 +902,7 @@ public final class FolderCrypt {
      */
     private static List<Unit> collectUnits(Path dir, DecryptStats stats, boolean allowNested) throws IOException {
         List<Unit> units = new ArrayList<>();
-        Map<String, List<Path>> chunkGroups = new LinkedHashMap<>(); // base -> chunk files
+        Map<String, List<Path>> chunkGroups = new LinkedHashMap<>(); // 基础文件映射到分卷文件
         List<Path> regularEncrypted = new ArrayList<>();
 
         try (Stream<Path> children = Files.list(dir)) {
@@ -1076,8 +1073,7 @@ public final class FolderCrypt {
      *
      * <p>深度从 {@code parentDepth} 开始计算：根目录为 0，其直接子项为 1，以此类推。
      * 文件仅在其深度 ≤ {@code maxDepth} 时加入 {@code files} 列表；
-     * 目录在其深度 ≥ {@code maxDepth} 时加入 {@code deepDirs} 列表（不再递归进入），
-     * 否则继续递归。
+     * 目录在其深度 ≥ {@code maxDepth} 时加入 {@code deepDirs} 列表（不再递归进入），否则继续递归。
      *
      * @param dir         当前目录
      * @param inputRoot   加密根目录（用于保持引用，此处传参与递归无关）
@@ -1294,8 +1290,7 @@ public final class FolderCrypt {
      *
      * <p>GZ 是纯单文件流格式，不保存条目名：用它对文件夹打包时，密文会以「压缩包基名」
      * 落盘而丢掉 {@code .ergou} 后缀，本工具随后就无法再识别这份产物。
-     * 因此文件夹与多文件归档一律把 GZ 提升为 TAR.GZ（保留条目名与目录结构），
-     * 与 {@link ArchivePacker#packEntries} 内部对多条目 GZ 的处理保持一致。
+     * 因此文件夹与多文件归档一律把 GZ 提升为 TAR.GZ（保留条目名与目录结构），与 {@link ArchivePacker#packEntries} 内部对多条目 GZ 的处理保持一致。
      *
      * @param format 用户选择的归档格式字符串
      * @return 实际使用的归档格式
@@ -1309,8 +1304,7 @@ public final class FolderCrypt {
      * 创建工作目录。
      *
      * <p>不需要归档时，工作目录即最终产物目录 {@code 输出目录/名字}，加密结果直接落盘；
-     * 需要归档时必须改用输出目录下的临时目录：否则默认输出目录（输入文件夹的父目录）
-     * 会让工作目录与输入文件夹重合，把原文件和密文一起打进归档，收尾清理还会删掉原文件夹。
+     * 需要归档时必须改用输出目录下的临时目录：否则默认输出目录（输入文件夹的父目录）会让工作目录与输入文件夹重合，把原文件和密文一起打进归档，收尾清理还会删掉原文件夹。
      *
      * @param outputDir 输出目录
      * @param name      产物基名
@@ -2025,8 +2019,7 @@ public final class FolderCrypt {
         public RsCodecs rsCodecs;
         public ProgressReporter reporter;
         /**
-         * Argon2 密钥派生的进度/取消回调（移动端用于回传进度与响应取消），
-         * null 表示无需回调。由 {@link FolderCrypt} 透传给每个文件的加密请求。
+         * Argon2 密钥派生的进度/取消回调（移动端用于回传进度与响应取消），null 表示无需回调。由 {@link FolderCrypt} 透传给每个文件的加密请求。
          */
         public hbnu.project.ergoutreecrypt.crypto.KdfProgress kdfProgress;
         /**
@@ -2068,8 +2061,7 @@ public final class FolderCrypt {
         public String password;
         public String archivePassword;
         /**
-         * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，
-         * 通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
+         * 归档密码提供者：解压遇到受密码保护的归档但 {@link #archivePassword} 为空时，通过此回调弹窗询问用户密码。桌面 / 移动端各自提供 UI 实现，可为 null。
          */
         public ArchivePasswordProvider archivePasswordProvider;
         public boolean forceDecrypt;

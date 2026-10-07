@@ -75,7 +75,6 @@ import java.util.Locale
  * <p>提供 Argon2 移动模式、默认加密选项、线程数、背景图片等设置。已作为底部导航栏独立 Tab。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -46,9 +46,7 @@ public final class EncryptCompressTest {
     private static boolean savedFallback;
 
     /**
-     * 初始化：本套件专门测试「加密后压缩 + 归档密码」，需开启「工具特有加密」
-     * 使 GZ/TAR.GZ/7Z 可加密；默认关闭「密码回退」，让未显式填写归档密码的
-     * 用例仍生成明文归档（个别用例内部会临时开启回退）。
+     * 初始化：本套件专门测试「加密后压缩 + 归档密码」，需开启「工具特有加密」使 GZ/TAR.GZ/7Z 可加密；默认关闭「密码回退」，让未显式填写归档密码的用例仍生成明文归档（个别用例内部会临时开启回退）。
      */
     @BeforeAll
     static void setUp() {
@@ -183,7 +181,7 @@ public final class EncryptCompressTest {
         Path archive = tempDir.resolve("output.ergou.gz");
         assertTrue(Files.exists(archive));
 
-        // GZ with password uses AES-256-CTR whole-file wrapper
+        // 带密码的 GZ 使用 AES-256-CTR 整文件包裹。
         assertTrue(ArchiveExtractor.isEncryptedFile(archive),
                 "GZ with password should have EGTC_ARCHV1 magic");
 
@@ -631,7 +629,7 @@ public final class EncryptCompressTest {
 
     @Test
     void dualDeniabilitySplitToZip(@TempDir Path tempDir) throws Exception {
-        byte[] realData = generateTestData(3 * 1024 * 1024); // 3 MiB, triggers split
+        byte[] realData = generateTestData(3 * 1024 * 1024); // 3 MiB，触发分卷
         byte[] decoyData = generateTestData(100 * 1024);
 
         Path realFile = createFile(tempDir, "secret.bin", realData);
@@ -696,7 +694,7 @@ public final class EncryptCompressTest {
 
     @Test
     void dualDeniabilityAllOptionsToZip(@TempDir Path tempDir) throws Exception {
-        // EGTD + paranoid + RS + split + ZIP
+        // EGTD、偏执、RS、分卷与 ZIP 组合
         byte[] realData = generateTestData(300 * 1024);
         byte[] decoyData = generateTestData(80 * 1024);
 

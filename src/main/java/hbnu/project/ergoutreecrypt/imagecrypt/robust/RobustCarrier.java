@@ -22,12 +22,9 @@ import java.util.Map;
  * 抗图片重编码载体的分级前向纠错与灰度符号编解码器。
  *
  * <p>载体采用“灰度调制或像素块重复 + Reed-Solomon + 交织”的串接结构。均衡档保持
- * RS(192,128) 与 8 级灰度，以兼容已有产物；增强档和极强档使用 RS(192,96)，并依次
- * 降为 4 级与 2 级灰度。交织会把连续的像素污染分散到多个码字，极强档还通过 2×2
- * 重复块和归一化采样抵抗更强的压缩以及轻微等比例缩放。
+ * RS(192,128) 与 8 级灰度，以兼容已有产物；增强档和极强档使用 RS(192,96)，并依次降为 4 级与 2 级灰度。交织会把连续的像素污染分散到多个码字，极强档还通过 2×2重复块和归一化采样抵抗更强的压缩以及轻微等比例缩放。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class RobustCarrier {
 
@@ -539,7 +536,6 @@ public final class RobustCarrier {
      * 把逻辑帧按组编码并交织的流式输入。
      *
      * @author ErgouTree
-     * @since 2026/9/17
      */
     private static final class EncodingInputStream extends InputStream {
 

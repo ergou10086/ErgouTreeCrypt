@@ -15,7 +15,6 @@ import java.nio.file.Path;
  * <p>类名与共享核心反射入口保持一致；Android 构建会排除桌面 AWT 实现并采用本类。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class DesktopRobustImageDecoder {
 

@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@link LogService} 与 {@link MemoryLogBuffer} 的核心行为测试。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class LogServiceTest {
 

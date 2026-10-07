@@ -18,7 +18,6 @@ import java.nio.file.StandardOpenOption;
  * Android Bitmap 实现的超大图片 JPEG 恢复副本转码桥。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class DesktopRobustPayloadTranscoder {
 

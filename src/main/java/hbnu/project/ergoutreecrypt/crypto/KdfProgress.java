@@ -8,7 +8,6 @@ package hbnu.project.ergoutreecrypt.crypto;
  * 桌面端不传（{@code null}），派生行为与既有版本完全一致。
  *
  * @author ErgouTree
- * @since 2026/8/28
  */
 public interface KdfProgress {
 

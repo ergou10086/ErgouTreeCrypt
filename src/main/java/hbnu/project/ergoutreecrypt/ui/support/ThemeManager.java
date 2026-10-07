@@ -17,8 +17,7 @@ import java.util.concurrent.TimeUnit;
  * 主题管理器，支持浅色/深色双主题及跟随 Windows 系统主题自动切换。
  *
  * <p>通过给场景根节点切换 {@code light} / {@code dark} 样式类来驱动 CSS 变量，
- * 单一样式表 {@code win11.css} 内用 {@code .root.light} / {@code .root.dark}
- * 选择器覆盖，做到一次加载、即时切换。
+ * 单一样式表 {@code win11.css} 内用 {@code .root.light} / {@code .root.dark}选择器覆盖，做到一次加载、即时切换。
  *
  * <p>三种主题模式：
  * <ul>

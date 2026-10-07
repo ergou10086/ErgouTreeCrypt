@@ -7,11 +7,9 @@ package hbnu.project.ergoutreecrypt.exception;
  * 本类型或其子类，使前端能通过 {@link #kind()} 做类型化判断，而非字符串匹配。
  *
  * <p>取向：<b>不为每个错误建子类</b>。绝大多数场景用 {@code new CryptoException(kind, message)}
- * 即可；只有需携带结构化字段时才建子类（见 {@link CancelledException}）。{@link #args()} 携带
- * i18n 格式化参数（如暴力破解锁定阈值），由映射器在展示阶段拼入文案。
+ * 即可；只有需携带结构化字段时才建子类（见 {@link CancelledException}）。{@link #args()} 携带i18n 格式化参数（如暴力破解锁定阈值），由映射器在展示阶段拼入文案。
  *
  * @author ErgouTree
- * @since 2026/9/13
  */
 public class CryptoException extends Exception {
 

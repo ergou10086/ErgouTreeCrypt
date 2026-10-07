@@ -6,7 +6,6 @@ package hbnu.project.ergoutreecrypt.log;
  * <p>回调可能来自任意线程（含加解密后台线程），UI 实现须自行切到 FX 线程。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public interface LogListener {
 

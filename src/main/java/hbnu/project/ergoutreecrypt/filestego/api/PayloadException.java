@@ -19,7 +19,6 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind;
  * <p>默认归类为 {@link ErrorKind#PAYLOAD_INVALID}。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public class PayloadException extends CryptoException {
 

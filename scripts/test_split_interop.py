@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Real desktop JVM <-> Android ART split regression: four decrypt + four verify directions.
-Use an existing connected emulator/device. The script installs debug/test APKs only.
-Example: python scripts/test_split_interop.py --adb PATH --slow
+"""真实桌面 JVM 与 Android ART 分卷回归：四种解密方向与四种认证方向。
+使用已连接的模拟器或设备；脚本只安装调试 APK 与测试 APK。
+示例：python scripts/test_split_interop.py --adb PATH --slow
 """
 import argparse
 import os

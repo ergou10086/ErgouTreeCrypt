@@ -53,7 +53,6 @@ import java.security.SecureRandom
  * @param showActions      是否显示生成/复制操作按钮，默认 true
  * @param modifier         修饰符
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun PasswordField(

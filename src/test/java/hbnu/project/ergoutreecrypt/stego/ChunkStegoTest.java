@@ -40,7 +40,7 @@ class ChunkStegoTest {
         return p;
     }
 
-    // ---- ChunkTrailer ----
+    // ---- 分块尾部 ----
 
     @Test
     void trailerRoundtrip() throws Exception {
@@ -52,7 +52,7 @@ class ChunkStegoTest {
         for (int i = 0; i < 24; i++) nonce[i] = (byte) (i + 100);
 
         ChunkTrailer t = new ChunkTrailer(12345L, "test.bin", salt, hkdfSalt, nonce,
-                (byte) 2, null); // hasMac but no actual MAC data
+                (byte) 2, null); // 声明消息认证码但实际缺少认证数据
 
         byte[] serialized = t.toBytes();
         ChunkTrailer restored = ChunkTrailer.fromBytes(serialized);
@@ -82,7 +82,7 @@ class ChunkStegoTest {
         assertArrayEquals(mac, restored.payloadMac);
     }
 
-    // ---- PngChunkStego engine ----
+    // ---- PNG 分块隐写引擎 ----
 
     @Test
     void embedAndExtractRaw(@TempDir Path dir) throws Exception {

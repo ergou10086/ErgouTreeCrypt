@@ -27,7 +27,6 @@ import java.util.Map;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 public final class FileHistoryStore implements HistoryStore {
 
@@ -211,8 +210,7 @@ public final class FileHistoryStore implements HistoryStore {
     }
 
     /**
-     * 极简 JSON 对象解析器：仅支持一层平铺对象，
-     * 值为字符串、数字或 null（与本存储的写入格式一一对应）。
+     * 极简 JSON 对象解析器：仅支持一层平铺对象，值为字符串、数字或 null（与本存储的写入格式一一对应）。
      *
      * <p>解析器逐字符扫描并正确处理字符串转义，
      * 值中包含键名或引号等特殊字符不会导致误解析。

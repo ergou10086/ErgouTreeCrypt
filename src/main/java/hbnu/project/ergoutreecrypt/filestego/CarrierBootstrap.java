@@ -12,11 +12,9 @@ import hbnu.project.ergoutreecrypt.filestego.carrier.zip.ZipCarrierAdapter;
  * 内置载体适配器引导注册器。
  *
  * <p>将项目内建的各格式 {@link hbnu.project.ergoutreecrypt.filestego.carrier.spi.CarrierAdapter}
- * 实现集中注册到 {@link CarrierRegistry}。{@link FileStegoCodec} 在类加载时会自动调用
- * {@link #ensureRegistered()}，因此调用方通常无需手动触发。
+ * 实现集中注册到 {@link CarrierRegistry}。{@link FileStegoCodec} 在类加载时会自动调用{@link #ensureRegistered()}，因此调用方通常无需手动触发。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class CarrierBootstrap {
 

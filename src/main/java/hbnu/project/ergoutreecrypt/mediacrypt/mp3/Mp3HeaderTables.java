@@ -13,14 +13,14 @@ package hbnu.project.ergoutreecrypt.mediacrypt.mp3;
  *   E(4)  比特率索引
  *   F(2)  采样率索引
  *   G(1)  padding（1=该帧多 1 字节(Layer III/II) 或 4 字节(Layer I)）
- *   H(1)  private
+ *   H(1)  私有位
  *   I(2)  声道模式：11=单声道，其余为立体声类
  *   ...
  * </pre>
  *
  * <p>帧长公式（字节，向下取整）：
  * <ul>
- *   <li>Layer I：{@code (12 * bitrate / sampleRate + padding) * 4}</li>
+ *   <li>第一层：{@code (12 * bitrate / sampleRate + padding) * 4}</li>
  *   <li>Layer II/III：{@code 144 * bitrate / sampleRate + padding}（MPEG-2/2.5 Layer III 系数为 72）</li>
  * </ul>
  *
@@ -41,7 +41,7 @@ public final class Mp3HeaderTables {
     /**
      * 比特率表 [versionGroup][layerIndex][bitrateIndex]（单位 bps）。
      * versionGroup：0 = MPEG-1，1 = MPEG-2/2.5。
-     * layerIndex：0=LayerI,1=LayerII,2=LayerIII。
+     * layerIndex：0=第一层，1=第二层，2=第三层。
      * bitrateIndex 0 表示 free，15 为非法。值为 0 表示 free/非法。
      */
     private static final int[][][] BITRATE = {
@@ -109,7 +109,7 @@ public final class Mp3HeaderTables {
         }
 
         int versionGroup = (version == MPEG_1) ? 0 : 1;
-        int layerIndex = LAYER_1 - layer; // LAYER_1=3→0, II=2→1, III=1→2
+        int layerIndex = LAYER_1 - layer; // LAYER_1=3→0，第二层=2→1，第三层=1→2
         int bitrate = BITRATE[versionGroup][layerIndex][bitrateIdx] * 1000;
         int sampleRate = SAMPLE_RATE[version][sampleIdx];
         if (bitrate == 0 || sampleRate == 0) {

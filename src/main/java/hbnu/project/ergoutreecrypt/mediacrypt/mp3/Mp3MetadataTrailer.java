@@ -27,7 +27,7 @@ import java.nio.file.StandardOpenOption;
  * <pre>
  *   [ metadata 字节（见 MediaMetadata.toBytes，变长） ]
  *   [ trailerLen : 4B 大端 = metadata 长度 ]
- *   [ trailerMagic : 8B = "EGTCMP3T" ]
+ *   [ 尾部魔数 : 8字节 = "EGTCMP3T" ]
  * </pre>
  * 解密时从文件尾读固定 12 字节定位，再回读 metadata，并按"原文件长度 = 当前长度 - 尾块总长"剥离。
  *

@@ -43,20 +43,20 @@ import java.util.List;
  * <h3>文件格式</h3>
  * <pre>
  * ┌──────────────────────────────────────────────┐
- * │ Magic: "EGTD" (4 bytes)                      │
- * │ Version: 0x01 (1 byte)                       │
- * │ HeaderSize: uint32 LE (4 bytes)              │
+ * │ 魔数："EGTD"（4字节）                      │
+ * │ 版本：0x01（1字节）                       │
+ * │ 头大小：无符号三十二位小端整数（4字节）   │
  * ├──────────────────────────────────────────────┤
- * │ MetaBlock-1 (decoy slot): 552 bytes          │
+ * │ 元数据块一（诱饵槽）：552字节             │
  * │   salt[16] + nonce[24]                       │
  * │   + XChaCha20_encrypt(plaintext_meta_1)      │
  * ├──────────────────────────────────────────────┤
- * │ MetaBlock-2 (hidden slot): 552 bytes         │
+ * │ 元数据块二（隐藏槽）：552字节             │
  * │   无隐藏卷时填充 SecureRandom 字节             │
  * ├──────────────────────────────────────────────┤
- * │ Decoy Data Region                            │
+ * │ 诱饵数据区                               │
  * ├──────────────────────────────────────────────┤
- * │ Hidden Data Region                           │
+ * │ 隐藏数据区                               │
  * └──────────────────────────────────────────────┘
  * </pre>
  *
@@ -870,13 +870,13 @@ public final class DualDeniability {
             System.arraycopy(nonce, 0, plain, NONCE_OFFSET, NONCE_SIZE);
             // authTag（由 encryptToFile 在序列化前填入）
             System.arraycopy(authTag, 0, plain, AUTHTAG_OFFSET, AUTHTAG_SIZE);
-            // dataOffset (8 bytes LE)
+            // dataOffset（8字节，小端）
             ByteBuffer.wrap(plain, DATAOFFSET_OFFSET, 8).order(ByteOrder.LITTLE_ENDIAN)
                     .putLong(dataOffset);
-            // dataLength (8 bytes LE)
+            // dataLength（8字节，小端）
             ByteBuffer.wrap(plain, DATALENGTH_OFFSET, 8).order(ByteOrder.LITTLE_ENDIAN)
                     .putLong(dataLength);
-            // origNameLen (2 bytes LE)
+            // origNameLen（2字节，小端）
             byte[] nameBytes = origName.getBytes(StandardCharsets.UTF_8);
             int nameLen = Math.min(nameBytes.length, MAX_FILENAME_BYTES);
             ByteBuffer.wrap(plain, ORIGNAMELEN_OFFSET, 2).order(ByteOrder.LITTLE_ENDIAN)

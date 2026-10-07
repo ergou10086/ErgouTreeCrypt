@@ -4,19 +4,15 @@ package hbnu.project.ergoutreecrypt.crypto;
  * 原生（JNI）Argon2id 派生桥接。
  *
  * <p>通过 JNI 调用随 Android 打包的 libargon2（参考 C 实现），在 native 堆分配内存、
- * 用 SIMD 优化，使移动端派生 1 GiB 参数时从「数分钟」降到秒级。桌面端未打包
- * {@code ergou_argon2} 动态库，{@link #isAvailable()} 恒为 {@code false}，调用方
- * 回退到纯 Java 的 {@link Argon2OffHeap}，行为不变。
+ * 用 SIMD 优化，使移动端派生 1 GiB 参数时从「数分钟」降到秒级。桌面端未打包{@code ergou_argon2} 动态库，{@link #isAvailable()} 恒为 {@code false}，调用方回退到纯 Java 的 {@link Argon2OffHeap}，行为不变。
  *
  * <p>输出与 BouncyCastle {@code Argon2BytesGenerator}、{@link Argon2OffHeap} 逐字节
- * 一致（三者均实现 Argon2id v1.3，RFC 9106 确定性），由 {@code NativeArgon2Test}
- * 交叉验证。
+ * 一致（三者均实现 Argon2id v1.3，RFC 9106 确定性），由 {@code NativeArgon2Test}交叉验证。
  *
  * <p>本类在桌面端（无 native 库）与 Android 端（有 native 库）共用同一份源码；桌面
  * 端仅 {@code loadLibrary} 失败一次后缓存为不可用，无其他开销。
  *
  * @author ErgouTree
- * @since 2026/8/30
  */
 public final class NativeArgon2 {
 

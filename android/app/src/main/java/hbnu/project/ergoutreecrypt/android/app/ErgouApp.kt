@@ -22,7 +22,7 @@ import java.security.Security
 import java.util.Locale
 
 /**
- * ErgouTreeCrypt Android Application。
+ * ErgouTreeCrypt 的 Android 应用入口。
  *
  * <p>负责全局初始化：
  * <ol>
@@ -32,7 +32,6 @@ import java.util.Locale
  * </ol>
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class ErgouApp : Application() {
 

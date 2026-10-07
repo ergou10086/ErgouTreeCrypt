@@ -71,14 +71,14 @@ final class MediaTestFixtures {
      * @param frameCount 帧数
      */
     static byte[] buildMp3(int frameCount) {
-        // MPEG-1 Layer III, 128kbps, 44.1kHz, mono, no CRC, no padding。
+        // MPEG-1 第三层，128kbps、44.1kHz、单声道，无 CRC、无填充。
         // 帧长 = 144 * 128000 / 44100 = 417 字节。
         int frameLen = 144 * 128000 / 44100; // 417
         byte[] header = new byte[]{
-                (byte) 0xFF, // sync
-                (byte) 0xFB, // MPEG1(11) LayerIII(01) noCRC(1) -> 1111 1011
-                (byte) 0x90, // bitrate idx 1001=128k, samplerate 00=44.1k, pad 0 -> 1001 0000
-                (byte) 0xC0  // channel mode 11=mono -> 1100 0000
+                (byte) 0xFF, // 同步字
+                (byte) 0xFB, // MPEG1(11)、第三层(01)、无CRC(1) → 1111 1011
+                (byte) 0x90, // 码率索引1001=128k，采样率00=44.1k，填充0 → 1001 0000
+                (byte) 0xC0  // 声道模式11=单声道 → 1100 0000
         };
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -95,15 +95,15 @@ final class MediaTestFixtures {
     /**
      * 构造最小合法 MP4：ftyp + moov(占位) + mdat(媒体数据)。
      *
-     * @param mdatData mdat payload
+     * @param mdatData 媒体数据载荷
      */
     static byte[] buildMp4(byte[] mdatData) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         // ftyp
         byte[] ftypPayload = concat(
-                "isom".getBytes(StandardCharsets.US_ASCII), // major brand
-                intBE(0x200),                                // minor version
-                "isomiso2mp41".getBytes(StandardCharsets.US_ASCII)); // compatible brands
+                "isom".getBytes(StandardCharsets.US_ASCII), // 主品牌
+                intBE(0x200),                                // 次版本
+                "isomiso2mp41".getBytes(StandardCharsets.US_ASCII)); // 兼容品牌
         writeBox(out, "ftyp", ftypPayload);
         // moov（占位，内容非真实但 box 结构合法即可——本子系统不解析 moov 内部）
         byte[] moovPayload = new byte[32];
@@ -306,25 +306,25 @@ final class MediaTestFixtures {
         // ---- mvhd ----
         private static byte[] buildMvhd(int timescale, int duration) {
             ByteBuffer bb = ByteBuffer.allocate(96).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(0);                          // creation_time
-            bb.putInt(0);                          // modification_time
+            bb.putInt(0);                          // 创建时间
+            bb.putInt(0);                          // 修改时间
             bb.putInt(timescale);
             bb.putInt(duration);
-            bb.putInt(0x00010000);                 // rate (1.0)
-            bb.putShort((short) 0x0100);           // volume (1.0)
-            bb.putShort((short) 0);                // reserved
-            bb.putInt(0); bb.putInt(0);            // reserved
-            for (int i = 0; i < 9; i++) {          // matrix (identity)
+            bb.putInt(0x00010000);                 // 播放速率（1.0）
+            bb.putShort((short) 0x0100);           // 音量（1.0）
+            bb.putShort((short) 0);                // 保留字段
+            bb.putInt(0); bb.putInt(0);            // 保留字段
+            for (int i = 0; i < 9; i++) {          // 单位矩阵
                 if (i == 0 || i == 4) {
                     bb.putInt(0x00010000);
                 } else {
                     bb.putInt(0);
                 }
             }
-            for (int i = 0; i < 6; i++) {          // pre_defined
+            for (int i = 0; i < 6; i++) {          // 预定义字段
                 bb.putInt(0);
             }
-            bb.putInt(2);                          // next_track_id
+            bb.putInt(2);                          // 下一个轨道标识符
             return fullBox("mvhd", (byte) 0, 0, bb.array());
         }
 
@@ -338,26 +338,26 @@ final class MediaTestFixtures {
 
         private static byte[] buildTkhd(int duration) {
             ByteBuffer bb = ByteBuffer.allocate(80).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(0);                          // creation_time
-            bb.putInt(0);                          // modification_time
-            bb.putInt(1);                          // track_id
-            bb.putInt(0);                          // reserved
+            bb.putInt(0);                          // 创建时间
+            bb.putInt(0);                          // 修改时间
+            bb.putInt(1);                          // 轨道标识符
+            bb.putInt(0);                          // 保留字段
             bb.putInt(duration);
-            bb.putLong(0);                         // reserved
-            bb.putShort((short) 0);                // layer
-            bb.putShort((short) 0);                // alternate_group
-            bb.putShort((short) 0x0100);           // volume (1.0)
-            bb.putShort((short) 0);                // reserved
-            for (int i = 0; i < 9; i++) {          // matrix (identity)
+            bb.putLong(0);                         // 保留字段
+            bb.putShort((short) 0);                // 层级
+            bb.putShort((short) 0);                // 备用分组
+            bb.putShort((short) 0x0100);           // 音量（1.0）
+            bb.putShort((short) 0);                // 保留字段
+            for (int i = 0; i < 9; i++) {          // 单位矩阵
                 if (i == 0 || i == 4) {
                     bb.putInt(0x00010000);
                 } else {
                     bb.putInt(0);
                 }
             }
-            bb.putInt(0);                          // width
-            bb.putInt(0);                          // height
-            // flags: track_enabled(0x1) | track_in_movie(0x2) | track_in_preview(0x4) = 0x7
+            bb.putInt(0);                          // 宽度
+            bb.putInt(0);                          // 高度
+            // 标志：启用轨道(0x1) | 在影片中使用(0x2) | 在预览中使用(0x4) = 0x7
             return fullBox("tkhd", (byte) 0, 0x000007, bb.array());
         }
 
@@ -372,23 +372,23 @@ final class MediaTestFixtures {
 
         private static byte[] buildMdhd(int timescale, int duration) {
             ByteBuffer bb = ByteBuffer.allocate(20).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(0);                          // creation_time
-            bb.putInt(0);                          // modification_time
+            bb.putInt(0);                          // 创建时间
+            bb.putInt(0);                          // 修改时间
             bb.putInt(timescale);
             bb.putInt(duration);
-            bb.putShort((short) 0x55C4);           // language "und"
-            bb.putShort((short) 0);                // pre_defined
+            bb.putShort((short) 0x55C4);           // 语言标识 "und"
+            bb.putShort((short) 0);                // 预定义字段
             return fullBox("mdhd", (byte) 0, 0, bb.array());
         }
 
         private static byte[] buildHdlr() {
             ByteBuffer bb = ByteBuffer.allocate(33).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(0);                          // pre_defined
-            bb.put("soun".getBytes(StandardCharsets.US_ASCII)); // handler_type
-            for (int i = 0; i < 3; i++) {          // reserved (12 bytes)
+            bb.putInt(0);                          // 预定义字段
+            bb.put("soun".getBytes(StandardCharsets.US_ASCII)); // 处理器类型
+            for (int i = 0; i < 3; i++) {          // 保留字段（十二字节）
                 bb.putInt(0);
             }
-            bb.put("SoundHandler\0".getBytes(StandardCharsets.US_ASCII)); // name
+            bb.put("SoundHandler\0".getBytes(StandardCharsets.US_ASCII)); // 名称
             return fullBox("hdlr", (byte) 0, 0, bb.array());
         }
 
@@ -402,16 +402,16 @@ final class MediaTestFixtures {
 
         private static byte[] buildSmhd() {
             ByteBuffer bb = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            bb.putShort((short) 0);                // balance
-            bb.putShort((short) 0);                // reserved
+            bb.putShort((short) 0);                // 声道平衡
+            bb.putShort((short) 0);                // 保留字段
             return fullBox("smhd", (byte) 0, 0, bb.array());
         }
 
         private static byte[] buildDinf() {
-            // url box: flags=1 (self-contained), no payload
+            // URL 数据块：标志为一，表示数据自包含且无载荷。
             byte[] url = fullBox("url ", (byte) 0, 0x000001, new byte[0]);
             ByteBuffer bb = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(1);                          // entry_count
+            bb.putInt(1);                          // 条目数量
             byte[] drefPayload = concat(bb.array(), url);
             return box("dinf", fullBox("dref", (byte) 0, 0, drefPayload));
         }
@@ -427,24 +427,24 @@ final class MediaTestFixtures {
         }
 
         private static byte[] buildStsd() {
-            // mp4a sample entry (AudioSampleEntry = 28 bytes + optional boxes)
+            // mp4a 音频采样条目：二十八字节加可选数据块。
             byte[] esds = buildEsds();
             ByteBuffer mp4a = ByteBuffer.allocate(28 + esds.length).order(ByteOrder.BIG_ENDIAN);
-            for (int i = 0; i < 6; i++) mp4a.put((byte) 0); // reserved (SampleEntry prefix)
-            mp4a.putShort((short) 1);              // data_reference_index
-            mp4a.putInt(0);                        // reserved[0] (uint32, version/revision)
-            mp4a.putInt(0);                        // reserved[1] (uint32, vendor)
-            mp4a.putShort((short) 1);              // channelcount
-            mp4a.putShort((short) 16);             // samplesize
-            mp4a.putShort((short) 0);              // pre_defined
-            mp4a.putShort((short) 0);              // reserved
-            mp4a.putInt(44100 << 16);              // samplerate (16.16 fixed point)
+            for (int i = 0; i < 6; i++) mp4a.put((byte) 0); // 保留字段（采样条目前缀）
+            mp4a.putShort((short) 1);              // 数据引用索引
+            mp4a.putInt(0);                        // 保留字段零（无符号三十二位整数，版本/修订）
+            mp4a.putInt(0);                        // 保留字段一（无符号三十二位整数，供应商）
+            mp4a.putShort((short) 1);              // 声道数
+            mp4a.putShort((short) 16);             // 采样大小
+            mp4a.putShort((short) 0);              // 预定义字段
+            mp4a.putShort((short) 0);              // 保留字段
+            mp4a.putInt(44100 << 16);              // 采样率（16.16 定点数）
             mp4a.put(esds);
 
             byte[] mp4aBox = box("mp4a", mp4a.array());
 
             ByteBuffer bb = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(1);                          // entry_count
+            bb.putInt(1);                          // 条目数量
             return fullBox("stsd", (byte) 0, 0, concat(bb.array(), mp4aBox));
         }
 
@@ -452,31 +452,31 @@ final class MediaTestFixtures {
          * 构建 esds box：包含 AAC-LC (44.1kHz mono) 的 DecoderSpecificInfo。
          */
         private static byte[] buildEsds() {
-            // AudioSpecificConfig: AAC-LC, 44.1kHz, mono → 0x1210
+            // 音频专用配置：AAC-LC、44.1kHz、单声道 → 0x1210
             byte[] asc = new byte[]{(byte) 0x12, (byte) 0x10};
 
-            // DecoderSpecificInfo (tag=5)
+            // 解码器专用信息（标签五）
             byte[] dsi = descriptor(0x05, asc);
 
-            // SLConfigDescriptor (tag=6, predefined=0x02)
+            // 同步层配置描述符（标签六，预定义值0x02）
             byte[] sl = descriptor(0x06, new byte[]{0x02});
 
-            // DecoderConfigDescriptor (tag=4)
+            // 解码器配置描述符（标签四）
             ByteBuffer dcd = ByteBuffer.allocate(13).order(ByteOrder.BIG_ENDIAN);
-            dcd.put((byte) 0x40);                  // objectTypeIndication (MPEG-4 Audio)
-            dcd.put((byte) 0x15);                  // streamType(5)<<2|1<<1|1 = 0x15 (Audio, upstream=0, reserved=1)
-            dcd.put((byte) 0);                     // bufferSizeDB[2]
-            dcd.put((byte) 0);                     // bufferSizeDB[1]
-            dcd.put((byte) 0);                     // bufferSizeDB[0]
-            dcd.putInt(128000);                    // maxBitrate
-            dcd.putInt(128000);                    // avgBitrate
+            dcd.put((byte) 0x40);                  // 对象类型标识（MPEG-4 音频）
+            dcd.put((byte) 0x15);                  // 流类型(5)<<2|1<<1|1 = 0x15（音频，上游=0，保留=1）
+            dcd.put((byte) 0);                     // 解码缓冲大小字节二
+            dcd.put((byte) 0);                     // 解码缓冲大小字节一
+            dcd.put((byte) 0);                     // 解码缓冲大小字节零
+            dcd.putInt(128000);                    // 最大码率
+            dcd.putInt(128000);                    // 平均码率
             byte[] dcdPayload = concat(dcd.array(), dsi, sl);
             byte[] dcdDescriptor = descriptor(0x04, dcdPayload);
 
-            // ES_Descriptor (tag=3)
+            // 基本流描述符（标签三）
             ByteBuffer es = ByteBuffer.allocate(3).order(ByteOrder.BIG_ENDIAN);
             es.putShort((short) 1);                // ES_ID
-            es.put((byte) 0);                      // flags (no stream dependence, no URL, no OCR)
+            es.put((byte) 0);                      // 标志：无流依赖、无URL、无OCR
             byte[] esPayload = concat(es.array(), dcdDescriptor);
             byte[] esDescriptor = descriptor(0x03, esPayload);
 
@@ -504,40 +504,40 @@ final class MediaTestFixtures {
 
         private static byte[] buildStts(int numSamples, int sampleDelta) {
             ByteBuffer bb = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(numSamples);                 // sample_count
-            bb.putInt(sampleDelta);                // sample_delta
+            bb.putInt(numSamples);                 // 采样数量
+            bb.putInt(sampleDelta);                // 采样间隔
             ByteBuffer hdr = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            hdr.putInt(1);                         // entry_count
+            hdr.putInt(1);                         // 条目数量
             return fullBox("stts", (byte) 0, 0, concat(hdr.array(), bb.array()));
         }
 
         private static byte[] buildStsc(int numSamples) {
             ByteBuffer bb = ByteBuffer.allocate(12).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(1);                          // first_chunk
-            bb.putInt(numSamples);                 // samples_per_chunk
-            bb.putInt(1);                          // sample_description_index
+            bb.putInt(1);                          // 首个数据块
+            bb.putInt(numSamples);                 // 每块采样数量
+            bb.putInt(1);                          // 采样描述索引
             ByteBuffer hdr = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            hdr.putInt(1);                         // entry_count
+            hdr.putInt(1);                         // 条目数量
             return fullBox("stsc", (byte) 0, 0, concat(hdr.array(), bb.array()));
         }
 
         private static byte[] buildStsz(int numSamples) {
-            // variable sample size: use a fixed size sample
+            // 可变采样大小：使用大小固定的样例采样。
             int sampleSize = 100;
             ByteBuffer bb = ByteBuffer.allocate(8 + numSamples * 4).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(0);                          // sample_size = 0 (variable)
-            bb.putInt(numSamples);                 // sample_count
+            bb.putInt(0);                          // 采样大小为零，表示可变大小。
+            bb.putInt(numSamples);                 // 采样数量
             for (int i = 0; i < numSamples; i++) {
-                bb.putInt(sampleSize);             // entry_size
+                bb.putInt(sampleSize);             // 条目大小
             }
             return fullBox("stsz", (byte) 0, 0, bb.array());
         }
 
         private static byte[] buildStco(int mdatPayloadOffset) {
             ByteBuffer bb = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            bb.putInt(mdatPayloadOffset);          // chunk_offset
+            bb.putInt(mdatPayloadOffset);          // 数据块偏移
             ByteBuffer hdr = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-            hdr.putInt(1);                         // entry_count
+            hdr.putInt(1);                         // 条目数量
             return fullBox("stco", (byte) 0, 0, concat(hdr.array(), bb.array()));
         }
 

@@ -23,7 +23,6 @@ import java.io.File
  *
  * @param context 应用上下文，内部统一使用 applicationContext
  * @author ErgouTree
- * @since 2026/9/20
  */
 class StorageUsage(context: Context) {
 
@@ -66,8 +65,7 @@ class StorageUsage(context: Context) {
      * 清理全部缓存并返回实际释放的字节数。
      *
      * <p>清理范围与 {@link #scan()} 完全一致，因此该按钮能把当前列出的占用降到 0。
-     * 密钥文件安全区先按 {@link AndroidFileOps#cleanupSecureKeyfiles()} 覆写再删除，
-     * 保持与常规操作结束时相同的处理强度。
+     * 密钥文件安全区先按 {@link AndroidFileOps#cleanupSecureKeyfiles()} 覆写再删除，保持与常规操作结束时相同的处理强度。
      *
      * @return 实际释放的字节数
      */

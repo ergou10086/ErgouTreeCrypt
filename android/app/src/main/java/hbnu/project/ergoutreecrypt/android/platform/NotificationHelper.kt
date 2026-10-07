@@ -17,7 +17,6 @@ import hbnu.project.ergoutreecrypt.android.MainActivity
  * 在 Android 13+ 上需要 {@code POST_NOTIFICATIONS} 权限（运行时申请）。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 object NotificationHelper {
 

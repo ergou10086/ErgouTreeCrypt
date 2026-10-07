@@ -37,7 +37,6 @@ import java.util.List;
  * 本类负责注册 BouncyCastle 密码学提供者并加载主界面。详见 {@code docs/ARCHITECTURE.md}。
  *
  * @author ErgouTree
- * @since 2026/6/17
  */
 public class PicocryptApplication extends Application {
 

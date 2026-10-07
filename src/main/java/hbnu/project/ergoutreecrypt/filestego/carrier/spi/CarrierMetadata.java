@@ -11,19 +11,18 @@ import java.util.Arrays;
  * 载体层元数据——存储密钥派生所需的密码学参数。
  *
  * <p>与 Payload 层的 JSON Metadata（描述原始文件信息）不同，CarrierMetadata
- * 存放的是密码学关键数据（盐、nonce 等），以固定二进制布局存储在各载体格式的
- * "解码器忽略"区域（末尾追加、自定义 chunk/box 等）。
+ * 存放的是密码学关键数据（盐、nonce 等），以固定二进制布局存储在各载体格式的"解码器忽略"区域（末尾追加、自定义 chunk/box 等）。
  *
  * <h3>二进制布局</h3>
  * <pre>
- *   MAGIC          4 bytes   "EGFS" (0x45474653)
- *   VERSION        1 byte    uint8 (1)
+ *   MAGIC          4 字节   "EGFS" (0x45474653)
+ *   VERSION        1 字节   无符号八位整数 (1)
  *   PAYLOAD_SIZE   8 bytes   uint64 (Payload 总字节数)
- *   FLAGS          1 byte    bitfield
- *                            [paranoid:1][hasIntegrity:1][stealth:1][reserved:5]
- *   SALT          16 bytes   Argon2id salt
- *   HKDF_SALT     32 bytes   HKDF salt
- *   NONCE         24 bytes   XChaCha20 nonce
+ *   FLAGS          1 字节   标志位
+ *                            [偏执:1][完整性:1][隐蔽:1][保留:5]
+ *   SALT          16 字节   Argon2id 盐值
+ *   HKDF_SALT     32 字节   HKDF 盐值
+ *   NONCE         24 字节   XChaCha20 随机数
  *   SERPENT_IV    16 bytes   仅 paranoid 模式时存在
  *   STEALTH_SALT  16 bytes   仅 stealth 模式时存在
  *   ARGON2_MEM    4 bytes   uint32 Argon2 内存参数覆写（KiB），0 = 使用默认
@@ -41,7 +40,6 @@ import java.util.Arrays;
  * 非零时须构成合法组合，否则视为格式损坏。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class CarrierMetadata {
 

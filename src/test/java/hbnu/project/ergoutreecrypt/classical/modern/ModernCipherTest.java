@@ -167,8 +167,7 @@ class ModernCipherTest {
     }
 
     /**
-     * ChaCha20 无认证：错误密码要么被严格 UTF-8 解码捕获而抛异常，
-     * 要么（小概率恰好为合法 UTF-8）静默产出乱码，但绝不还原原文。
+     * ChaCha20 无认证：错误密码要么被严格 UTF-8 解码捕获而抛异常，要么（小概率恰好为合法 UTF-8）静默产出乱码，但绝不还原原文。
      */
     @Test
     void chacha20WrongPasswordYieldsGarbageOrError() {

@@ -19,7 +19,6 @@ import java.nio.ByteBuffer
  * <p>测试只验证 Phase 2 外层容器能被平台正常打开；协议帧与跨端恢复属于后续互操作阶段。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 @RunWith(AndroidJUnit4::class)
 class ImageCryptPngCompatibilityTest {

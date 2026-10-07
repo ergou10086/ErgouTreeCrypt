@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
  * @param modifier 修饰符
  * @param actions  标题右侧的操作区（图标按钮等）
  * @author ErgouTree
- * @since 2026/8/14
  */
 @Composable
 fun CompactTopBar(

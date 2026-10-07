@@ -25,8 +25,7 @@ import java.util.List;
  * </ol>
  *
  * <p>「电脑端解密 vs 手机端解密」由 JVM 堆大小区分：默认堆下 1 GiB 走堆内 BC（电脑端），
- * 以 {@code -Xmx512m} 运行时 1 GiB 走离堆（手机端）。故本测试需分别在两种堆下各跑一次，
- * 两次结果合起来即覆盖全部四路。加密/解密产物写入 {@code temp/test/test_output/fourway}。
+ * 以 {@code -Xmx512m} 运行时 1 GiB 走离堆（手机端）。故本测试需分别在两种堆下各跑一次，两次结果合起来即覆盖全部四路。加密/解密产物写入 {@code temp/test/test_output/fourway}。
  *
  * @author ErgouTree
  */

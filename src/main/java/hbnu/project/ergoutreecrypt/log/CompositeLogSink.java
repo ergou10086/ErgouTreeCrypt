@@ -6,7 +6,6 @@ package hbnu.project.ergoutreecrypt.log;
  * <p>单个接收器失败会被吞掉，不影响其余接收器与主流程。
  *
  * @author ErgouTree
- * @since 2026/8/27
  */
 public final class CompositeLogSink implements LogSink {
 

@@ -197,7 +197,7 @@ public final class VolumeHeader {
         return version != null && version.length() >= 2 && version.startsWith("v1");
     }
 
-    // ---- accessors ----
+    // ---- 属性访问 ----
 
     public String getVersion() { return version; }
     public void setVersion(String version) { this.version = version; }

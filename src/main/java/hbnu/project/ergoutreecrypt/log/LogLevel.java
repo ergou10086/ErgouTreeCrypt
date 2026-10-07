@@ -4,11 +4,9 @@ package hbnu.project.ergoutreecrypt.log;
  * 应用日志级别。
  *
  * <p>严重程度从高到低：{@link #ERROR}、{@link #WARN}、{@link #INFO}、{@link #TRACE}。
- * 设置阈值后，仅记录严重程度不低于该阈值的事件。用户设置只暴露
- * {@link #INFO}（标准）与 {@link #TRACE}（诊断）两档。
+ * 设置阈值后，仅记录严重程度不低于该阈值的事件。用户设置只暴露{@link #INFO}（标准）与 {@link #TRACE}（诊断）两档。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public enum LogLevel {
 

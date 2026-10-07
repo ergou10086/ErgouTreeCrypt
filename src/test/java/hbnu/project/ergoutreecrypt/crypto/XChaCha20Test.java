@@ -14,8 +14,7 @@ import org.junit.jupiter.api.Test;
  * 验证 {@link XChaCha20} 的核心正确性。
  *
  * <p>关键测试 {@link #hChaCha20Vector()} 使用 IETF 草案
- * draft-irtf-cfrg-xchacha-03 §2.2.1 的官方 HChaCha20 测试向量。HChaCha20 是
- * XChaCha20 的子密钥派生核心，也是 Java 实现最容易与 Go x/crypto 产生分歧之处。
+ * draft-irtf-cfrg-xchacha-03 §2.2.1 的官方 HChaCha20 测试向量。HChaCha20 是XChaCha20 的子密钥派生核心，也是 Java 实现最容易与 Go x/crypto 产生分歧之处。
  * 该向量通过即证明子密钥派生与规范（及 Go）一致。
  */
 class XChaCha20Test {

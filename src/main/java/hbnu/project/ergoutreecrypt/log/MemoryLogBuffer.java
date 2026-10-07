@@ -12,7 +12,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * {@value #INFO_CAPACITY} 条，诊断（TRACE）约 {@value #TRACE_CAPACITY} 条。
  *
  * @author ErgouTree
- * @since 2026/8/26
  */
 public final class MemoryLogBuffer implements LogSink {
 

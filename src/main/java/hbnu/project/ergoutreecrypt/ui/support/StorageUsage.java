@@ -27,7 +27,6 @@ import java.util.stream.Stream;
  * 所有目录遍历都按「尽量返回已统计部分」处理，权限不足或路径失效时不抛异常。
  *
  * @author ErgouTree
- * @since 2026/9/20
  */
 public final class StorageUsage {
 
@@ -168,8 +167,7 @@ public final class StorageUsage {
      * 清扫陈旧的临时产物，用于在应用启动时阻止缓存跨会话累积。
      *
      * <p>只删除系统临时目录中的自有临时项与输出目录下遗留的暂存工作目录，且仅当条目的
-     * 最后修改时间已超过 {@value #STALE_AGE_MILLIS} 毫秒（24 小时）。近期条目一律保留，
-     * 因此不会干扰另一个正在运行的实例。
+     * 最后修改时间已超过 {@value #STALE_AGE_MILLIS} 毫秒（24 小时）。近期条目一律保留，因此不会干扰另一个正在运行的实例。
      *
      * @return 实际释放的字节数
      */

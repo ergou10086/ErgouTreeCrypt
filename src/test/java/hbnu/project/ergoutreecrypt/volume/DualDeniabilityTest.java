@@ -439,7 +439,7 @@ public final class DualDeniabilityTest {
         byte[] fileBytes = Files.readAllBytes(output);
         byte[] mb2 = Arrays.copyOfRange(fileBytes, 9 + 552, 9 + 552 + 552);
 
-        // Mini entropy check: not all zeros, not all identical
+        // 简单熵检查：不能全零，也不能全部相同。
         boolean allZero = true;
         boolean allSame = true;
         byte first = mb2[0];

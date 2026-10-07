@@ -25,7 +25,6 @@ import java.util.Iterator;
  * 以清晰度和文件语义换取聊天软件重编码后的可恢复性。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 public final class DesktopRobustPayloadTranscoder {
 

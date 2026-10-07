@@ -33,7 +33,6 @@ import java.util.List;
  * <p>FLAC 解码器会忽略未知 Application ID 的 APPLICATION 块，音频帧区字节不变。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 public final class FlacCarrierAdapter extends AbstractCarrierAdapter {
 

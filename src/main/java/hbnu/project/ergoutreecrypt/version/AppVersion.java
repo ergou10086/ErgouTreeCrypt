@@ -16,8 +16,7 @@ import java.util.regex.Pattern;
  * 应用版本号解析，供主界面标题、设置与「关于」页显示。
  *
  * <p>版本号的唯一真源是 {@code pom.xml} 的 {@code <version>}：构建时由 Maven 把该值
- * 过滤进 {@code version.properties}，本类只负责在运行时把它读出来，因此无需在界面代码里
- * 重复维护版本字面量。
+ * 过滤进 {@code version.properties}，本类只负责在运行时把它读出来，因此无需在界面代码里重复维护版本字面量。
  *
  * <p>解析按以下优先级回退，结果在首次调用后缓存：
  * <ol>

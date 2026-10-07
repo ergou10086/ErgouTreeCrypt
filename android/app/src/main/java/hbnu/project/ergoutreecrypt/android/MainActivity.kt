@@ -38,11 +38,9 @@ private const val REFRESH_RATE_EPSILON_HZ = 0.1f
  *   <li>API 26–28：读/写外部存储（旧版存储权限）</li>
  *   <li>API 29–32：读外部存储（可选，直接路径读取）</li>
  * </ul>
- * "所有文件访问权限"不在此弹窗申请（Play 政策限制），改为设置页引导跳转，
- * 未授予时应用自动降级为 SAF/MediaStore 流程，不影响使用。
+ * "所有文件访问权限"不在此弹窗申请（Play 政策限制），改为设置页引导跳转，未授予时应用自动降级为 SAF/MediaStore 流程，不影响使用。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class MainActivity : ComponentActivity() {
 
@@ -109,7 +107,7 @@ class MainActivity : ComponentActivity() {
             val darkTheme = when (themeMode) {
                 "LIGHT" -> false
                 "DARK" -> true
-                else -> isSystemInDarkTheme() // SYSTEM
+                else -> isSystemInDarkTheme() // 跟随系统
             }
 
             ErgouTheme(darkTheme = darkTheme) {

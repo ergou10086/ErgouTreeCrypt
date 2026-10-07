@@ -23,16 +23,15 @@ import java.util.List;
  * {@code [CarrierMetadata + STEG-V2 Payload]}：
  * <pre>
  *   "RIFF" &lt;size&gt; "WAVE"   ← size 更新为包含 STEG chunk 的新总长
- *   fmt  chunk
- *   data chunk
- *   "STEG" &lt;chunkSize LE&gt; [combined] [pad if odd]
+ *   格式块
+ *   数据块
+ *   "STEG" &lt;小端块大小&gt; [合并数据] [奇数长度时填充]
  * </pre>
  *
  * <p>RIFF 规范要求 chunk payload 为奇数长度时补 1 字节填充；填充字节不计入 chunk size，
  * 因此提取时按 size 精确切分即可正确还原，无边界歧义。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class WavCarrierAdapter extends AbstractCarrierAdapter {
 

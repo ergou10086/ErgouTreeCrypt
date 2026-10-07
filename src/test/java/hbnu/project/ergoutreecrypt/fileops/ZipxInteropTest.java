@@ -5,9 +5,9 @@ import java.nio.file.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.*;
 
-/** Opt-in real-file ZIPX exchange with an Android ART instrumentation process. */
+/** 显式启用的真实 ZIPX 文件与 Android ART 设备进程交换测试。 */
 class ZipxInteropTest {
-    /** Generates desktop archives and authenticates and restores them on desktop. */
+    /** 生成桌面归档，并在桌面执行认证与还原。 */
     @Test void generateDesktopCorpus() throws Exception {
         assumeTrue(Boolean.getBoolean("zipx.interop.generate"));
         Path source = Path.of(System.getProperty("zipx.real.file", "src/test/resources/filetest/[ひなみ桜花][2024-01-25].m4a"));
@@ -15,20 +15,20 @@ class ZipxInteropTest {
         ZipxInteropSupport.generate(Path.of("target/zipx-interop/desktop"), source, false);
     }
 
-    /** Authenticates and restores artifacts produced by Android ART. */
+    /** 认证并还原 Android ART 生成的产物。 */
     @Test void readAndroidCorpus() throws Exception {
         String corpus = System.getProperty("zipx.interop.android");
         assumeTrue(corpus != null);
         ZipxInteropSupport.verifyAll(Path.of(corpus), Path.of("target/zipx-interop/android-on-desktop"));
     }
 
-    /** Regenerates and self-verifies affected raw archives while retaining the full volume corpus. */
+    /** 重新生成并自校验受影响的原始归档，保留完整卷语料。 */
     @Test void refreshDesktopRawArchives() throws Exception {
         assumeTrue(Boolean.getBoolean("zipx.interop.refresh"));
         ZipxInteropSupport.refreshXzArchives(Path.of("target/zipx-interop/desktop"), false);
     }
 
-    /** Reads newly regenerated Android raw archives after a targeted interoperability correction. */
+    /** 定向修复互通问题后，读取重新生成的 Android 原始归档。 */
     @Test void readAndroidRawArchives() throws Exception {
         String corpus = System.getProperty("zipx.interop.android");
         assumeTrue(corpus != null);

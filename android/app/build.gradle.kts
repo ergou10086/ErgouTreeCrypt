@@ -50,7 +50,7 @@ val syncInteropCorpus by tasks.registering(Copy::class) {
     into("src/androidTest/assets/imagecrypt/interop")
 }
 
-// Desktop interop corpus is generated on demand; large real files stay out of Git.
+// 桌面互通语料按需生成，大型真实文件不加入 Git。
 val syncLz4Golden by tasks.registering(Sync::class) {
     from("../../src/test/resources/lz4/golden")
     into(layout.buildDirectory.dir("lz4-golden-assets/lz4/golden"))
@@ -61,7 +61,7 @@ val syncLz4InteropSupport by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("lz4-interop-java"))
 }
 
-// ZIPX fixtures and harness are shared by JVM tests and actual ART instrumentation.
+// ZIPX 样例与测试入口由 JVM 测试和真实 ART 设备测试共享。
 val syncZipxInteropSupport by tasks.registering(Sync::class) {
     from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/fileops/ZipxInteropSupport.java") }
     into(layout.buildDirectory.dir("zipx-interop-java"))
@@ -247,10 +247,9 @@ dependencies {
     implementation(libs.commons.compress)
     implementation(libs.zip4j)
     implementation(libs.tukaani.xz)
-    // Android needs the AAR with ABI-specific .so files. The plain JAR embeds
-    // desktop binaries and cannot be loaded by Android's linker.
+    // Android 需要包含各 ABI 原生库的 AAR；普通 JAR 内嵌的是桌面原生库，Android 链接器无法加载。
     implementation("com.github.luben:zstd-jni:${libs.versions.zstd.jni.get()}@aar")
-    // Local JVM tests run on the host and therefore need the desktop JAR.
+    // 本地 JVM 测试在宿主机上运行，因此需要桌面 JAR。
     testImplementation(libs.zstd.jni)
 
     // ============================================================
@@ -265,7 +264,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     // ============================================================
-    // Compose UI
+    // Compose 界面
     // ============================================================
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

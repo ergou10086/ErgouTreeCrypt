@@ -28,12 +28,9 @@ import java.util.List;
  * <p>覆盖两个层面：
  * <ol>
  *   <li><b>M1 元数据记录</b>：桌面端按 {@link Argon2DesktopMode} 档位加密媒体时，
- *       {@code MediaMetadata} v2 必须记录实际 Argon2 三元组（而非全零），使移动端
- *       解密时读到真实低内存档位、堆内秒级派生。</li>
+ *       {@code MediaMetadata} v2 必须记录实际 Argon2 三元组（而非全零），使移动端解密时读到真实低内存档位、堆内秒级派生。</li>
  *   <li><b>跨端互通</b>：桌面端档位（均衡 256 MiB / 强 1 GiB）与移动端档位
- *       （256 / 64 / 32 MiB）加密的媒体文件，解密端均能逐字节还原——因解密侧
- *       从元数据读取参数，两端共用同一 {@code MediaCryptCodec}，故桌面加密与移动
- *       加密两个方向的产物都可被另一端正确解密。</li>
+ *       （256 / 64 / 32 MiB）加密的媒体文件，解密端均能逐字节还原——因解密侧从元数据读取参数，两端共用同一 {@code MediaCryptCodec}，故桌面加密与移动加密两个方向的产物都可被另一端正确解密。</li>
  * </ol>
  *
  * <p>真实数据文件（{@code temp/test/原内容} 的 mp3 / mp4）用于端到端逐字节比对；
@@ -41,7 +38,6 @@ import java.util.List;
  * {@code temp/test/test_output/fpe}。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class MediaCryptKdfInteropTest {
 
@@ -125,8 +121,7 @@ class MediaCryptKdfInteropTest {
     }
 
     /**
-     * 向后兼容基线：未显式设置档位（{@link MediaCryptOptions#defaults()}）时
-     * 元数据不记录参数（全零），解密端回落到默认 1 GiB——与 M1 之前的旧文件一致。
+     * 向后兼容基线：未显式设置档位（{@link MediaCryptOptions#defaults()}）时元数据不记录参数（全零），解密端回落到默认 1 GiB——与 M1 之前的旧文件一致。
      */
     @Test
     void backwardCompat_defaultOptionsRecordNoParams(@TempDir Path dir) throws Exception {
@@ -243,9 +238,7 @@ class MediaCryptKdfInteropTest {
      * 真实媒体文件双向互通：桌面端三档 + 移动端两档加密，解密逐字节还原。
      *
      * <p>移动端档位取 {@code Argon2MobileMode} 的 LIGHT（64 MiB/2/2）与
-     * AUTO 兜底（32 MiB/2/2）；桌面端「均衡 256 MiB」与移动端 BALANCED 同参，
-     * 二者等价覆盖「手机加密 → 电脑解密」。对 529 MiB 大 mp4 仅做均衡档往返，
-     * 控制总时长。
+     * AUTO 兜底（32 MiB/2/2）；桌面端「均衡 256 MiB」与移动端 BALANCED 同参，二者等价覆盖「手机加密 → 电脑解密」。对 529 MiB 大 mp4 仅做均衡档往返，控制总时长。
      */
     @Test
     void realMedia_desktopAndMobileTierRoundTrip() throws Exception {

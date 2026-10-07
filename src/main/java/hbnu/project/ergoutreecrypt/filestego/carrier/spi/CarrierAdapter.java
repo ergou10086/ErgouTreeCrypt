@@ -15,8 +15,7 @@ import java.util.List;
  * 载体适配器——定义将 STEG-V2 Payload 嵌入/提取到特定文件格式的接口。
  *
  * <p>每个实现类对应一种载体文件格式（PNG、ZIP、PDF、WAV、FLAC、MP4 等）。
- * 新增载体格式只需增加一个 Adapter 实现并注册到 {@link CarrierRegistry}，
- * 无需修改上层代码。
+ * 新增载体格式只需增加一个 Adapter 实现并注册到 {@link CarrierRegistry}，无需修改上层代码。
  *
  * <p>本子系统仅采用<strong>容量无关</strong>嵌入：数据写入解码器忽略区
  * （末尾追加、自定义 chunk/box、metadata block 等），任意大小文件可嵌入任意大小容器。
@@ -29,7 +28,6 @@ import java.util.List;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public interface CarrierAdapter {
 
@@ -136,8 +134,7 @@ public interface CarrierAdapter {
      * 将 STEG-V2 Payload 文件流式嵌入到载体文件中。
      *
      * <p>默认实现回退到 {@link #embed}（重建 meta+payload 组合块并读入内存）；
-     * 支持大文件的适配器应覆写为真正的流式写入。{@code meta} 为序列化后的
-     * {@link CarrierMetadata} 字节（由门面层提供，与 payload 分离传递）。
+     * 支持大文件的适配器应覆写为真正的流式写入。{@code meta} 为序列化后的{@link CarrierMetadata} 字节（由门面层提供，与 payload 分离传递）。
      *
      * @param carrierFile 原始载体文件路径（未嵌入前的干净文件）
      * @param meta        序列化后的 CarrierMetadata 字节数组

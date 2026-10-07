@@ -82,8 +82,7 @@ public interface MediaCipher {
      * 只读探测文件的加密元数据
      *
      * <p>供移动端解密前预检使用：读取载体（WAV {@code EgTc} chunk / MP3 尾块 /
-     * MP4 {@code uuid} box）中内嵌的 {@link MediaMetadata}，据此判断 Argon2 参数
-     * 档位。与 {@link #decrypt} 不同，本方法不会把去元数据后的容器写到磁盘。
+     * MP4 {@code uuid} box）中内嵌的 {@link MediaMetadata}，据此判断 Argon2 参数档位。与 {@link #decrypt} 不同，本方法不会把去元数据后的容器写到磁盘。
      *
      * <p>非本工具加密的文件返回 {@code null}；默认实现返回 {@code null}（子类覆写）。
      *

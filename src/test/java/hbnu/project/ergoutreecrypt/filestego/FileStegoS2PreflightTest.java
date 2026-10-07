@@ -44,7 +44,6 @@ import java.util.zip.ZipOutputStream;
  * <p>另验证桌面端压缩往返不劣化；Android 端通过同版本的 Zstd AAR 提供解压能力。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class FileStegoS2PreflightTest {
 
@@ -166,9 +165,9 @@ class FileStegoS2PreflightTest {
     void isCompressedFlagParsing() {
         ByteBuffer compressed = ByteBuffer.allocate(10).order(ByteOrder.BIG_ENDIAN);
         compressed.put(new byte[] {0x53, 0x54, 0x47, 0x32}); // "STG2"
-        compressed.putShort((short) 1);                       // version
+        compressed.putShort((short) 1);                       // 版本
         compressed.putShort((short) 0x0002);                  // FLAG_COMPRESSED
-        compressed.putShort((short) 0);                       // meta length
+        compressed.putShort((short) 0);                       // 元数据长度
         assertTrue(PayloadCodec.isCompressedFlag(compressed.array()), "bit1 应判定为压缩");
 
         ByteBuffer plain = ByteBuffer.allocate(10).order(ByteOrder.BIG_ENDIAN);

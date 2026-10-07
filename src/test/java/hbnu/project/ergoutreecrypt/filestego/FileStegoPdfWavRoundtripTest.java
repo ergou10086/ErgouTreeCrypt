@@ -21,8 +21,7 @@ import java.security.Security;
  * 文件隐写 PDF / WAV 载体端到端往返测试（M1.3 / M1.4）。
  *
  * <p>覆盖 PDF（%%EOF 后 Base64 注释块）与 WAV（追加 STEG chunk）在
- * normal / paranoid / stealth 三种模式下的 hide → extract 数据一致性、
- * 检测能力与容器结构完整性；并验证任意二进制内容（含 0x00、高位字节）都能被正确还原。
+ * normal / paranoid / stealth 三种模式下的 hide → extract 数据一致性、检测能力与容器结构完整性；并验证任意二进制内容（含 0x00、高位字节）都能被正确还原。
  *
  * @author ErgouTree
  */
@@ -71,16 +70,16 @@ class FileStegoPdfWavRoundtripTest {
         bb.put("RIFF".getBytes(StandardCharsets.US_ASCII));
         bb.putInt(riffSize);
         bb.put("WAVE".getBytes(StandardCharsets.US_ASCII));
-        // fmt  chunk
+        // 格式块
         bb.put("fmt ".getBytes(StandardCharsets.US_ASCII));
         bb.putInt(16);
         bb.putShort((short) 1);      // PCM
-        bb.putShort((short) 1);      // mono
-        bb.putInt(44100);            // sample rate
-        bb.putInt(44100 * 2);        // byte rate
-        bb.putShort((short) 2);      // block align
-        bb.putShort((short) 16);     // bits per sample
-        // data chunk
+        bb.putShort((short) 1);      // 单声道
+        bb.putInt(44100);            // 采样率
+        bb.putInt(44100 * 2);        // 字节率
+        bb.putShort((short) 2);      // 数据块对齐
+        bb.putShort((short) 16);     // 每采样位数
+        // 数据块
         bb.put("data".getBytes(StandardCharsets.US_ASCII));
         bb.putInt(dataBytes);
         SecureRandom r = new SecureRandom();

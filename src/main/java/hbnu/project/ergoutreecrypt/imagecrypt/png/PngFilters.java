@@ -10,7 +10,6 @@ import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptException;
  * EGTC-IMG writer 固定写 filter 0，但 reader 必须接受 0–4，才能读取由标准无损 PNG 优化器重新选择过滤器后仍保持 RGB 样本不变的文件。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class PngFilters {
 

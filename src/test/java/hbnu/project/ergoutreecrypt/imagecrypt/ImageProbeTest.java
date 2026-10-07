@@ -29,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 真实素材（1280×720 RGBA PNG、1920×1080 VP8X WebP）验证真实容器结构下的解析结果。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageProbeTest {
 

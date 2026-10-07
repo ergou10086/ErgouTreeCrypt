@@ -30,8 +30,7 @@ import java.util.UUID
  * 在真实 Android 运行时验证图片页面 ViewModel 的 URI、暂存、MediaStore 与协议工作流。
  *
  * <p>与直接调用共享 codec 的互操作测试不同，本测试覆盖 Phase 7 新增的平台适配层：
- * FileProvider URI → 私有 Path、Activity 作用域状态、OperationCoordinator、认证后公共提交，
- * 以及公开/密码两种模式的页面调用参数。
+ * FileProvider URI → 私有 Path、Activity 作用域状态、OperationCoordinator、认证后公共提交，以及公开/密码两种模式的页面调用参数。
  */
 @RunWith(AndroidJUnit4::class)
 class ImageCryptViewModelDeviceTest {

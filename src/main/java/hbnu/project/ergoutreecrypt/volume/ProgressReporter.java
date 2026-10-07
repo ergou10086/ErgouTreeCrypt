@@ -9,7 +9,6 @@ package hbnu.project.ergoutreecrypt.volume;
  * <p>支持 {@link ProgressPhase} 区分加解密与压缩/解压进度：UI 可据此驱动独立进度条与配色。
  *
  * @author ErgouTree
- * @since 2026/6/17
  */
 public interface ProgressReporter {
 

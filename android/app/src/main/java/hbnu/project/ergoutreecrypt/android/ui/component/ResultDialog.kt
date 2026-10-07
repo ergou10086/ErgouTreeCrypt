@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
  * @param onConfirm    确认按钮回调（通常与 onDismiss 相同）
  * @param confirmLabel 确认按钮文字
  * @author ErgouTree
- * @since 2026/8/12
  */
 @Composable
 fun ResultDialog(
@@ -237,7 +236,7 @@ fun mapErrorToChineseMessage(error: String?): String {
         error.contains("目标大小", ignoreCase = true) && error.contains("混淆", ignoreCase = true) ->
             "文件大小混淆失败：目标大小必须大于当前输出文件大小。请增大目标大小。"
 
-        // InterruptedException (cancel)
+        // InterruptedException（操作取消）
         error.contains("InterruptedException", ignoreCase = true) ->
             "操作已被取消。"
 

@@ -28,8 +28,7 @@ import java.util.Optional;
  * 「启动前拦截 + 提示引导」的文件类型护栏。
  *
  * <p>在用户点击「加密 / 解密 / 隐藏 / 提取 / 校验」的那一刻，按「当前功能 + 当前选项」
- * 对所选输入做一次<b>只读探测</b>，判断这份文件是否该由当前功能处理；不合规则立即拒绝，
- * 并给出「该去哪个功能 / 勾选哪个选项」的指引文案，而不是让核心跑到一半再抛出泛化失败。
+ * 对所选输入做一次<b>只读探测</b>，判断这份文件是否该由当前功能处理；不合规则立即拒绝，并给出「该去哪个功能 / 勾选哪个选项」的指引文案，而不是让核心跑到一半再抛出泛化失败。
  *
  * <p>设计要点：
  * <ul>
@@ -40,15 +39,12 @@ import java.util.Optional;
  * </ul>
  *
  * <p>拒绝结果里的 {@link GuardResult#guardKey()} 是 i18n key，界面直接
- * {@code Messages.format(key, args)} 即可得到面向用户的引导文案；{@link GuardResult#kind()}
- * 则给出对应的 {@link ErrorKind}，供需要按类型分支的调用方使用。
+ * {@code Messages.format(key, args)} 即可得到面向用户的引导文案；{@link GuardResult#kind()}则给出对应的 {@link ErrorKind}，供需要按类型分支的调用方使用。
  *
  * <p>本类<b>不</b>负责 {@code IMAGE_STEGO_*} 的容量探测：图像隐写依赖 {@code java.awt}，
- * 该子系统在移动端被构建脚本排除，故此处只做扩展名护栏，容量与魔数判定仍由桌面端
- * 控制器与 {@code stego} 子系统自行完成。
+ * 该子系统在移动端被构建脚本排除，故此处只做扩展名护栏，容量与魔数判定仍由桌面端控制器与 {@code stego} 子系统自行完成。
  *
  * @author ErgouTree
- * @since 2026/9/14
  */
 public final class FileInputGuard {
 
@@ -809,8 +805,7 @@ public final class FileInputGuard {
      * 轻量探测输入的 EGTC-IMG 外层协议头。
      *
      * <p>成功时返回放行结果；失败时保留协议或 I/O 错误分类。调用方可把
-     * {@link ErrorKind#NOT_IMAGE_CRYPT} 与普通 PNG 的 {@link ErrorKind#INVALID_HEADER}
-     * 视为“未命中”并继续其它护栏，同时必须直接返回未知版本与 I/O 错误。
+     * {@link ErrorKind#NOT_IMAGE_CRYPT} 与普通 PNG 的 {@link ErrorKind#INVALID_HEADER}视为“未命中”并继续其它护栏，同时必须直接返回未知版本与 I/O 错误。
      *
      * @param input 输入路径
      * @return 协议头探测结果
@@ -888,8 +883,7 @@ public final class FileInputGuard {
      * <p>为避免探测本身带来风险，探测策略按"代价"分层：
      * <ul>
      *   <li>扩展名命中某个载体格式时，只探测该格式的适配器；若该适配器的 {@code detect}
-     *       会整读文件（PDF/WAV/FLAC），则仅对 {@link #CARRIER_PROBE_MAX_BYTES} 以内的
-     *       文件探测，超大文件交给核心在提取阶段报错；</li>
+     *       会整读文件（PDF/WAV/FLAC），则仅对 {@link #CARRIER_PROBE_MAX_BYTES} 以内的文件探测，超大文件交给核心在提取阶段报错；</li>
      *   <li>扩展名不匹配任何载体格式时（如被改名的载体），仅对小文件做一次全适配器
      *       的"尽力而为"扫描。</li>
      * </ul>

@@ -185,8 +185,7 @@ final class MultiFileBatchTest {
     // ================================================================
 
     /**
-     * 多文件 + 加密后压缩：产物为单个 {@code 批名.zip}，其中只有密文条目，
-     * 且被选中的源文件一个都不能少、一个都不能变。
+     * 多文件 + 加密后压缩：产物为单个 {@code 批名.zip}，其中只有密文条目，且被选中的源文件一个都不能少、一个都不能变。
      */
     @Test
     void batchEncryptWithPostArchive(@TempDir Path tempDir) throws Exception {

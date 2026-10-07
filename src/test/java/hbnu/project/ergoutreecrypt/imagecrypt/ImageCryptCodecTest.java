@@ -36,8 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link ImageCryptCodec} 的全流程测试：五种首期格式的字节级往返、认证失败分类、
- * 截断与尾部追加、取消清理、目标冲突与只读探测。
+ * {@link ImageCryptCodec} 的全流程测试：五种首期格式的字节级往返、认证失败分类、截断与尾部追加、取消清理、目标冲突与只读探测。
  *
  * <h3>为什么断言"字节一致"而不是"像素一致"</h3>
  * <p>本功能承诺的是恢复文件与输入文件逐字节相同，因此每条往返断言都比较 SHA-256 与长度，
@@ -45,11 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h3>慢测试的取舍</h3>
  * <p>密码模式的 Argon2id 固定为 64 MiB / 3 passes，单次派生约需一秒。因此只有少数用例
- * 使用真实密码派生；其余覆盖保护模式之外逻辑的用例一律走公开恢复，避免把测试时间浪费在
- * 重复的 KDF 上。
+ * 使用真实密码派生；其余覆盖保护模式之外逻辑的用例一律走公开恢复，避免把测试时间浪费在重复的 KDF 上。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptCodecTest {
 
@@ -863,8 +860,7 @@ final class ImageCryptCodecTest {
      * 读取逻辑帧、施加改写、再写成一张合法的 PNG。
      *
      * <p>直接改写 PNG 像素是做不到的：像素经过 zlib 与 CRC 封装。走
-     * {@link PixelPngReader}/{@link PixelPngWriter} 重打包既保持了 PNG 结构合法，
-     * 又能精确命中协议帧内部的单一字段，从而把失败原因隔离到被测校验点。
+     * {@link PixelPngReader}/{@link PixelPngWriter} 重打包既保持了 PNG 结构合法，又能精确命中协议帧内部的单一字段，从而把失败原因隔离到被测校验点。
      *
      * @param encrypted  原始产物
      * @param targetName 新文件名

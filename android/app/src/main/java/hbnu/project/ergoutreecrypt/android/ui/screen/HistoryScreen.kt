@@ -81,13 +81,10 @@ private fun typeIcon(type: OperationType): ImageVector {
  * 操作历史列表页。
  *
  * <p>移动端历史界面：触控友好的卡片列表，每条记录展示文件名、
- * 操作类型与操作时间；点按记录打开其输出文件夹，文件夹不存在或
- * 无法打开时以 Toast 友好提示。右上角提供返回与清空按钮，
- * 清空前弹出确认对话框。
+ * 操作类型与操作时间；点按记录打开其输出文件夹，文件夹不存在或无法打开时以 Toast 友好提示。右上角提供返回与清空按钮，清空前弹出确认对话框。
  *
  * @param onBack 返回上一页回调
  * @author ErgouTree
- * @since 2026/8/14
  */
 @Composable
 fun HistoryScreen(onBack: () -> Unit) {

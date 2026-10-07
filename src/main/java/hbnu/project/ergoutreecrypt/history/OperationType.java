@@ -8,7 +8,6 @@ package hbnu.project.ergoutreecrypt.history;
  * 旧版本应用读取包含未知类型的历史文件时，会跳过无法识别的记录行，不影响其余记录。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 public enum OperationType {
 

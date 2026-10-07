@@ -96,7 +96,6 @@ data class MaterializedImageInput(
  * <p>解析成功的 URI→路径结果会缓存，重复选择同一文件时直接返回，避免再次复制大文件。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 class AndroidFileOps(private val context: Context) {
 
@@ -267,8 +266,7 @@ class AndroidFileOps(private val context: Context) {
      * 验证路径指向的文件是否真正可读（试打开输入流而非仅 exists()）。
      *
      * <p>Xiaomi/HyperOS 等魔改 MediaStore 实现返回的 {@code _data} 路径可能
-     * {@code exists()=true} 但无读取权限，直接采用会导致后续加解密中途
-     * 抛 EACCES。本方法以能否成功打开流为准，确保采用前路径真实可用。
+     * {@code exists()=true} 但无读取权限，直接采用会导致后续加解密中途抛 EACCES。本方法以能否成功打开流为准，确保采用前路径真实可用。
      *
      * @param path 待验证的文件绝对路径
      * @return true 表示文件存在且可读
@@ -289,8 +287,7 @@ class AndroidFileOps(private val context: Context) {
      * 将目录树 URI（OpenDocumentTree 选择结果）解析为真实文件系统目录路径。
      *
      * <p>SAF 目录选择器返回的树 URI 无法通过 {@link #resolveToPath(Uri)} 处理。
-     * 本方法仅支持系统外部存储提供者（ExternalStorageProvider）返回的树 URI，
-     * 通过解析文档 ID 中的卷名与相对路径拼接为绝对路径；其他提供者（如云盘）返回 null。
+     * 本方法仅支持系统外部存储提供者（ExternalStorageProvider）返回的树 URI，通过解析文档 ID 中的卷名与相对路径拼接为绝对路径；其他提供者（如云盘）返回 null。
      *
      * @param uri 目录树 URI
      * @return 目录绝对路径；无法解析返回 null
@@ -442,7 +439,7 @@ class AndroidFileOps(private val context: Context) {
     /**
      * 将单个文件或目录递归复制到 SAF 目录树中指定父文档 ID 下（覆盖同名文件，复用同名目录）。
      *
-     * @param resolver    ContentResolver
+     * @param resolver 内容解析器
      * @param treeUri     目录树 URI
      * @param parentDocId 目标父目录的文档 ID
      * @param entry       待复制的文件或目录
@@ -498,9 +495,7 @@ class AndroidFileOps(private val context: Context) {
      * 将临时目录内容（保留子目录结构）复制到指定 MediaStore 公共集合。
      *
      * <p>供 API 29+ 分区存储使用：经 MediaStore 插入即可合法落盘到 Download 或 Pictures
-     * 下的 ErgouTreeCrypt 子目录。同名文件会先
-     * best-effort 删除应用自有条目；删除失败（文件归其他应用所有）时由
-     * MediaProvider 自动改名（如 "name (1)"）。
+     * 下的 ErgouTreeCrypt 子目录。同名文件会先best-effort 删除应用自有条目；删除失败（文件归其他应用所有）时由MediaProvider 自动改名（如 "name (1)"）。
      *
      * @param tempDir      包含待提交内容的临时目录
      * @param relativePath 目标 MediaStore 相对路径（如 Download/ErgouTreeCrypt）
@@ -660,7 +655,7 @@ class AndroidFileOps(private val context: Context) {
     /**
      * 在 SAF 目录树指定父文档下新建文档并返回其文档 ID。
      *
-     * @param resolver    ContentResolver
+     * @param resolver 内容解析器
      * @param treeUri     目录树 URI
      * @param parentDocId 父目录文档 ID
      * @param name        新文档名
@@ -681,7 +676,7 @@ class AndroidFileOps(private val context: Context) {
     /**
      * 在 SAF 目录树指定父文档下查找指定名称的子文档 ID（可选限定为目录）。
      *
-     * @param resolver      ContentResolver
+     * @param resolver 内容解析器
      * @param treeUri       目录树 URI
      * @param parentDocId   父目录文档 ID
      * @param name          子文档名
@@ -729,7 +724,7 @@ class AndroidFileOps(private val context: Context) {
     /**
      * 删除 SAF 目录下与指定名称相同的既有文档（用于覆盖输出）。
      *
-     * @param resolver    ContentResolver
+     * @param resolver 内容解析器
      * @param treeUri     目录树 URI
      * @param parentDocId 父目录文档 ID
      * @param name        目标文档名
@@ -901,8 +896,7 @@ class AndroidFileOps(private val context: Context) {
      * 将密钥文件安全地拷贝到应用私有存储。
      *
      * <p>密钥文件是敏感数据，不应保留在用户可访问的目录中。
-     * 本方法将密钥文件内容拷贝到 {@code filesDir/keyfiles/} 下，
-     * 使用 UUID 命名以避免泄露原始文件名。
+     * 本方法将密钥文件内容拷贝到 {@code filesDir/keyfiles/} 下，使用 UUID 命名以避免泄露原始文件名。
      *
      * <p>使用 64 KiB 缓冲流式复制（见 {@link #copyStream}），大密钥文件同样受益。
      *

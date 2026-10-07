@@ -29,8 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <h3>为什么期望值取自桌面语料而不是设备自报</h3>
  * <p>设备导出的 {@code export-N.properties} 里也记了一份 {@code restoredSha256}。如果直接拿它
  * 当断言目标，那么"设备写错了期望值"和"设备真的能还原"就无法区分，互操作变成了自证。
- * 因此这里一律以冻结的 {@code corpus.properties} 中**输入文件自身的 SHA-256** 为准，
- * 设备记录只用于核对来源。
+ * 因此这里一律以冻结的 {@code corpus.properties} 中**输入文件自身的 SHA-256** 为准，设备记录只用于核对来源。
  *
  * <h3>为什么默认跳过</h3>
  * <p>本测试需要一份由设备导出、再经 adb 拉取到本机的产物目录。CI 与日常开发不会随手具备这个
@@ -38,7 +37,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <b>跳过不等于通过</b>：Phase 4 的验收要求是显式提供目录并看到它通过。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class ImageCryptAndroidArtifactTest {
 

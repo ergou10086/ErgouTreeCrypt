@@ -28,7 +28,7 @@ public final class VolumeRoundtripTest {
     }
 
     // ================================================================
-    // Basic roundtrip
+    // 基本往返验证
     // ================================================================
 
     @Test
@@ -40,7 +40,7 @@ public final class VolumeRoundtripTest {
         Path encrypted = tempDir.resolve("test.ergou");
         Path decrypted = tempDir.resolve("test_decrypted.txt");
 
-        // Encrypt
+        // 加密
         EncryptRequest encReq = new EncryptRequest();
         encReq.setInputFile(input.toString());
         encReq.setOutputFile(encrypted.toString());
@@ -50,7 +50,7 @@ public final class VolumeRoundtripTest {
         Encryptor.encrypt(encReq);
         assertTrue(Files.exists(encrypted), "encrypted file should exist");
 
-        // Decrypt
+        // 解密
         DecryptRequest decReq = new DecryptRequest();
         decReq.setInputFile(encrypted.toString());
         decReq.setOutputFile(decrypted.toString());
@@ -60,7 +60,7 @@ public final class VolumeRoundtripTest {
         Decryptor.decrypt(decReq);
         assertTrue(Files.exists(decrypted), "decrypted file should exist");
 
-        // Verify byte-identical
+        // 验证字节完全一致
         byte[] decryptedBytes = Files.readAllBytes(decrypted);
         assertArrayEquals(plaintext, decryptedBytes, "roundtrip should be byte-identical");
     }
@@ -93,7 +93,7 @@ public final class VolumeRoundtripTest {
 
     @Test
     void testRoundTripReedSolomon(@TempDir Path tempDir) throws Exception {
-        byte[] plaintext = generateTestData(2 * 1024 * 1024 + 777); // ~2 MiB + partial
+        byte[] plaintext = generateTestData(2 * 1024 * 1024 + 777); // 约2 MiB，另有不完整尾块
         Path input = createFile(tempDir, "rs_test.bin", plaintext);
 
         Path encrypted = tempDir.resolve("rs.ergou");
@@ -206,22 +206,22 @@ public final class VolumeRoundtripTest {
         Path encrypted = tempDir.resolve("nopass.ergou");
         Path decrypted = tempDir.resolve("nopass_dec.txt");
 
-        // Encrypt WITHOUT password → internally uses DEFAULT_PASSWORD
+        // 无密码加密，内部使用公开默认密码。
         EncryptRequest encReq = new EncryptRequest();
         encReq.setInputFile(input.toString());
         encReq.setOutputFile(encrypted.toString());
-        encReq.setPassword(null); // no password
+        encReq.setPassword(null); // 无密码
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
         assertTrue(Files.exists(encrypted));
         assertTrue(Files.size(encrypted) > 0);
 
-        // Decrypt WITHOUT password → internally uses DEFAULT_PASSWORD, succeeds
+        // 无密码解密，内部使用公开默认密码并应成功。
         DecryptRequest decReq = new DecryptRequest();
         decReq.setInputFile(encrypted.toString());
         decReq.setOutputFile(decrypted.toString());
-        decReq.setPassword(null); // also no password
+        decReq.setPassword(null); // 同样不提供密码
         decReq.setRsCodecs(rs);
         Decryptor.decrypt(decReq);
 
@@ -240,7 +240,7 @@ public final class VolumeRoundtripTest {
         Path encrypted = tempDir.resolve("kfonly.ergou");
         Path decrypted = tempDir.resolve("kfonly_dec.txt");
 
-        // Encrypt with keyfile only (no password)
+        // 仅使用密钥文件加密，不提供密码。
         EncryptRequest encReq = new EncryptRequest();
         encReq.setInputFile(input.toString());
         encReq.setOutputFile(encrypted.toString());
@@ -249,7 +249,7 @@ public final class VolumeRoundtripTest {
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
-        // Decrypt with same keyfile (no password)
+        // 使用同一密钥文件解密，不提供密码。
         DecryptRequest decReq = new DecryptRequest();
         decReq.setInputFile(encrypted.toString());
         decReq.setOutputFile(decrypted.toString());
@@ -284,7 +284,7 @@ public final class VolumeRoundtripTest {
 
         assertThrows(Exception.class, () -> Decryptor.decrypt(decReq),
                 "wrong password should fail");
-        // Output file should NOT exist
+        // 输出文件不应存在
         assertFalse(Files.exists(decrypted), "decrypted file should not exist after wrong password");
     }
 
@@ -329,7 +329,7 @@ public final class VolumeRoundtripTest {
         encReq.setInputFile(input.toString());
         encReq.setOutputFile(encrypted.toString());
         encReq.setPassword("zero-pass");
-        encReq.setComments(""); // explicitly empty
+        encReq.setComments(""); // 明确为空
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
@@ -363,13 +363,13 @@ public final class VolumeRoundtripTest {
             assertEquals(hbnu.project.ergoutreecrypt.header.VolumeHeader.VERSION_V215, version);
         }
 
-        // Verify total file size = header + encrypted data
+        // 验证总文件大小等于卷头加密数据大小之和
         long fileSize = Files.size(encrypted);
         assertTrue(fileSize > 789, "file should be larger than base header");
     }
 
     // ================================================================
-    // Deniability
+    // 可否认加密
     // ================================================================
 
     @Test
@@ -387,7 +387,7 @@ public final class VolumeRoundtripTest {
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
-        // Verify deniability wrapper is detectable
+        // 验证可检测到可否认加密包裹层
         assertTrue(Deniability.isDeniable(encrypted.toString(), rs),
                 "file should be detected as deniable");
 
@@ -395,7 +395,7 @@ public final class VolumeRoundtripTest {
         decReq.setInputFile(encrypted.toString());
         decReq.setOutputFile(decrypted.toString());
         decReq.setPassword("deniability-pass");
-        decReq.setDeniability(true); // signal to strip deniability
+        decReq.setDeniability(true); // 请求剥离可否认加密外层
         decReq.setRsCodecs(rs);
         Decryptor.decrypt(decReq);
 
@@ -457,7 +457,7 @@ public final class VolumeRoundtripTest {
     }
 
     // ================================================================
-    // Split / Recombine
+    // 分卷与合卷
     // ================================================================
 
     @Test
@@ -472,23 +472,23 @@ public final class VolumeRoundtripTest {
         encReq.setOutputFile(encrypted.toString());
         encReq.setPassword("split-pass");
         encReq.setSplit(true);
-        encReq.setChunkSize(1); // 1 MiB chunks
+        encReq.setChunkSize(1); // 每卷1 MiB
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
         // 单文件分卷：加密结果移入以原文件同名的文件夹中再分卷
-        // folderName = "split" (strip .ergou from split.ergou)
+        // 文件夹名为 "split"，从 split.ergou 去除扩展名。
         Path chunkDir = tempDir.resolve("split");
         assertFalse(Files.exists(encrypted), "unsplit file should be deleted");
         assertTrue(Files.exists(chunkDir.resolve("split.ergou.0")), "chunk 0 should exist");
         assertTrue(Files.exists(chunkDir.resolve("split.ergou.1")), "chunk 1 should exist");
 
-        // Decrypt with recombine — use the chunk base inside the folder
+        // 解密时自动合卷，使用文件夹内的分卷基础路径。
         DecryptRequest decReq = new DecryptRequest();
-        decReq.setInputFile(chunkDir.resolve("split.ergou.0").toString()); // first chunk
+        decReq.setInputFile(chunkDir.resolve("split.ergou.0").toString()); // 首个分卷
         decReq.setOutputFile(decrypted.toString());
         decReq.setPassword("split-pass");
-        decReq.setRecombine(true); // signal recombine
+        decReq.setRecombine(true); // 请求合卷
         decReq.setRsCodecs(rs);
         Decryptor.decrypt(decReq);
 
@@ -507,7 +507,7 @@ public final class VolumeRoundtripTest {
         encReq.setPassword("split-deny-pass");
         encReq.setDeniability(true);
         encReq.setSplit(true);
-        encReq.setChunkSize(1); // 1 MiB chunks
+        encReq.setChunkSize(1); // 每卷1 MiB
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
@@ -529,7 +529,7 @@ public final class VolumeRoundtripTest {
 
     @Test
     void testIsNotDeniable(@TempDir Path tempDir) throws Exception {
-        // A regular encrypted file (no deniability) should NOT be detected as deniable
+        // 普通加密文件不应被识别为可否认加密文件。
         byte[] plaintext = generateTestData(1024);
         Path input = createFile(tempDir, "regular.bin", plaintext);
         Path encrypted = tempDir.resolve("regular.ergou");
@@ -547,7 +547,7 @@ public final class VolumeRoundtripTest {
 
     @Test
     void testAllOptionsCombined(@TempDir Path tempDir) throws Exception {
-        // Test: Paranoid + RS + Deniability + Split — all together
+        // 测试偏执、RS、可否认加密与分卷的完整组合。
         byte[] plaintext = generateTestData(200 * 1024); // 200 KiB
         Path input = createFile(tempDir, "all_opts.bin", plaintext);
         Path kf = createFile(tempDir, "all_opts.key", "all-options-keyfile".getBytes());
@@ -562,7 +562,7 @@ public final class VolumeRoundtripTest {
         encReq.setReedSolomon(true);
         encReq.setDeniability(true);
         encReq.setSplit(true);
-        encReq.setChunkSize(50); // 50 KiB chunks
+        encReq.setChunkSize(50); // 每卷50 KiB
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
@@ -583,8 +583,8 @@ public final class VolumeRoundtripTest {
 
     @Test
     void testLargeFileRoundTrip(@TempDir Path tempDir) throws Exception {
-        // Test a larger file (~5 MiB) to exercise the full streaming pipeline
-        byte[] plaintext = generateTestData(5 * 1024 * 1024 + 12345); // 5 MiB + offset
+        // 使用约5 MiB的大文件测试完整流式流水线。
+        byte[] plaintext = generateTestData(5 * 1024 * 1024 + 12345); // 5 MiB，加额外偏移
         Path input = createFile(tempDir, "large.bin", plaintext);
         Path encrypted = tempDir.resolve("large.ergou");
         Path decrypted = tempDir.resolve("large_dec.bin");
@@ -626,7 +626,7 @@ public final class VolumeRoundtripTest {
         decReq.setInputFile(encrypted.toString());
         decReq.setOutputFile(decrypted.toString());
         decReq.setPassword("pr-pass");
-        decReq.setForceDecrypt(true); // ignore MAC, just check bytes
+        decReq.setForceDecrypt(true); // 忽略消息认证码，仅检查字节
         decReq.setRsCodecs(rs);
         Decryptor.decrypt(decReq);
 
@@ -643,7 +643,7 @@ public final class VolumeRoundtripTest {
     }
 
     // ================================================================
-    // Helpers
+    // 辅助方法
     // ================================================================
 
     private static Path createFile(Path dir, String name, byte[] data) throws IOException {
@@ -653,7 +653,7 @@ public final class VolumeRoundtripTest {
     }
 
     // ================================================================
-    // Dual Deniability integration
+    // 双卷可否认加密集成
     // ================================================================
 
     @Test
@@ -679,7 +679,7 @@ public final class VolumeRoundtripTest {
 
         assertTrue(DualDeniability.isDualDeniable(output.toString()));
 
-        // Real password decrypt
+        // 使用真实密码解密
         DecryptRequest realReq = new DecryptRequest();
         realReq.setInputFile(output.toString());
         realReq.setOutputFile(decReal.toString());
@@ -688,7 +688,7 @@ public final class VolumeRoundtripTest {
         Decryptor.decrypt(realReq);
         assertArrayEquals(realData, Files.readAllBytes(decReal));
 
-        // Fake password decrypt (create new output file)
+        // 使用伪密码解密，并创建新的输出文件。
         DecryptRequest fakeReq = new DecryptRequest();
         fakeReq.setInputFile(output.toString());
         fakeReq.setOutputFile(decFake.toString());
@@ -746,12 +746,12 @@ public final class VolumeRoundtripTest {
         encReq.setFakePassword("fake-split");
         encReq.setDualDeniability(true);
         encReq.setSplit(true);
-        encReq.setChunkSize(1); // 1 MiB chunks
+        encReq.setChunkSize(1); // 每卷1 MiB
         encReq.setOutputFile(output.toString());
         encReq.setRsCodecs(rs);
         Encryptor.encrypt(encReq);
 
-        // After split, chunks are in dual_split/ folder
+        // 分卷后各卷保存在 dual_split/ 文件夹内
         Path chunkDir = tempDir.resolve("dual_split");
         assertTrue(Files.exists(chunkDir.resolve("dual_split.ergou.0")), "chunk 0 should exist");
 

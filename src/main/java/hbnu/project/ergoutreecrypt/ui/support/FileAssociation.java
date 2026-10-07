@@ -12,8 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Windows 外壳集成工具：将 {@code .ergou} 扩展名注册到 HKCU，
- * 使加密文件在资源管理器中显示应用图标；并提供资源管理器右键菜单的注入与移除。
+ * Windows 外壳集成工具：将 {@code .ergou} 扩展名注册到 HKCU，使加密文件在资源管理器中显示应用图标；并提供资源管理器右键菜单的注入与移除。
  *
  * <p>写 {@code HKEY_CURRENT_USER} 不需要管理员权限。注册后会通知 Shell 刷新图标缓存
  *
@@ -30,9 +29,7 @@ public final class FileAssociation {
      * 资源管理器右键菜单「使用 ErgouTreeCrypt 打开」的注册表位置。
      *
      * <p>挂在 {@code HKCU\Software\Classes\*} 下表示对所有文件类型生效。
-     * 键名固定为 {@code ErgouTreeCrypt}，既不含版本号也不含可执行文件路径，
-     * 因此不同版本注入的是同一个位置：新版本启动时能检测到旧版本的注入，
-     * 新版本重新注入会直接覆盖旧版本的命令行（旧 exe 路径随之失效也不会残留）。
+     * 键名固定为 {@code ErgouTreeCrypt}，既不含版本号也不含可执行文件路径，因此不同版本注入的是同一个位置：新版本启动时能检测到旧版本的注入，新版本重新注入会直接覆盖旧版本的命令行（旧 exe 路径随之失效也不会残留）。
      */
     private static final String MENU_KEY =
             "HKCU\\Software\\Classes\\*\\shell\\ErgouTreeCrypt";
@@ -53,8 +50,7 @@ public final class FileAssociation {
     }
 
     /**
-     * 将 {@code .ergou} → {@code ErgouTreeCrypt.ergou} 写入 HKCU，
-     * 并将图标指向指定路径的 .ico 文件。
+     * 将 {@code .ergou} → {@code ErgouTreeCrypt.ergou} 写入 HKCU，并将图标指向指定路径的 .ico 文件。
      *
      * @param iconPath 已落盘的 .ico 文件绝对路径
      * @return 是否注册成功
@@ -70,7 +66,7 @@ public final class FileAssociation {
             String openKey = progKey + "\\shell\\open";
             String commandKey = openKey + "\\command";
 
-            // 1) .ergou → ProgID
+            // 1) .ergou 扩展名关联到程序标识符
             runReg("add", extKey, "/ve", "/d", PROG_ID, "/f");
             // 2) ProgID → 显示名
             runReg("add", progKey, "/ve", "/d", APP_NAME, "/f");
@@ -94,8 +90,7 @@ public final class FileAssociation {
      * 均落盘到 {@code %APPDATA%/ErgouTreeCrypt/}，每次启动覆盖写入。
      *
      * <p>加密文件（.ergou）在 Windows 资源管理器中会显示 {@code file.png} 的图案。
-     * 本方法只负责文件关联与图标，不涉及右键菜单；右键菜单由用户在设置中
-     * 通过 {@link #installContextMenu()} 手动注入。
+     * 本方法只负责文件关联与图标，不涉及右键菜单；右键菜单由用户在设置中通过 {@link #installContextMenu()} 手动注入。
      */
     public static void autoRegister() {
         if (!isWindows()) {
@@ -331,7 +326,7 @@ public final class FileAssociation {
         String openKey = progKey + "\\shell\\open";
         String commandKey = openKey + "\\command";
 
-        // 1) .ergou → ProgID
+        // 1) .ergou 扩展名关联到程序标识符
         runReg("add", extKey, "/ve", "/d", PROG_ID, "/f");
         // 2) ProgID → 显示名
         runReg("add", progKey, "/ve", "/d", APP_NAME, "/f");

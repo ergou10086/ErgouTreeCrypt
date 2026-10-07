@@ -128,7 +128,7 @@ public abstract class AbstractModernCipher implements ClassicalCipher {
      *
      * @param cipher 密文字节（GCM 模式包含末尾认证标签）
      * @param key    派生后的算法密钥
-     * @param iv     IV/nonce
+     * @param iv 初始化向量或 nonce
      * @return 明文字节
      * @throws InvalidCipherTextException 认证/填充校验失败
      */
@@ -264,7 +264,7 @@ public abstract class AbstractModernCipher implements ClassicalCipher {
      * @param data          输入数据
      * @param engine        底层分组密码引擎
      * @param key           算法密钥
-     * @param iv            IV
+     * @param iv 初始化向量
      * @return 处理结果
      */
     protected final byte[] cbcProcess(final boolean forEncryption, final byte[] data,

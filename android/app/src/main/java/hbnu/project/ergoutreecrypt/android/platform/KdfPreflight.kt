@@ -44,14 +44,12 @@ data class ImageKdfAssessment(
  * 移动端解密前的 KDF 元数据预检。
  *
  * <p>移动端应用堆受限，无法像桌面端一样在堆内派生 1 GiB 参数的密钥。此工具在
- * 解密<b>单文件</b>前读取卷头中的 Argon2 内存参数，供 UI 提前提示"该文件密钥
- * 派生较慢 / 建议桌面端重加密"，避免用户点击解密后长时间卡顿或内存不足闪退。
+ * 解密<b>单文件</b>前读取卷头中的 Argon2 内存参数，供 UI 提前提示"该文件密钥派生较慢 / 建议桌面端重加密"，避免用户点击解密后长时间卡顿或内存不足闪退。
  *
  * <p>读取失败（非 .ergou 文件、损坏等）一律返回 {@code null}，由调用方按
  * "无参数 → 桌面端默认 1 GiB" 处理提示。
  *
  * @author ErgouTree
- * @since 2026/8/28
  */
 object KdfPreflight {
 
@@ -100,8 +98,7 @@ object KdfPreflight {
      * 只读探测加密媒体文件内嵌的元数据
      *
      * <p>供格式保持解密前预检使用：按扩展名嗅探格式，读取 WAV/MP3/MP4 载体中内嵌的
-     * {@link MediaMetadata}，据此判断 Argon2 档位。非受支持格式、非本工具加密或读取
-     * 失败一律返回 {@code null}。
+     * {@link MediaMetadata}，据此判断 Argon2 档位。非受支持格式、非本工具加密或读取失败一律返回 {@code null}。
      *
      * @param path 待探测的媒体文件路径
      * @return 解析出的元数据；非本工具加密或读取失败返回 null

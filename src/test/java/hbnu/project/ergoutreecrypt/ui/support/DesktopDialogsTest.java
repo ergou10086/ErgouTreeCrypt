@@ -1,6 +1,6 @@
 package hbnu.project.ergoutreecrypt.ui.support;
 
-import hbnu.project.ergoutreecrypt.passwordbook.PasswordBookEntry;
+import hbnu.project.ergoutreecrypt.password.passwordbook.PasswordBookEntry;
 import hbnu.project.ergoutreecrypt.version.AppVersion;
 import javafx.application.Platform;
 import javafx.css.PseudoClass;

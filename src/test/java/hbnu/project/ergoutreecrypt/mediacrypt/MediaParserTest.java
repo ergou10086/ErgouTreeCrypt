@@ -72,7 +72,7 @@ class MediaParserTest {
         id3[0] = 'I';
         id3[1] = 'D';
         id3[2] = '3';
-        id3[3] = 3; // version
+        id3[3] = 3; // 版本
         // synchsafe size = 30 -> 字节 [6..9]
         id3[6] = 0;
         id3[7] = 0;

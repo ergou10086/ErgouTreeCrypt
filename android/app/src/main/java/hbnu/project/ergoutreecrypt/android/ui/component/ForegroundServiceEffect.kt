@@ -18,14 +18,13 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
  * <p>注意：Service 仅作为通知宿主，实际加解密仍运行在 ViewModel 协程中；
  * 若进程被强制回收（如厂商一键清理），小文件操作仍可能中断。
  *
- * @param ctx           Android Context
+ * @param ctx Android 上下文
  * @param isRunning     是否有加解密操作正在运行
  * @param progressState 当前进度状态
  * @param fileSize      输入文件大小（字节），null 表示未知
  * @param title         通知标题（"正在加密" / "正在解密"）
  * @param fileName      文件名
  * @author ErgouTree
- * @since 2026/8/12
  */
 @Composable
 fun ForegroundServiceEffect(

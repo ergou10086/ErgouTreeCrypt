@@ -19,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * "写入侧严格拒绝路径、读取侧主动剥离路径"这条双向约束。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class InnerManifestTest {
 
@@ -270,7 +269,7 @@ final class InnerManifestTest {
      * @param format     格式
      * @param fileLength 原文件长度
      * @param name       文件名
-     * @param mime       MIME
+     * @param mime MIME 类型
      * @param extension  扩展名
      * @param flags      flags 位
      * @return 描述区字节

@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
  * 完全一致字节"这一性质，本测试将其锚定为回归保障。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class CryptoStreamingEquivalenceTest {
 

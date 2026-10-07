@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import java.io.File
 
-/** Runs on ART. adb pushes desktop artifacts, then pulls mobile artifacts for JVM verification. */
+/** 在 ART 上运行；通过 adb 上传桌面产物，并导出移动端产物供 JVM 验证。 */
 @RunWith(AndroidJUnit4::class)
 class Lz4InteropTest {
     @Test fun desktopToAndroidAndAndroidToAndroidThenExport() {

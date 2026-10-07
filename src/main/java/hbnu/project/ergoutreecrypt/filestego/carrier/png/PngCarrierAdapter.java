@@ -35,7 +35,6 @@ import java.util.zip.CRC32;
  * 适配器把它作为不透明字节写入/读取，不重复实现密码学或 Payload 逻辑。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class PngCarrierAdapter extends AbstractCarrierAdapter {
 
@@ -154,7 +153,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
             }
             // 方案 B：IEND 之后存在以 EGFS 魔数开头的追加数据
             long iendStart = locateIendStart(ch, fileSize);
-            long trailerStart = iendStart + CHUNK_OVERHEAD; // IEND: len(0)+type+crc
+            long trailerStart = iendStart + CHUNK_OVERHEAD; // IEND：长度(0)+类型+CRC
             if (trailerStart + CarrierMetadata.MAGIC_LEN <= fileSize) {
                 ByteBuffer magic = readAt(ch, trailerStart, CarrierMetadata.MAGIC_LEN);
                 byte[] magicBytes = new byte[CarrierMetadata.MAGIC_LEN];
@@ -180,8 +179,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入：按 {@code preferChunk} 选择方案 A（stEG chunk，流式计算 CRC）
-     * 或方案 B（IEND 后追加），不将 Payload 全量读入内存。
+     * 流式嵌入：按 {@code preferChunk} 选择方案 A（stEG chunk，流式计算 CRC）或方案 B（IEND 后追加），不将 Payload 全量读入内存。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -200,9 +198,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式嵌入（带进度回调）：按 {@code preferChunk} 选择方案 A（stEG chunk）或
-     * 方案 B（IEND 后追加），并按已复制字节数占载体与 Payload 总字节数的比例
-     * 逐块回调进度。
+     * 流式嵌入（带进度回调）：按 {@code preferChunk} 选择方案 A（stEG chunk）或方案 B（IEND 后追加），并按已复制字节数占载体与 Payload 总字节数的比例逐块回调进度。
      *
      * @param carrierFile 原始载体文件路径
      * @param meta        序列化后的 CarrierMetadata 字节数组
@@ -242,8 +238,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取：定位 stEG chunk（方案 A）或 IEND 尾部（方案 B），定点读取元数据，
-     * 再按 {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
+     * 流式提取：定位 stEG chunk（方案 A）或 IEND 尾部（方案 B），定点读取元数据，再按 {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（PNG 方案不使用）
@@ -258,9 +253,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式提取（带进度回调）：定位 stEG chunk（方案 A）或 IEND 尾部（方案 B），
-     * 定点读取元数据，再按 {@code meta.payloadSize()} 精确流式拷贝 Payload 到
-     * 文件，并按已拷贝字节数逐块回调进度。
+     * 流式提取（带进度回调）：定位 stEG chunk（方案 A）或 IEND 尾部（方案 B），定点读取元数据，再按 {@code meta.payloadSize()} 精确流式拷贝 Payload 到文件，并按已拷贝字节数逐块回调进度。
      *
      * @param stegoFile  隐写载体文件
      * @param password   密码（PNG 方案不使用）
@@ -564,8 +557,7 @@ public final class PngCarrierAdapter extends AbstractCarrierAdapter {
     }
 
     /**
-     * 流式查找 stEG chunk 的数据区间 [dataStart, dataLen]，未找到返回 null
-     * （方案 B 的 IEND 终止即返回）。
+     * 流式查找 stEG chunk 的数据区间 [dataStart, dataLen]，未找到返回 null（方案 B 的 IEND 终止即返回）。
      *
      * @param ch       文件通道
      * @param fileSize 文件大小

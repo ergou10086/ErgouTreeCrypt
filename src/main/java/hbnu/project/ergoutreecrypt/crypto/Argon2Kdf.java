@@ -29,9 +29,7 @@ import org.bouncycastle.crypto.params.Argon2Parameters;
 public final class Argon2Kdf {
 
     /**
-     * Argon2 内存分配的安全系数：BouncyCastle 的实现以 {@code Block} 对象数组
-     * 全量分配内存（每块 1 KiB 数据 + 数组/对象头），叠加派生过程的临时缓冲与
-     * GC 峰值，实际堆占用约为内存参数的 1.25 倍。
+     * Argon2 内存分配的安全系数：BouncyCastle 的实现以 {@code Block} 对象数组全量分配内存（每块 1 KiB 数据 + 数组/对象头），叠加派生过程的临时缓冲与GC 峰值，实际堆占用约为内存参数的 1.25 倍。
      */
     private static final double MEMORY_OVERHEAD_FACTOR = 1.25;
 
@@ -70,8 +68,7 @@ public final class Argon2Kdf {
      * 估算给定 Argon2 内存参数所需的堆字节数。
      *
      * <p>BouncyCastle 的 {@code Argon2BytesGenerator} 会一次性分配约
-     * {@code memoryKiB} KiB 的 Block 对象数组，叠加对象头与派生临时缓冲后，
-     * 实际峰值约为参数内存的 {@link #MEMORY_OVERHEAD_FACTOR} 倍。
+     * {@code memoryKiB} KiB 的 Block 对象数组，叠加对象头与派生临时缓冲后，实际峰值约为参数内存的 {@link #MEMORY_OVERHEAD_FACTOR} 倍。
      *
      * @param memoryKiB Argon2 内存参数（KiB）
      * @return 估算的所需堆字节数
@@ -84,8 +81,7 @@ public final class Argon2Kdf {
      * 估算当前 JVM 可用的堆字节数。
      *
      * <p>计算方式为 {@code maxMemory - (totalMemory - freeMemory)}：堆上限减去
-     * 已占用部分，即不触发 GC 的前提下还能分配的最大字节数。Android ART 上
-     * {@code maxMemory} 为应用堆上限（受 largeHeap 影响）。
+     * 已占用部分，即不触发 GC 的前提下还能分配的最大字节数。Android ART 上{@code maxMemory} 为应用堆上限（受 largeHeap 影响）。
      *
      * @return 当前可用的堆字节数
      */

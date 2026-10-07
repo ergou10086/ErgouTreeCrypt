@@ -9,8 +9,7 @@ import java.util.concurrent.atomic.AtomicReference
  * 全局加解密操作忙标记协调器。
  *
  * <p>ViewModel 提升到 Activity 作用域后，用户可以在不同 Tab 间切换并
- * 各自启动操作。加解密为 CPU/内存密集型任务，且前台 Service 通知同一时刻
- * 只应存在一个，因此通过进程级忙标记阻止并发启动：
+ * 各自启动操作。加解密为 CPU/内存密集型任务，且前台 Service 通知同一时刻只应存在一个，因此通过进程级忙标记阻止并发启动：
  * 各 ViewModel 在 {@code startXxx} 时置忙，操作结束或取消时凭令牌释放；
  * 页面据此禁用启动按钮。
  *
@@ -18,7 +17,6 @@ import java.util.concurrent.atomic.AtomicReference
  * 时，其过期的 {@code release(token)} 不会误清新任务的忙标记。
  *
  * @author ErgouTree
- * @since 2026/8/25
  */
 object OperationCoordinator {
 

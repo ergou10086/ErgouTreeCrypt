@@ -19,9 +19,9 @@ import java.util.Arrays;
  *   9    1   formatId  媒体格式（见 MediaFormat.formatId）
  *  10    1   profile   加密档位编码（见 MediaCryptProfile.code）
  *  11    1   flags     bit0=paranoid，bit1=hasIntegrity，其余保留
- *  12   16   salt      Argon2 salt
+ *  12   16   salt      Argon2 盐值
  *  28   32   hkdfSalt  HKDF salt（用于派生 enc/mac 子密钥）
- *  60   24   nonce     XChaCha20 base nonce
+ *  60   24   nonce     XChaCha20 基础随机数
  *  84   64   plainMac  原文 payload 的 MAC（仅当 hasIntegrity，否则省略）
  * </pre>
  * 总长：{@value #BASE_LEN}（无 MAC）或 {@value #BASE_LEN} + 64（含 MAC）。

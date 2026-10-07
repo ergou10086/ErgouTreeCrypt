@@ -18,7 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * 避免各测试类各写一套字节拼装。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptTestSupport {
 

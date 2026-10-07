@@ -22,11 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ZIP 流式倒扫 EOCD 定位测试。
  *
  * <p>验证 {@link ZipCarrierAdapter} 流式尾部倒扫在以下边界条件下仍能
- * 正确定位真实 EOCD：注释内含伪 EOCD 签名、Payload 内含伪 EOCD + 伪 EGFS、
- * 真实 EOCD 签名跨越 1 MiB 扫描块边界。
+ * 正确定位真实 EOCD：注释内含伪 EOCD 签名、Payload 内含伪 EOCD + 伪 EGFS、真实 EOCD 签名跨越 1 MiB 扫描块边界。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class ZipEocdScanTest {
 

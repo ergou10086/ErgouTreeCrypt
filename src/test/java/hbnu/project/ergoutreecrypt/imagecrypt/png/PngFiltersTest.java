@@ -12,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * {@link PngFilters} 的 PNG filter 0–4 规范向量测试。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PngFiltersTest {
 

@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.sp
  * <p>使用系统默认字体，定义 Material 3 排版层级。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 val AppTypography = Typography(
     displayLarge = TextStyle(

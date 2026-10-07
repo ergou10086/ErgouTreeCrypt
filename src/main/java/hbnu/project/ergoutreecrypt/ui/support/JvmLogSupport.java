@@ -10,7 +10,6 @@ import java.nio.file.Path;
  * <p>协调 {@link JvmDiagnostics} 与 {@link Slf4jJvmLog} 的启动顺序：先打开 Logback 文件，再安装诊断采集，关闭时相反。
  *
  * @author ErgouTree
- * @since 2026/8/27
  */
 public final class JvmLogSupport {
 

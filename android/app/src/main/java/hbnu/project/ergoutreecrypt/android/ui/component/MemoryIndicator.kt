@@ -23,9 +23,7 @@ private const val REFRESH_INTERVAL_MS = 1500L
  * 内存使用情况指示器——低调的单行小字。
  *
  * <p>展示系统当前空闲内存与应用堆占用（已用/上限），帮助用户在加解密操作
- * 前后判断内存是否紧张（例如提取大文件前预知堆余量）。视觉上使用
- * {@code labelSmall} 字号与低透明度颜色，置于页面内容顶部右对齐，
- * 不干扰主要操作流程。
+ * 前后判断内存是否紧张（例如提取大文件前预知堆余量）。视觉上使用{@code labelSmall} 字号与低透明度颜色，置于页面内容顶部右对齐，不干扰主要操作流程。
  *
  * <p>展示与否由设置项 {@code ui.memory.indicator} 控制，由各页面在调用处
  * 判断，本组件自身不感知设置。
@@ -38,7 +36,6 @@ private const val REFRESH_INTERVAL_MS = 1500L
  *
  * @param modifier 布局修饰符（调用方可指定对齐方式）
  * @author ErgouTree
- * @since 2026/8/15
  */
 @Composable
 fun MemoryIndicator(modifier: Modifier = Modifier) {

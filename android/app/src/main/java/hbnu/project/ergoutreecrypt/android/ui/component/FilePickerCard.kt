@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.dp
  * @param loadingText 处理中提示文本（loading 为 true 时显示）
  * @param loadingHint 处理中辅助提示，可为空（loading 为 true 时显示）
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun FilePickerCard(
@@ -169,8 +168,7 @@ fun formatFileSize(bytes: Long): String {
  * 从 Uri 中提取文件名。
  *
  * <p>优先通过 {@link OpenableColumns#DISPLAY_NAME} 查询真实显示名。
- * SAF 返回的 {@code content://} URI 的 {@code lastPathSegment} 通常是文档 ID，
- * 云盘等提供者可能不含扩展名，直接使用会导致后续的扩展名/格式判断失败；
+ * SAF 返回的 {@code content://} URI 的 {@code lastPathSegment} 通常是文档 ID，云盘等提供者可能不含扩展名，直接使用会导致后续的扩展名/格式判断失败；
  * 查询失败时回退到解析路径段。
  *
  * @param context 上下文，用于查询 ContentResolver

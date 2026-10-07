@@ -17,8 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 离堆 Argon2 取消响应性与进度粒度测试（Phase A1）。
  *
  * <p>验证 {@link Argon2OffHeap} 在取消信号到来时于 slice/块粒度即可中止派生，
- * 而非等到整轮（pass）结束；同时验证 {@code onSliceProgress} 以 slice 粒度回调，
- * 以及正常派生结果与 BouncyCastle 仍逐字节一致（改动不破坏正确性）。
+ * 而非等到整轮（pass）结束；同时验证 {@code onSliceProgress} 以 slice 粒度回调，以及正常派生结果与 BouncyCastle 仍逐字节一致（改动不破坏正确性）。
  *
  * @author ErgouTree
  */
@@ -51,9 +50,7 @@ class Argon2OffHeapCancelTest {
      * 首个 slice 之后请求取消：应中止，且不会推进到第二个 pass。
      *
      * <p>取消在 {@code onSliceProgress} 首次回调（slice 1 边界）置位。若取消检查
-     * 仍是旧的整轮粒度，则派生会继续填完整个 pass 0 才在 pass 1 边界中止，届时
-     * {@code onProgress} 会被回调到 pass 2；本用例断言其停留在 pass 1，证明取消
-     * 已细化到 slice 以内。
+     * 仍是旧的整轮粒度，则派生会继续填完整个 pass 0 才在 pass 1 边界中止，届时{@code onProgress} 会被回调到 pass 2；本用例断言其停留在 pass 1，证明取消已细化到 slice 以内。
      */
     @Test
     void cancelAfterFirstSlice_abortsWithinFirstPass() {

@@ -6,11 +6,9 @@ import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
  * 文件隐写选项——用户层调用 {@code FileStegoCodec.hide} 时的完整可选参数。
  *
  * <p>包含加密相关选项和载体嵌入相关选项，由门面方法内部拆分为
- * {@link StegoEncodeOptions}（传递给 PayloadCodec）和 {@link EmbedOptions}
- * （传递给 CarrierAdapter）。
+ * {@link StegoEncodeOptions}（传递给 PayloadCodec）和 {@link EmbedOptions}（传递给 CarrierAdapter）。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class FileStegoOptions {
 
@@ -47,8 +45,7 @@ public final class FileStegoOptions {
     private final Argon2Params argon2Params;
 
     /**
-     * 低内存模式（移动端）：大文件仅在适配器支持流式嵌入/提取时
-     * 才允许处理，否则提前抛出友好错误而非 OOM。
+     * 低内存模式（移动端）：大文件仅在适配器支持流式嵌入/提取时才允许处理，否则提前抛出友好错误而非 OOM。
      */
     private final boolean lowMemoryMode;
 
@@ -224,7 +221,7 @@ public final class FileStegoOptions {
          * 设置 paranoid 模式。
          *
          * @param p 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder paranoid(final boolean p) {
             this.paranoid = p;
@@ -235,7 +232,7 @@ public final class FileStegoOptions {
          * 设置是否加密前压缩。
          *
          * @param c 是否压缩
-         * @return this
+         * @return 当前实例
          */
         public Builder compressed(final boolean c) {
             this.compressed = c;
@@ -246,7 +243,7 @@ public final class FileStegoOptions {
          * 设置 Zstandard 压缩档位。
          *
          * @param level 压缩档位（1–22）
-         * @return this
+         * @return 当前实例
          */
         public Builder compressionLevel(final int level) {
             this.compressionLevel = ZstdCompressor.clampLevel(level);
@@ -257,7 +254,7 @@ public final class FileStegoOptions {
          * 设置是否存储完整性校验。
          *
          * @param store 是否存储
-         * @return this
+         * @return 当前实例
          */
         public Builder storeIntegrity(final boolean store) {
             this.storeIntegrity = store;
@@ -268,7 +265,7 @@ public final class FileStegoOptions {
          * 设置隐蔽模式。
          *
          * @param s 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder stealth(final boolean s) {
             this.stealth = s;
@@ -279,7 +276,7 @@ public final class FileStegoOptions {
          * 设置是否混淆文件大小。
          *
          * @param o 是否混淆
-         * @return this
+         * @return 当前实例
          */
         public Builder obfuscateSize(final boolean o) {
             this.obfuscateSize = o;
@@ -290,7 +287,7 @@ public final class FileStegoOptions {
          * 设置目标文件大小（字节）。
          *
          * @param bytes 目标字节数
-         * @return this
+         * @return 当前实例
          */
         public Builder targetSizeBytes(final long bytes) {
             this.targetSizeBytes = bytes;
@@ -301,7 +298,7 @@ public final class FileStegoOptions {
          * 设置是否启用防暴力破解。
          *
          * @param b 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder bruteForceGuard(final boolean b) {
             this.bruteForceGuard = b;
@@ -312,7 +309,7 @@ public final class FileStegoOptions {
          * 设置是否优先使用自定义区域嵌入。
          *
          * @param prefer 是否优先
-         * @return this
+         * @return 当前实例
          */
         public Builder preferChunk(final boolean prefer) {
             this.preferChunk = prefer;
@@ -325,7 +322,7 @@ public final class FileStegoOptions {
          * <p>移动端应传入低内存档位参数；解码侧须从载体元数据读取相同参数。
          *
          * @param params Argon2 参数覆写，可为 null
-         * @return this
+         * @return 当前实例
          */
         public Builder argon2Params(final Argon2Params params) {
             this.argon2Params = params;
@@ -336,7 +333,7 @@ public final class FileStegoOptions {
          * 设置低内存模式（移动端大文件护栏）。
          *
          * @param lowMemory 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder lowMemoryMode(final boolean lowMemory) {
             this.lowMemoryMode = lowMemory;
@@ -350,7 +347,7 @@ public final class FileStegoOptions {
          * 可用堆计算的阈值，使护栏与设备能力匹配而非固定值。
          *
          * @param bytes 护栏阈值字节数，0 表示默认
-         * @return this
+         * @return 当前实例
          */
         public Builder lowMemoryThresholdBytes(final long bytes) {
             this.lowMemoryThresholdBytes = bytes;

@@ -71,7 +71,7 @@ public final class CryptoConstants {
      */
     public static final int REKEY_IV_SIZE = 16;
 
-    // ==================== MAC ====================
+    // ==================== 消息认证码 ====================
 
     /**
      * 载荷 MAC 输出长度（字节）。BLAKE2b-512 与 HMAC-SHA3-512 均为 64 字节。

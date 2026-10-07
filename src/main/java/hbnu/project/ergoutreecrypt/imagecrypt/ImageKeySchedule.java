@@ -26,7 +26,7 @@ import java.util.Arrays;
  *                               salt = hkdfSalt,
  *                               info = "ErgouTreeCrypt/EGTC-IMG/v1")
  *   encKey = keyMaterial[0..31]    （XChaCha20）
- *   macKey = keyMaterial[32..63]   （keyed BLAKE2b-512）
+ *   macKey = keyMaterial[32..63]   （带密钥的 BLAKE2b-512）
  * </pre>
  *
  * <p>HKDF 的 info 必须绑定到图片协议域：直接复用媒体协议的空 info 会让同一主密钥在不同场景派生出相同材料。
@@ -43,7 +43,6 @@ import java.util.Arrays;
  * try-with-resources 使用。密码与主密钥的生命周期由调用方负责。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public final class ImageKeySchedule implements AutoCloseable {
 

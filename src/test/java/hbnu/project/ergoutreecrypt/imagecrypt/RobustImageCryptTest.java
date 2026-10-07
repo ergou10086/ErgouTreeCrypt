@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 抗图片重编码纠错载体的端到端测试。
  *
  * @author ErgouTree
- * @since 2026/9/17
  */
 final class RobustImageCryptTest {
 

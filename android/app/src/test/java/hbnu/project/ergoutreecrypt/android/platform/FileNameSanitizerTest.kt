@@ -12,7 +12,6 @@ import org.junit.Test
  * 完整保留中文、日文、emoji 等合法 Unicode 字符，不产生乱码。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class FileNameSanitizerTest {
 

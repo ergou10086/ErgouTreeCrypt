@@ -10,7 +10,6 @@ package hbnu.project.ergoutreecrypt.exception;
  * {@link #i18nKey()} 返回的 key 需在 {@code messages_*.properties} 中同步补充。
  *
  * @author ErgouTree
- * @since 2026/9/13
  */
 public enum ErrorKind {
 

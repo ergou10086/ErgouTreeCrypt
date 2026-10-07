@@ -22,7 +22,6 @@ package hbnu.project.ergoutreecrypt.history;
  * @param type                操作类型
  * @param timestampEpochMillis 操作完成时间（Unix 毫秒时间戳）
  * @author ErgouTree
- * @since 2026/8/14
  */
 public record OperationRecord(
         String fileName,

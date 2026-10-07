@@ -13,7 +13,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercises actual Compose controls and their DataStore-driven password visibility. */
+/** 在真实 Compose 控件中验证由 DataStore 驱动的密码可见性。 */
 @RunWith(AndroidJUnit4::class)
 class Lz4ArchiveUiTest {
     @get:Rule val compose = createComposeRule()

@@ -9,7 +9,6 @@ import hbnu.project.ergoutreecrypt.compress.ZstdCompressor;
  * StegoEncodeOptions 仅包含 Payload 编码/加密直接需要的选项。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class StegoEncodeOptions {
 
@@ -113,7 +112,7 @@ public final class StegoEncodeOptions {
          * 设置 Zstandard 压缩档位。
          *
          * @param level 压缩档位（1–22）
-         * @return this
+         * @return 当前实例
          */
         public Builder compressionLevel(final int level) {
             this.compressionLevel = ZstdCompressor.clampLevel(level);
@@ -139,7 +138,7 @@ public final class StegoEncodeOptions {
          * 解码侧必须读取同一参数进行派生。
          *
          * @param params Argon2 参数覆写，可为 null
-         * @return this
+         * @return 当前实例
          */
         public Builder argon2Params(final Argon2Params params) {
             this.argon2Params = params;

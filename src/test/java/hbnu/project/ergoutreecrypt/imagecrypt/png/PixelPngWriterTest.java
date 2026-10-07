@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link PixelPngWriter} 的流式映射与查看器兼容测试。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 final class PixelPngWriterTest {
 
@@ -173,7 +172,7 @@ final class PixelPngWriterTest {
      * 创建确定性 padding 的测试 writer。
      *
      * @param chunkSize IDAT 分块大小
-     * @return writer
+     * @return 写入器
      */
     private static PixelPngWriter writer(final int chunkSize) {
         ImageCryptRandomSource random = length -> {

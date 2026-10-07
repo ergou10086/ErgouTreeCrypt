@@ -162,8 +162,7 @@ private data class SelectedInput(
 )
 
 /**
- * 计算「压缩后加密」的最终产物名，规则与共享核心
- * {@code Encryptor.preArchiveOutputName} 保持一致。
+ * 计算「压缩后加密」的最终产物名，规则与共享核心{@code Encryptor.preArchiveOutputName} 保持一致。
  *
  * <p>先剥掉调用方给的 {@code .ergou} / {@code .pcv} 卷后缀，再插入归档扩展名并补回
  * {@code .ergou}，得到 {@code <基名>.<归档扩展名>.ergou}。
@@ -1546,7 +1545,7 @@ fun EncryptScreen(
                         }
                     }
                 }
-            } // End ExpandableCard
+            } // 可折叠卡片结束
 
             OperationLogPanel(visible = logVisible)
 

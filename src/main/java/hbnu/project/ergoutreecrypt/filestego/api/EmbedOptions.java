@@ -11,7 +11,6 @@ package hbnu.project.ergoutreecrypt.filestego.api;
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class EmbedOptions {
 
@@ -89,7 +88,7 @@ public final class EmbedOptions {
          * 设置 paranoid 模式。
          *
          * @param p 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder paranoid(final boolean p) {
             this.paranoid = p;
@@ -100,7 +99,7 @@ public final class EmbedOptions {
          * 设置是否存储完整性校验。
          *
          * @param has 是否存储
-         * @return this
+         * @return 当前实例
          */
         public Builder hasIntegrity(final boolean has) {
             this.hasIntegrity = has;
@@ -111,7 +110,7 @@ public final class EmbedOptions {
          * 设置隐蔽模式。
          *
          * @param s 是否启用
-         * @return this
+         * @return 当前实例
          */
         public Builder stealth(final boolean s) {
             this.stealth = s;
@@ -122,7 +121,7 @@ public final class EmbedOptions {
          * 设置是否优先使用自定义区域嵌入。
          *
          * @param prefer 是否优先
-         * @return this
+         * @return 当前实例
          */
         public Builder preferChunk(final boolean prefer) {
             this.preferChunk = prefer;

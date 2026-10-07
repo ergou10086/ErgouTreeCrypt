@@ -14,7 +14,6 @@ import java.util.zip.CRC32;
  * 调用方持有并负责关闭底层输出流，本类不会缓存整张图片。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class PngChunkWriter {
 

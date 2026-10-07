@@ -90,8 +90,7 @@ public final class WavCipher extends AbstractMediaCipher {
      * <ul>
      *   <li><b>W-FULL（安全档）</b>：整个 data payload；</li>
      *   <li><b>W-SEL（性能/预览档）</b>：pattern 选择性加密——每 {@value #SEL_PERIOD} 字节中加密前
-     *       {@value #SEL_BLOCK} 字节（借鉴 CENC pattern 思想，少量区间、速度更快；机密性弱于 W-FULL，
-     *       仅作预览/访问控制用途）。</li>
+     *       {@value #SEL_BLOCK} 字节（借鉴 CENC pattern 思想，少量区间、速度更快；机密性弱于 W-FULL，仅作预览/访问控制用途）。</li>
      * </ul>
      * 加解密两端调用本方法得到一致区间。
      */

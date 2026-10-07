@@ -22,7 +22,6 @@ import java.util.function.Supplier;
  * 从而将这部分与业务无关的逻辑从主控制器中剥离。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public final class WindowChrome {
 

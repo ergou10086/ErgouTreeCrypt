@@ -12,7 +12,6 @@ import java.util.stream.Stream;
  * 成功恢复输出后安全删除源文件的桌面端辅助工具。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class SourceDeletion {
 

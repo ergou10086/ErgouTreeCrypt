@@ -20,12 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 大载荷流式端到端往返测试（32 MiB 级）。
  *
  * <p>验证流式链路（encodeToFile → embedFromFile → extractFullToFile →
- * decodeToFile）在 paranoid + 完整性校验 + Argon2 覆写下对大文件的
- * 正确性与字节一致性。载荷超过适配器"读入内存"的舒适区，
- * 但远小于测试堆限制，作为 1GB 场景的缩小版回归锚点。
+ * decodeToFile）在 paranoid + 完整性校验 + Argon2 覆写下对大文件的正确性与字节一致性。载荷超过适配器"读入内存"的舒适区，但远小于测试堆限制，作为 1GB 场景的缩小版回归锚点。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class LargeFileStreamRoundtripTest {
 

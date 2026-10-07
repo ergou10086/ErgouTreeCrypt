@@ -43,15 +43,12 @@ import java.util.Objects;
  *    还原  [PNG] → 反滤波取 RGB → OuterHeader ──┘
  * </pre>
  * 加解密共用同一条流式管线：加密侧 {@link FrameSource} 把 {@code 头 || 密文 || 认证标签}
- * 当作逻辑字节流交给 {@link PixelPngWriter}；解密侧 {@link DecryptingFrameSink} 把 RGB 样本
- * 当作写入口，边收边解密。两侧的工作内存都固定（1 MiB 缓冲 + 单行 RGB），
- * 与图片分辨率、载荷长度无关，因此移动端不需要解码原图 Bitmap。
+ * 当作逻辑字节流交给 {@link PixelPngWriter}；解密侧 {@link DecryptingFrameSink} 把 RGB 样本当作写入口，边收边解密。两侧的工作内存都固定（1 MiB 缓冲 + 单行 RGB），与图片分辨率、载荷长度无关，因此移动端不需要解码原图 Bitmap。
  *
  * <h3>阶段上报的语义</h3>
  * <p>加密路径的"读原文件 → 加密 → 累积 MAC → 写 PNG 扫描行"由同一条拉取式管线完成，
  * 无法拆成互不重叠的两段，因此只上报 {@link ImageCryptPhase#ENCRYPTING}。
- * 解密路径同理，由 {@link ImageCryptPhase#PNG_READING} 覆盖"解析 PNG → 解密 → 写临时文件"，
- * 其后依次是 {@link ImageCryptPhase#MAC_VERIFY} 与 {@link ImageCryptPhase#COMMITTING}。
+ * 解密路径同理，由 {@link ImageCryptPhase#PNG_READING} 覆盖"解析 PNG → 解密 → 写临时文件"，其后依次是 {@link ImageCryptPhase#MAC_VERIFY} 与 {@link ImageCryptPhase#COMMITTING}。
  * KDF 阶段的 pass 进度走 {@link ImageCryptProgress#onKdfPass(int, int)}，不与字节进度混用。
  *
  * <h3>临时文件与提交</h3>
@@ -67,13 +64,11 @@ import java.util.Objects;
  * 因此不会意外改写调用方的数组，也不会把密码留到垃圾回收。日志只记录文件名，不记录完整路径、密码、密钥或 nonce。
  *
  * @author ErgouTree
- * @since 2026/9/16
  */
 public final class ImageCryptCodec {
 
     /**
-     * I/O 缓冲与流式分块大小（1 MiB）。取消检查按该粒度进行，满足协议要求的
-     * "I/O 循环取消检查间隔不超过 1 MiB"。
+     * I/O 缓冲与流式分块大小（1 MiB）。取消检查按该粒度进行，满足协议要求的"I/O 循环取消检查间隔不超过 1 MiB"。
      */
     private static final int IO_BUFFER_BYTES = 1 << 20;
 
@@ -162,8 +157,7 @@ public final class ImageCryptCodec {
      * 按选项指定的保护模式加密一张图片。
      *
      * <p>输入按"完整原文件字节"处理：不解码、不重编码，因此 JPEG 量化表、EXIF、ICC、
-     * 动画帧与调色板都随原始字节完整往返。产物是标准 8-bit RGB PNG，在普通看图软件中
-     * 显示为无意义的噪声图。
+     * 动画帧与调色板都随原始字节完整往返。产物是标准 8-bit RGB PNG，在普通看图软件中显示为无意义的噪声图。
      *
      * @param input    输入图片路径
      * @param output   产物 PNG 路径
@@ -430,8 +424,7 @@ public final class ImageCryptCodec {
      *
      * <p>恢复文件名由加密区内的 InnerManifest 决定：清单中的 basename 经
      * {@link InnerManifest#safeBasename()} 清洗后作为基名并插入 {@code .restored} 标记；
-     * 名称缺失或非法时退化为 {@code restored.<扩展名>}。目录成分、盘符与路径分隔符一律被
-     * 剥离，因此恶意构造的文件名无法把产物写出到目标目录之外。
+     * 名称缺失或非法时退化为 {@code restored.<扩展名>}。目录成分、盘符与路径分隔符一律被剥离，因此恶意构造的文件名无法把产物写出到目标目录之外。
      *
      * <p>目标已存在时默认拒绝覆盖，而不是静默替换；过期判定发生在解出清单之后、
      * 开始写原文件字节之前，因此冲突会在极短时间内报告，不会白等一次完整解密。
@@ -520,9 +513,7 @@ public final class ImageCryptCodec {
      * 轻量判断文件是否为 EGTC-IMG 产物。
      *
      * <p>只解压到足以读出外层协议头为止，不解密任何载荷，也不做认证。因此该方法是给功能路由
-     * 使用的<b>提示性</b>判断：返回 true 只说明外层结构声明了 EGTC-IMG 帧，不说明文件完整、
-     * 密码正确或未被篡改。文件不存在、不是普通文件、不是 PNG 或结构不是 EGTC-IMG 时一律
-     * 返回 false，使调用方能把普通 PNG 与图片密文分流。
+     * 使用的<b>提示性</b>判断：返回 true 只说明外层结构声明了 EGTC-IMG 帧，不说明文件完整、密码正确或未被篡改。文件不存在、不是普通文件、不是 PNG 或结构不是 EGTC-IMG 时一律返回 false，使调用方能把普通 PNG 与图片密文分流。
      *
      * @param input 待探测文件
      * @return true 表示外层结构为 EGTC-IMG PNG
@@ -578,8 +569,7 @@ public final class ImageCryptCodec {
      *
      * <h3>为什么以异常而不是布尔值表达失败</h3>
      * <p>协议要求把"密码错误"与"载荷损坏"明确区分开：前者应提示用户重新输入密码，后者应提示
-     * 文件已损坏或被修改，两者对用户的下一步动作完全不同。布尔返回值无法承载这一区分，
-     * 因此本方法在认证不通过时抛出带 {@link ErrorKind} 的分类异常，成功时正常返回。
+     * 文件已损坏或被修改，两者对用户的下一步动作完全不同。布尔返回值无法承载这一区分，因此本方法在认证不通过时抛出带 {@link ErrorKind} 的分类异常，成功时正常返回。
      *
      * <p>密码模式下每次调用都会完整执行一遍 Argon2id，因此无法绕过 KDF 快速试探密码；
      * 校验过程不写出任何恢复文件，只把解密结果丢弃。
@@ -792,8 +782,7 @@ public final class ImageCryptCodec {
      * 消耗了等待时间。无法查询可用空间时不做阻断，交由实际写入阶段报错。
      *
      * <p>这是一次<b>尽力而为</b>的预检，因此必须容忍各平台查询文件系统信息时的差异。
-     * Android 的 ART 会在 {@code Files.getFileStore} 上抛出 {@link SecurityException}
-     * ——平台的 {@code statvfs} 实现受 SELinux 策略约束，宿主 JVM 上完全看不到这个问题。
+     * Android 的 ART 会在 {@code Files.getFileStore} 上抛出 {@link SecurityException}——平台的 {@code statvfs} 实现受 SELinux 策略约束，宿主 JVM 上完全看不到这个问题。
      * 若只捕获 {@code IOException}，一次成功的加密就会因为一个纯提示性的预检而在设备上崩溃。
      *
      * @param directory     目标目录
@@ -891,8 +880,7 @@ public final class ImageCryptCodec {
      * 把认证通过的临时文件提交到最终位置。
      *
      * <p>优先使用原子移动，使目标位置要么不存在要么已完整；文件系统不支持原子移动时退化为
-     * 受控替换。不允许覆盖时，目标在提交瞬间出现会转为 {@link ErrorKind#FILE_EXISTS}，
-     * 不会静默替换用户文件。
+     * 受控替换。不允许覆盖时，目标在提交瞬间出现会转为 {@link ErrorKind#FILE_EXISTS}，不会静默替换用户文件。
      *
      * @param tempFile  临时文件
      * @param target    目标路径
@@ -956,8 +944,7 @@ public final class ImageCryptCodec {
      *   <li>文件名扩展名<b>指向同一种格式</b>时沿用它，使 {@code photo.JPEG} 恢复成
      *       {@code photo.restored.jpeg} 而不是被规整成 {@code .jpg}；</li>
      *   <li>扩展名缺失、非法或指向另一种格式时退回格式默认值。后者很常见：用户把 PNG
-     *       改名成 {@code .jp2} 再加密，若沿用该扩展名，恢复产物会是一个名叫
-     *       {@code .jp2} 的 PNG 文件，用户与看图软件都会被误导。</li>
+     *       改名成 {@code .jp2} 再加密，若沿用该扩展名，恢复产物会是一个名叫{@code .jp2} 的 PNG 文件，用户与看图软件都会被误导。</li>
      * </ul>
      *
      * @param source 输入图片路径
@@ -1004,8 +991,7 @@ public final class ImageCryptCodec {
      * 把流回调里包装的受检异常在门面边界原样抛出。
      *
      * <p>取消与协议错误在 UI 层有不同处理，因此不能把它们降级为通用 I/O 错误；流回调内只会
-     * 抛出 {@link CancelledException} 与 {@link ImageCryptException}，其它类型属于编程错误，
-     * 归类为内部错误而不是误报成"文件损坏"。
+     * 抛出 {@link CancelledException} 与 {@link ImageCryptException}，其它类型属于编程错误，归类为内部错误而不是误报成"文件损坏"。
      *
      * @param e 流回调包装异常
      * @throws ImageCryptException 原始协议错误或内部错误
@@ -1043,11 +1029,9 @@ public final class ImageCryptCodec {
      * 把受检的图片协议异常与取消信号穿过 {@link InputStream}/{@link OutputStream} 接口。
      *
      * <p>PNG 编解码层只认识 {@link IOException}，而取消与协议错误是受检异常。该包装在流
-     * 回调内层抛出、在门面边界由 {@link #rethrow(LogicalStreamException)} 还原，
-     * 使两个方向都不必把受检异常降级成通用 I/O 错误。
+     * 回调内层抛出、在门面边界由 {@link #rethrow(LogicalStreamException)} 还原，使两个方向都不必把受检异常降级成通用 I/O 错误。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class LogicalStreamException extends IOException {
 
@@ -1065,11 +1049,9 @@ public final class ImageCryptCodec {
      * 加密侧的逻辑帧输入流：{@code OuterHeader || Ciphertext || AuthTag}。
      *
      * <p>数据由 {@link PixelPngWriter} 拉取。每填满一块就加密一次并累积 MAC，因此认证标签
-     * 只在整个密文产生完毕后才计算，而 PNG 扫描行已经在同步写出——原图与全部密文都不需要
-     * 同时驻留内存。
+     * 只在整个密文产生完毕后才计算，而 PNG 扫描行已经在同步写出——原图与全部密文都不需要同时驻留内存。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class FrameSource extends InputStream {
 
@@ -1314,7 +1296,6 @@ public final class ImageCryptCodec {
      * 在此之前所有明文都停留在临时文件里，不会出现在目标位置。
      *
      * @author ErgouTree
-     * @since 2026/9/16
      */
     private static final class DecryptingFrameSink extends OutputStream {
 
@@ -1555,8 +1536,7 @@ public final class ImageCryptCodec {
          * 在协议头收齐后建立密钥编排并校验 keyConfirm。
          *
          * <p>keyConfirm 覆盖除 headerCrc32 外的全部头字段，因此篡改 protectionMode、KDF 参数
-         * 或算法 ID 都无法伪造通过；同时它让密码模式在读取大载荷前就能区分"密码错误"与
-         * "载荷损坏"。最终判定仍以完整认证标签为准。
+         * 或算法 ID 都无法伪造通过；同时它让密码模式在读取大载荷前就能区分"密码错误"与"载荷损坏"。最终判定仍以完整认证标签为准。
          *
          * @throws IOException         底层读取失败
          * @throws ImageCryptException 头字段非法、缺少密码、密码错误或头部被篡改
@@ -1617,8 +1597,7 @@ public final class ImageCryptCodec {
          * 把明文分流到清单描述区与原文件临时文件。
          *
          * <p>描述区长度由清单自身在偏移 12 处声明，因此先按协议上限收够 16 字节读出该字段，
-         * 再按声明长度收齐描述区并解析；解析成功后，同一块里越界的尾部字节属于原文件载荷，
-         * 必须补写到临时文件而不能丢弃。
+         * 再按声明长度收齐描述区并解析；解析成功后，同一块里越界的尾部字节属于原文件载荷，必须补写到临时文件而不能丢弃。
          *
          * @param data   明文数据
          * @param offset 起始偏移

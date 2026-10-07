@@ -7,8 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * 图标格式工具
- * 从 PNG 资源生成 Windows .ico 文件。
+ * 图标格式工具从 PNG 资源生成 Windows .ico 文件。
  *
  * <p>Windows Vista 及以上版本原生支持 PNG-in-ICO，因此只需要将 PNG 数据包入 ICO 容器即可，无需转换为 BMP。生成的 .ico 可用于注册表 {@code DefaultIcon} 值和 JavaFX {@link javafx.stage.Stage#getIcons()}。
  *
@@ -50,26 +49,26 @@ public final class IconUtils {
         int dataOffset = 6 + 16;
         ByteArrayOutputStream bos = new ByteArrayOutputStream(dataOffset + pngData.length);
 
-        // --- ICONDIR ---
-        // reserved (2)
+        // --- 图标目录头 ---
+        // 保留字段（2字节）
         bos.write(0);
         bos.write(0);
-        // type = ICO (2)
+        // ICO 类型（2字节）
         writeLE16(bos, ICO_TYPE);
-        // count = 1 (2)
+        // 图像数量为一（2字节）
         writeLE16(bos, 1);
 
-        // --- ICONDIRENTRY ---
-        bos.write(wByte);          // width
-        bos.write(hByte);          // height
-        bos.write(0);              // color palette count
-        bos.write(0);              // reserved
-        writeLE16(bos, 1);         // color planes (1 for PNG-in-ICO)
-        writeLE16(bos, 32);        // bits-per-pixel
-        writeLE32(bos, pngData.length); // image size
-        writeLE32(bos, dataOffset);     // image offset
+        // --- 图标目录条目 ---
+        bos.write(wByte);          // 宽度
+        bos.write(hByte);          // 高度
+        bos.write(0);              // 调色板颜色数
+        bos.write(0);              // 保留字段
+        writeLE16(bos, 1);         // 颜色平面数（PNG 封装在 ICO 中时为一）
+        writeLE16(bos, 32);        // 每像素位数
+        writeLE32(bos, pngData.length); // 图像大小
+        writeLE32(bos, dataOffset);     // 图像偏移
 
-        // --- PNG image data ---
+        // --- PNG 图像数据 ---
         bos.write(pngData);
 
         return bos.toByteArray();

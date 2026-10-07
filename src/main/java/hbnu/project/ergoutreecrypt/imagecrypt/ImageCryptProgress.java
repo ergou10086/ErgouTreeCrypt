@@ -9,7 +9,6 @@ package hbnu.project.ergoutreecrypt.imagecrypt;
  * <p>所有方法都可能在后<b>台线程</b>被调用，UI 实现需自行切回界面线程更新视图。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 public interface ImageCryptProgress {
 

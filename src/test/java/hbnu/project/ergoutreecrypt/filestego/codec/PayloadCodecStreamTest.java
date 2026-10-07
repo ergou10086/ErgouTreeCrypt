@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * MAC 失败删除输出、密码错误不产生输出、Argon2 覆写往返。
  *
  * @author ErgouTree
- * @since 2026/8/14
  */
 class PayloadCodecStreamTest {
 

@@ -33,11 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link FileInputGuard} 与 {@link OutputNaming} 的启动前预检测试。
  *
  * <p>覆盖各功能对「可接受输入 / 快速拒绝 + 引导」的判定：通用加解密、通用完整性校验、
- * 音视频格式保持加解密与校验、图像隐写、文件隐写。为保持测试快速，所有需要真实
- * 密钥派生的场景（卷加密、媒体加密、隐写嵌入）都显式覆写为低 Argon2 参数。
+ * 音视频格式保持加解密与校验、图像隐写、文件隐写。为保持测试快速，所有需要真实密钥派生的场景（卷加密、媒体加密、隐写嵌入）都显式覆写为低 Argon2 参数。
  *
  * @author ErgouTree
- * @since 2026/9/14
  */
 final class FileInputGuardTest {
 

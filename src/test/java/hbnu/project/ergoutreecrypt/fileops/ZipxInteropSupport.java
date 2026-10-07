@@ -8,21 +8,21 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
 
-/** Exchanges real ZIPX artifacts between desktop JVM and Android ART, verifying before decrypting. */
+/** 在桌面 JVM 与 Android ART 之间交换真实 ZIPX 产物，先认证再解密。 */
 public final class ZipxInteropSupport {
     public static final String ARCHIVE_PASSWORD = "zipx-归档🔐";
     public static final String VOLUME_PASSWORD = "zipx-加密🔑";
 
-    /** Prevents construction. */
+    /** 禁止实例化。 */
     private ZipxInteropSupport() { }
 
     /**
-     * Produces full real-file codec, volume and split-volume cases and verifies the producer's own output.
-     * @param output corpus directory
-     * @param source real M4A file
-     * @param mobile whether the producer runs on ART
-     * @return corpus manifest
-     * @throws Exception production or producer self-verification failed
+     * 生成完整的真实文件编解码、卷及分卷用例，并验证生产端自身输出。
+     * @param output 语料目录
+     * @param source 真实 M4A 文件
+     * @param mobile 生产端是否运行在 ART
+     * @return 语料清单
+     * @throws Exception 生产或生产端自校验失败
      */
     public static Properties generate(Path output, Path source, boolean mobile) throws Exception {
         Files.createDirectories(output);
@@ -57,19 +57,19 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Produces one artifact and immediately runs independent authentication and restoration phases.
-     * @param root corpus root
-     * @param manifest case inventory
-     * @param index case number
-     * @param id stable case identifier
-     * @param workflow archive, pre or post
-     * @param codec compression method
-     * @param password whether the archive is encrypted
-     * @param split whether the volume is split
-     * @param mode split metadata format
-     * @param mobile whether the producer runs on ART
-     * @return next case number
-     * @throws Exception production or self-verification failed
+     * 生成单个产物，立即执行独立认证与还原阶段。
+     * @param root 语料根目录
+     * @param manifest 用例清单
+     * @param index 用例编号
+     * @param id 稳定用例标识符
+     * @param workflow 归档、前处理或后处理流程
+     * @param codec 压缩方法
+     * @param password 归档是否加密
+     * @param split 卷是否分卷
+     * @param mode 分卷元数据格式
+     * @param mobile 生产端是否运行在 ART
+     * @return 下一个用例编号
+     * @throws Exception 生产或自校验失败
      */
     private static int produce(Path root, Properties manifest, int index, String id, String workflow,
                                 ZipxMethod codec, boolean password, boolean split, SplitMetadataMode mode,
@@ -110,12 +110,12 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Authenticates and restores one transferred artifact, comparing complete bytes by SHA-256 and size.
-     * @param corpus producer corpus directory
-     * @param output operation-owned output directory
-     * @param manifest producer inventory
-     * @param index case number
-     * @throws Exception any authentication or restoration check failed
+     * 认证并还原单个传输产物，通过 SHA-256 和大小比较完整字节。
+     * @param corpus 生产端语料目录
+     * @param output 当前操作拥有的输出目录
+     * @param manifest 生产端清单
+     * @param index 用例编号
+     * @throws Exception 任意认证或还原检查失败
      */
     public static void verify(Path corpus, Path output, Properties manifest, int index) throws Exception {
         Files.createDirectories(output);
@@ -167,10 +167,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Verifies all cases received from the other runtime.
-     * @param corpus producer corpus root
-     * @param output operation-owned output directory
-     * @throws Exception incomplete matrix or failed case
+     * 验证从另一个运行时接收的所有用例。
+     * @param corpus 生产端语料根目录
+     * @param output 当前操作拥有的输出目录
+     * @throws Exception 矩阵不完整或用例失败
      */
     public static void verifyAll(Path corpus, Path output) throws Exception {
         Properties manifest = new Properties();
@@ -185,10 +185,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Regenerates XZ cases after an empty-entry interoperability fix, preserving unaffected cases.
-     * @param corpus existing complete producer corpus
-     * @param mobile whether the producer runs on ART
-     * @throws Exception regeneration or producer verification failed
+     * 空条目互通修复后仅重新生成 XZ 用例，保留无变化的用例。
+     * @param corpus 已有完整生产端语料
+     * @param mobile 生产端是否运行在 ART
+     * @throws Exception 重新生成或生产端认证失败
      */
     public static void refreshXzArchives(Path corpus, boolean mobile) throws Exception {
         Properties manifest = manifest(corpus);
@@ -203,10 +203,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Verifies affected raw archives without repeating unchanged full-file volume workflows.
-     * @param corpus producer corpus
-     * @param output operation-owned verification directory
-     * @throws Exception any authentication or restoration failed
+     * 验证受影响的原始归档，不重复无变化的完整文件卷流程。
+     * @param corpus 生产端语料
+     * @param output 当前操作拥有的认证目录
+     * @throws Exception 任意认证或还原失败
      */
     public static void verifyRawArchives(Path corpus, Path output) throws Exception {
         Properties manifest = manifest(corpus);
@@ -219,10 +219,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Loads an existing complete corpus for targeted revalidation.
-     * @param corpus producer corpus
-     * @return validated inventory
-     * @throws IOException incomplete corpus
+     * 加载已有完整语料，用于定向复验。
+     * @param corpus 生产端语料
+     * @return 已验证的清单
+     * @throws IOException 语料不完整
      */
     private static Properties manifest(Path corpus) throws IOException {
         Properties manifest = new Properties();
@@ -232,10 +232,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Selects a real split chunk, testing automatic metadata-format detection.
-     * @param directory extracted split directory
-     * @return selected chunk
-     * @throws IOException split files missing
+     * 选择真实分卷，测试元数据格式自动识别。
+     * @param directory 已提取的分卷目录
+     * @return 选中的分卷
+     * @throws IOException 分卷文件缺失
      */
     private static Path splitInput(Path directory) throws IOException {
         try (var paths = Files.walk(directory)) {
@@ -246,10 +246,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Hashes an artifact or a complete split tree, including each relative filename.
-     * @param artifact file or directory
-     * @return SHA-256 digest
-     * @throws Exception hashing failed
+     * 计算文件或完整分卷目录树的哈希，包含每个相对文件名。
+     * @param artifact 文件或目录
+     * @return SHA-256 摘要
+     * @throws Exception 哈希计算失败
      */
     private static String treeHash(Path artifact) throws Exception {
         if (Files.isRegularFile(artifact)) return sha256(artifact);
@@ -264,10 +264,10 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Hashes every byte of a file without loading it into memory.
-     * @param path source file
-     * @return SHA-256 digest
-     * @throws Exception hashing failed
+     * 逐字节计算文件哈希，不把完整文件加载到内存。
+     * @param path 源文件
+     * @return SHA-256 摘要
+     * @throws Exception 哈希计算失败
      */
     public static String sha256(Path path) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -279,9 +279,9 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Converts digest bytes to portable lowercase hexadecimal.
-     * @param bytes digest bytes
-     * @return hexadecimal string
+     * 将摘要字节转为可移植的小写十六进制。
+     * @param bytes 摘要字节
+     * @return 十六进制字符串
      */
     private static String hex(byte[] bytes) {
         StringBuilder text = new StringBuilder();
@@ -290,19 +290,19 @@ public final class ZipxInteropSupport {
     }
 
     /**
-     * Enforces a regression invariant.
-     * @param condition required condition
-     * @param message failure explanation
-     * @throws IOException invariant failed
+     * 检查回归测试的不变量。
+     * @param condition 必须成立的条件
+     * @param message 失败说明
+     * @throws IOException 不变量不成立
      */
     private static void require(boolean condition, String message) throws IOException {
         if (!condition) throw new IOException(message);
     }
 
     /**
-     * Removes only a generated verification directory.
-     * @param work operation-owned test output
-     * @throws IOException cleanup failed
+     * 仅删除生成的认证目录。
+     * @param work 当前操作拥有的测试输出
+     * @throws IOException 清理失败
      */
     private static void deleteWork(Path work) throws IOException {
         try (var paths = Files.walk(work)) {

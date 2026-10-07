@@ -128,7 +128,7 @@ class CarrierMetadataTest {
 
     @Test
     void startsWithMagicTooShort() {
-        byte[] shortData = new byte[]{0x45, 0x47}; // Only "EG"
+        byte[] shortData = new byte[]{0x45, 0x47}; // 只有 "EG" 前缀
         assertFalse(CarrierMetadata.startsWithMagic(shortData));
     }
 

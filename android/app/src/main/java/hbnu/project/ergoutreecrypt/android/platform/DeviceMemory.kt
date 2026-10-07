@@ -7,15 +7,12 @@ import android.content.Context
  * 设备内存探测工具——统一提供应用堆与系统内存的实时信息。
  *
  * <p>共享核心的 Argon2 预检（{@code Argon2Kdf.assertMemoryAvailable}）基于
- * {@code Runtime} 的堆上限判断，本类补充 Android 特有的系统内存查询
- * （{@link ActivityManager.MemoryInfo}），供内存指示器与移动端护栏阈值使用。
+ * {@code Runtime} 的堆上限判断，本类补充 Android 特有的系统内存查询（{@link ActivityManager.MemoryInfo}），供内存指示器与移动端护栏阈值使用。
  *
  * <p>注意：物理内存大不等于应用可用堆大。Android 应用堆受
- * {@code android:largeHeap} 与系统 {dalvik.vm.heapsize} 限制（16 GB 内存设备
- * 通常也仅约 512 MiB），因此所有内存可行性判断都以堆上限为基准。
+ * {@code android:largeHeap} 与系统 {dalvik.vm.heapsize} 限制（16 GB 内存设备通常也仅约 512 MiB），因此所有内存可行性判断都以堆上限为基准。
  *
  * @author ErgouTree
- * @since 2026/8/15
  */
 object DeviceMemory {
 
@@ -62,9 +59,7 @@ object DeviceMemory {
      * 计算低内存模式大文件护栏阈值（字节）。
      *
      * <p>非流式适配器的回退路径会把载体与载荷一次性读入内存（峰值约为
-     * 文件大小的数倍），因此阈值取当前可用堆的四分之一，并夹在
-     * {@link #MIN_THRESHOLD_BYTES}~{@link #MAX_THRESHOLD_BYTES} 之间，
-     * 使护栏与设备实际能力匹配，而非固定 64 MiB。
+     * 文件大小的数倍），因此阈值取当前可用堆的四分之一，并夹在{@link #MIN_THRESHOLD_BYTES}~{@link #MAX_THRESHOLD_BYTES} 之间，使护栏与设备实际能力匹配，而非固定 64 MiB。
      *
      * @return 护栏阈值字节数
      */

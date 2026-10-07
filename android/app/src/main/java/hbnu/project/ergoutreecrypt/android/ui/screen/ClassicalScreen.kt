@@ -73,7 +73,6 @@ import hbnu.project.ergoutreecrypt.log.LogService
  * 与桌面端 100% 一致。已作为底部导航栏独立 Tab。
  *
  * @author ErgouTree
- * @since 2026/8/12
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

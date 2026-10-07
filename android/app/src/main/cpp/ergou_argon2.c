@@ -13,9 +13,9 @@
 #include "argon2.h"
 
 /*
- * Class:     hbnu_project_ergoutreecrypt_crypto_NativeArgon2
- * Method:    argon2idHashRaw
- * Signature: ([B[BIIII)[B
+ * 类：hbnu_project_ergoutreecrypt_crypto_NativeArgon2
+ * 方法：argon2idHashRaw
+ * 签名：([B[BIIII)[B
  */
 JNIEXPORT jbyteArray JNICALL
 Java_hbnu_project_ergoutreecrypt_crypto_NativeArgon2_argon2idHashRaw(

@@ -83,8 +83,7 @@ import java.io.File
  * Android 独立图片加密页面。
  *
  * <p>页面只负责文件选择和表单展示，协议算法、密码规范化、流式读写与提交事务均由
- * Activity 作用域 {@link ImageCryptViewModel} 处理。页面不会解码输入 Bitmap，因此大图的
- * 工作内存不随原始分辨率线性增长。
+ * Activity 作用域 {@link ImageCryptViewModel} 处理。页面不会解码输入 Bitmap，因此大图的工作内存不随原始分辨率线性增长。
  *
  * @param onOpenHistory 打开操作历史回调
  */

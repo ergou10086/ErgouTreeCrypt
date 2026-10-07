@@ -42,7 +42,6 @@ import hbnu.project.ergoutreecrypt.android.viewmodel.ProgressState
  * @param onCancel      取消操作回调
  * @param modifier      修饰符
  * @author ErgouTree
- * @since 2026/8/11
  */
 @Composable
 fun ProgressCard(

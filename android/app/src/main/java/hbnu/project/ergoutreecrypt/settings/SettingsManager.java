@@ -6,8 +6,7 @@ import hbnu.project.ergoutreecrypt.log.LogLevel;
  * Android 端设置管理器。
  *
  * <p>桌面端使用 {@code java.util.prefs.Preferences}，Android 端使用 Jetpack DataStore
- * （通过 {@code AndroidSettings} 访问）。本类提供同步的静态方法签名供共享核心代码引用，
- * 内部通过 in-memory 字段桥接 DataStore 的异步读写。
+ * （通过 {@code AndroidSettings} 访问）。本类提供同步的静态方法签名供共享核心代码引用，内部通过 in-memory 字段桥接 DataStore 的异步读写。
  *
  * <p>AndroidSettings 在初始化时调用 {@link #initFromBridge} 将 DataStore 中的值同步到本类；
  * 之后每次 DataStore 变更时通过各 setter 同步更新。
@@ -16,7 +15,6 @@ import hbnu.project.ergoutreecrypt.log.LogLevel;
  * 因此本类必须保持同步可用的语义。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 public final class SettingsManager {
 
@@ -69,7 +67,7 @@ public final class SettingsManager {
     private SettingsManager() {
     }
 
-    // ---- Getters ----
+    // ---- 属性读取 ----
 
     /** 解密后是否自动解压。 */
     public static boolean isAutoDecompressDecrypt() {

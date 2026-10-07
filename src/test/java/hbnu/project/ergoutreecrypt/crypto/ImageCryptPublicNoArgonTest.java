@@ -14,14 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * 「公开恢复模式不执行 Argon2」的硬性验证。
  *
  * <p>本类刻意放在 {@code crypto} 包，以便读取 {@link Argon2Kdf} 的包内并发观测计数
- * （{@code kdfInFlight}/{@code kdfMaxInFlight}），从而把"没调用"变成可断言的客观事实，
- * 而不是依赖耗时测量。
+ * （{@code kdfInFlight}/{@code kdfMaxInFlight}），从而把"没调用"变成可断言的客观事实，而不是依赖耗时测量。
  *
  * <p>公开模式把随机主密钥明文写入文件头，任何拿到文件的人都能恢复；在这条路径上执行
  * Argon2 既没有安全性收益，也会白白占用移动端的内存与时间。
  *
  * @author ErgouTree
- * @since 2026/9/15
  */
 final class ImageCryptPublicNoArgonTest {
 

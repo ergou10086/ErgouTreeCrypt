@@ -1,4 +1,4 @@
-package hbnu.project.ergoutreecrypt.passwordbook;
+package hbnu.project.ergoutreecrypt.password.passwordbook;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -15,7 +15,6 @@ import java.util.List;
  * <p>格式固定为两列 {@code name,password}，支持引号、逗号和多行字段。
  *
  * @author ErgouTree
- * @since 2026/9/22
  */
 public final class PasswordBookCsv {
 

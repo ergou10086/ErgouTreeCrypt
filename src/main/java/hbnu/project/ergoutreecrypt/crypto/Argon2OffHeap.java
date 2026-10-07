@@ -21,15 +21,10 @@ import java.util.concurrent.Future;
  * 离堆（native 内存）Argon2id v1.3 实现。
  *
  * <p>BouncyCastle 的 {@code Argon2BytesGenerator} 将整块 Argon2 内存分配在
- * Java 堆内；Android 应用堆上限（largeHeap 下通常约 512 MiB）因此无法派生
- * 1 GiB 参数的密钥——即使设备物理内存有 16 GB。本实现把 Argon2 内存块放在
- * native 内存中，绕开 Java 堆上限，使桌面端/高内存档位创建的文件也能在移动
- * 端完成密钥派生。
+ * Java 堆内；Android 应用堆上限（largeHeap 下通常约 512 MiB）因此无法派生1 GiB 参数的密钥——即使设备物理内存有 16 GB。本实现把 Argon2 内存块放在native 内存中，绕开 Java 堆上限，使桌面端/高内存档位创建的文件也能在移动端完成密钥派生。
  *
  * <p>内存分配优先使用 {@code sun.misc.Unsafe.allocateMemory}（纯 native
- * malloc，不受堆上限与 direct-buffer 预算约束；Android ART 与桌面 JVM 均
- * 可用）；Unsafe 不可用时回退 {@link ByteBuffer#allocateDirect}（受堆预算
- * 约束，可能提前 OOM）。
+ * malloc，不受堆上限与 direct-buffer 预算约束；Android ART 与桌面 JVM 均可用）；Unsafe 不可用时回退 {@link ByteBuffer#allocateDirect}（受堆预算约束，可能提前 OOM）。
  *
  * <p>输出与 BouncyCastle 实现逐字节一致（由 {@code Argon2OffHeapTest} 交叉
  * 验证）。填充按 lane 并行（切片间加屏障），与参考实现的执行顺序一致。
@@ -38,7 +33,6 @@ import java.util.concurrent.Future;
  * 数分钟），仅作为堆内存不足时的回退路径，由 {@link Argon2Kdf} 自动选择。
  *
  * @author ErgouTree
- * @since 2026/8/15
  */
 public final class Argon2OffHeap {
 
@@ -431,8 +425,7 @@ public final class Argon2OffHeap {
     }
 
     /**
-     * 生成下一个地址块：inputBlock.v[6] 自增后，
-     * address = input XOR compress(input)，再 address = address XOR compress(address)。
+     * 生成下一个地址块：inputBlock.v[6] 自增后，address = input XOR compress(input)，再 address = address XOR compress(address)。
      */
     private static void nextAddresses(final long[] addressBlock, final long[] inputBlock) {
         inputBlock[6]++;
@@ -617,9 +610,7 @@ public final class Argon2OffHeap {
      * {@code sun.misc.Unsafe} 反射桥接。
      *
      * <p>通过 {@code Class.forName + theUnsafe 字段反射} 获取实例、{@code MethodHandle}
-     * 绑定方法，避免编译期依赖 {@code sun.misc} 包（Android SDK 编译类路径不含该包，
-     * 但桌面 JVM 与 Android ART 运行时均提供该类）。MethodHandle 的
-     * {@code invokeExact} 可被 JIT 内联，性能接近直接调用。
+     * 绑定方法，避免编译期依赖 {@code sun.misc} 包（Android SDK 编译类路径不含该包，但桌面 JVM 与 Android ART 运行时均提供该类）。MethodHandle 的{@code invokeExact} 可被 JIT 内联，性能接近直接调用。
      *
      * <p>桌面 JVM 需模块声明 {@code requires jdk.unsupported}；Android 上
      * 若被隐藏 API 策略拦截则获取失败，调用方回退直接缓冲区。
@@ -629,19 +620,19 @@ public final class Argon2OffHeap {
         /** Unsafe 实例（Object 类型，避免编译期 sun.misc 依赖） */
         private final Object unsafe;
 
-        /** allocateMemory(long)long */
+        /** 堆外内存分配方法：allocateMemory(long)long */
         private final MethodHandle allocateMemory;
 
-        /** freeMemory(long)void */
+        /** 堆外内存释放方法：freeMemory(long)void */
         private final MethodHandle freeMemory;
 
-        /** setMemory(long,long,byte)void */
+        /** 堆外内存填充方法：setMemory(long,long,byte)void */
         private final MethodHandle setMemory;
 
-        /** getLong(long)long */
+        /** 长整数读取方法：getLong(long)long */
         private final MethodHandle getLong;
 
-        /** putLong(long,long)void */
+        /** 长整数写入方法：putLong(long,long)void */
         private final MethodHandle putLong;
 
         /**

@@ -14,14 +14,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * <h3>UAX #15 测试向量</h3>
  * <p>使用显式码点而非字面量构造测试输入，防止编辑器 NFC 归一化破坏测试意图。
  * <ul>
- *   <li>é (U+00E9) = NFC composed</li>
- *   <li>e (U+0065) + combining acute (U+0301) = NFD decomposed</li>
- *   <li>가 (U+AC00) = NFC hangul</li>
- *   <li>ᄀ (U+1100) + ᅡ (U+1161) = NFD conjoining jamo</li>
+ *   <li>é (U+00E9) 为 NFC 组合形式</li>
+ *   <li>e (U+0065) + 组合重音符 (U+0301) 为 NFD 分解形式</li>
+ *   <li>가 (U+AC00) 为 NFC 韩文组合形式</li>
+ *   <li>ᄀ (U+1100) + ᅡ (U+1161) 为 NFD 韩文字母组合形式</li>
  * </ul>
  *
  * @author ErgouTree
- * @since 2026/6/16
  */
 public final class PasswordNormalizerTest {
 
@@ -31,7 +30,7 @@ public final class PasswordNormalizerTest {
     private static final String GA_COMPOSED = new String(new int[] { 0xAC00 }, 0, 1);
     private static final String GA_DECOMPOSED = new String(new int[] { 0x1100, 0x1161 }, 0, 2);
     private static final String DEV_EMOJI = new String(new int[] { 0x1F469, 0x200D, 0x1F4BB }, 0, 3);
-    // e + acute (ccc 230) + dot-below (ccc 220): non-canonical order
+    // e + 重音符（组合类230）+ 下点（组合类220）：非规范顺序
     private static final String NON_CANONICAL = new String(new int[] { 0x0065, 0x0301, 0x0323 }, 0, 3);
 
     private static final byte[] E_NFC_BYTES = { (byte) 0xc3, (byte) 0xa9 };
@@ -50,7 +49,7 @@ public final class PasswordNormalizerTest {
 
     @Test
     void testNormalizeProducesNFC() {
-        // Composed + decomposed forms → same NFC bytes
+        // 组合和分解形式应得到相同 NFC 字节
         assertArrayEquals(E_NFC_BYTES, PasswordNormalizer.normalize(E_COMPOSED)
                 .getBytes(StandardCharsets.UTF_8), "e composed → NFC");
         assertArrayEquals(E_NFC_BYTES, PasswordNormalizer.normalize(E_DECOMPOSED)
@@ -78,7 +77,7 @@ public final class PasswordNormalizerTest {
 
     @Test
     void testNormalizeDoesNotCaseFoldOrTrim() {
-        // ß must NOT fold to "ss"; spaces must be preserved
+        // ß 不能折叠为 "ss"，且必须保留空格。
         String in = " stra" + new String(Character.toChars(0x00DF)) + "e ";
         assertEquals(in, PasswordNormalizer.normalize(in));
     }
@@ -151,7 +150,7 @@ public final class PasswordNormalizerTest {
         assertFalse(PasswordNormalizer.containsNonASCII("Password123!@#"));
         assertFalse(PasswordNormalizer.containsNonASCII(""));
         assertFalse(PasswordNormalizer.containsNonASCII(null));
-        assertFalse(PasswordNormalizer.containsNonASCII("")); // DEL, not high
+        assertFalse(PasswordNormalizer.containsNonASCII("")); // DEL 字符，不属于高位字符
         assertTrue(PasswordNormalizer.containsNonASCII(E_COMPOSED));
         assertTrue(PasswordNormalizer.containsNonASCII(E_DECOMPOSED));
         assertTrue(PasswordNormalizer.containsNonASCII(GA_COMPOSED));

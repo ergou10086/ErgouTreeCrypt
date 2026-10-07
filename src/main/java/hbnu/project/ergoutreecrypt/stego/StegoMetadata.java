@@ -18,14 +18,14 @@ import javax.crypto.spec.SecretKeySpec;
  * <pre>
  *   MAGIC        16 B    "EGTC-STEGO-IMG01"（固定 ASCII）
  *   VERSION      1  B    元数据格式版本
- *   FLAGS        1  B    [lsbDepth:2][hasMac:1][paranoid:1][stealth:1][reserved:3]
+ *   FLAGS        1字节    [最低有效位深度:2][消息认证:1][偏执:1][隐蔽:1][保留:3]
  *   CHANNELS     1  B    有效通道数
  *   PAYLOAD_SIZE 8  B    原始文件字节数 (long)
  *   FILE_NAME_LEN 4 B    文件名 UTF-8 字节数 (int)
  *   FILE_NAME    var     原始文件名 UTF-8 字节
- *   SALT         16 B    Argon2 salt
- *   HKDF_SALT    32 B    HKDF-SHA3-256 salt
- *   NONCE        24 B    XChaCha20 nonce
+ *   SALT         16字节   Argon2 盐值
+ *   HKDF_SALT    32字节   HKDF-SHA3-256 盐值
+ *   NONCE        24字节   XChaCha20 随机数
  *   SERPENT_IV   16 B    Serpent-CTR IV（仅 paranoid 时存在）
  *   PAYLOAD_MAC  64 B    BLAKE2b-512（仅 hasMac 时存在）
  * </pre>
@@ -268,7 +268,7 @@ public final class StegoMetadata {
                 + (isParanoidFlag(flags) ? SERPENT_IV_LEN : 0)
                 + (hasMacFlag(flags) ? MAC_SIZE : 0);
         if (bb.remaining() + (BASE_FIXED - minBodySize) < expectedBody - minBodySize + nameLen) {
-            // Simplify: just check we have enough for name + crypto fields at minimum
+            // 简化检查：至少容纳名称和密码学字段。
         }
 
         byte[] nameBytes = new byte[nameLen];
@@ -392,13 +392,13 @@ public final class StegoMetadata {
     /** @return 原始文件名 */
     public String fileName() { return fileName; }
 
-    /** @return Argon2 salt */
+    /** @return Argon2 盐值 */
     public byte[] salt() { return salt.clone(); }
 
-    /** @return HKDF salt */
+    /** @return HKDF 盐值 */
     public byte[] hkdfSalt() { return hkdfSalt.clone(); }
 
-    /** @return XChaCha20 nonce */
+    /** @return XChaCha20 随机数 */
     public byte[] nonce() { return nonce.clone(); }
 
     /** @return Serpent-CTR IV（可能为 null） */

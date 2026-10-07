@@ -53,7 +53,7 @@ import java.util.List;
  *   <li>writeHeader — RS 编码写 header（auth 值占位）</li>
  *   <li>deriveKeys — Argon2id 密码派生</li>
  *   <li>processKeyfiles — keyfile 哈希 + XOR</li>
- *   <li>computeAuth — v2 header HMAC</li>
+ *   <li>computeAuth — v2 头部 HMAC</li>
  *   <li>encryptPayload — XChaCha20(+Serpent) + MAC + 可选 RS</li>
  *   <li>finalize — 回填 auth → 原子重命名 → 可选 deniability/分卷/压缩</li>
  * </ol>
@@ -118,8 +118,7 @@ public final class Encryptor {
      *
      * <p>GZ 是纯单文件流格式、不保存条目名：条目多于一个时若仍用 GZ，解压只能得到一个
      * 以压缩包基名命名的无后缀文件，本工具后续无法再识别。故多条目时提升为 TAR.GZ。
-     * 单条目（单文件）时保持 GZ——此时压缩包基名本身就是 {@code <原输出名>}，
-     * 解压后正好还原成带 {@code .ergou} 后缀的名字，不会丢信息。
+     * 单条目（单文件）时保持 GZ——此时压缩包基名本身就是 {@code <原输出名>}，解压后正好还原成带 {@code .ergou} 后缀的名字，不会丢信息。
      *
      * @param raw        用户选择的归档格式字符串
      * @param entryCount 归档内条目数
@@ -134,8 +133,7 @@ public final class Encryptor {
      * 拼装「压缩后加密」的产物名：{@code <基名>.<归档扩展名>.ergou}。
      *
      * <p>与「加密后压缩」的 {@code <名>.ergou.<归档扩展名>} 顺序相反——压缩后加密是
-     * 先有归档再整体加密，因此卷后缀必须在最外层。调用方传入的若是常规的
-     * {@code <基名>.ergou}（桌面/移动端默认），这里先剥掉卷后缀再插入归档扩展名；
+     * 先有归档再整体加密，因此卷后缀必须在最外层。调用方传入的若是常规的{@code <基名>.ergou}（桌面/移动端默认），这里先剥掉卷后缀再插入归档扩展名；
      * 若传入的本来就没有卷后缀，则直接拼接。
      *
      * @param output 调用方给出的输出路径
@@ -163,14 +161,13 @@ public final class Encryptor {
         return "?";
     }
 
-    // ==================== Phase 1: Preprocess ====================
+    // ==================== 阶段一：预处理 ====================
 
     /**
      * 加密预处理：多文件合并、压缩后加密（先打包）、加密前压缩（Zstandard）。
      *
      * <p>三级处理的先后顺序固定为「先打包成归档 → 再做 Zstandard 压缩 → 最后加密」：
-     * 归档本身就是一种压缩，先打包再对归档做 Zstandard 不会破坏归档结构，
-     * 解密端按 header 中的压缩标志先解 Zstandard 再解归档即可还原。
+     * 归档本身就是一种压缩，先打包再对归档做 Zstandard 不会破坏归档结构，解密端按 header 中的压缩标志先解 Zstandard 再解归档即可还原。
      *
      * @param ctx 操作上下文
      * @param req 加密请求
@@ -245,7 +242,7 @@ public final class Encryptor {
         ctx.inputFile = working;
     }
 
-    // ==================== Phase 2: Generate values ====================
+    // ==================== 阶段二：生成随机值 ====================
 
     /**
      * 生成随机密码学材料并构建 VolumeHeader。
@@ -299,7 +296,7 @@ public final class Encryptor {
         ctx.header.setFlags(flags);
     }
 
-    // ==================== Phase 3: Write header ====================
+    // ==================== 阶段三：写入卷头 ====================
 
     /**
      * RS 编码并写入 header（auth 值位置写入零占位符）。
@@ -313,7 +310,7 @@ public final class Encryptor {
         }
     }
 
-    // ==================== Phase 4: Derive keys ====================
+    // ==================== 阶段四：派生密钥 ====================
 
     /**
      * Argon2id 密码派生。无密码时使用公开默认密码。
@@ -331,7 +328,7 @@ public final class Encryptor {
         ctx.setKey(key);
     }
 
-    // ==================== Phase 5: Process keyfiles ====================
+    // ==================== 阶段五：处理密钥文件 ====================
 
     /**
      * Keyfile 处理：计算各 keyfile 的 SHA3-256 哈希并合并。
@@ -363,7 +360,7 @@ public final class Encryptor {
         }
     }
 
-    // ==================== Phase 6: Compute auth ====================
+    // ==================== 阶段六：计算认证值 ====================
 
     /**
      * 计算 v2 header HMAC-SHA3-512 认证码。
@@ -378,7 +375,7 @@ public final class Encryptor {
         ctx.header.setKeyfileHash(ctx.keyfileHash);
     }
 
-    // ==================== Phase 7: Encrypt payload ====================
+    // ==================== 阶段七：加密载荷 ====================
 
     /**
      * 加密载荷：XChaCha20(+Serpent) 加密 + MAC 累积 + 可选 RS 编码。
@@ -457,7 +454,7 @@ public final class Encryptor {
         SecureZero.zero(serpentKey);
     }
 
-    // ==================== Phase 8: Finalize ====================
+    // ==================== 阶段八：最终处理 ====================
 
     /**
      * 最终化：回填 auth 值、原子重命名，按序执行分卷→压缩→可否认加密。

@@ -23,8 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 「压缩后加密」完整测试套件。
  *
  * <p>语义：先按所选格式把输入打成一个归档（可选归档密码），再对归档整体加密为单个
- * {@code .ergou}。覆盖单文件、文件夹、多文件三条路径，四种归档格式、归档密码、
- * 分卷、空输入与「留空即无密码」等边界。
+ * {@code .ergou}。覆盖单文件、文件夹、多文件三条路径，四种归档格式、归档密码、分卷、空输入与「留空即无密码」等边界。
  *
  * <p>使用低 Argon2 参数保证用例秒级完成。
  *
@@ -184,8 +183,7 @@ final class CompressThenEncryptTest {
     // ================================================================
 
     /**
-     * 文件夹压缩后加密：产物是单个 {@code <文件夹名>.<归档扩展名>.ergou}，
-     * 输出目录等于输入父目录时也不得改动原文件夹。
+     * 文件夹压缩后加密：产物是单个 {@code <文件夹名>.<归档扩展名>.ergou}，输出目录等于输入父目录时也不得改动原文件夹。
      */
     @Test
     void folderZipThenEncryptKeepsSourceAndRoundtrips(@TempDir Path tempDir) throws Exception {
@@ -247,8 +245,7 @@ final class CompressThenEncryptTest {
     }
 
     /**
-     * 文件夹 + GZ：GZ 不保存条目名，必须提升为 TAR.GZ 才不会丢掉 {@code .ergou} 后缀，
-     * 否则本工具无法再识别自己的产物。
+     * 文件夹 + GZ：GZ 不保存条目名，必须提升为 TAR.GZ 才不会丢掉 {@code .ergou} 后缀，否则本工具无法再识别自己的产物。
      */
     @Test
     void folderGzPromotedToTarGzAndRoundtrips(@TempDir Path tempDir) throws Exception {

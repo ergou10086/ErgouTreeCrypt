@@ -22,9 +22,7 @@ import kotlin.io.path.name
 /**
  * 移动端侧的桌面隐写产物提取互通测试（Phase S1 验收）。
  *
- * 用 Android 模块**自身编译的共享核心副本**（`syncCoreLibs` 同步的 `filestego` 包）
- * 提取桌面端 `FileStegoKdfInteropTest` 产出的真实隐写文件，并按移动端
- * `StegoViewModel.extract` 的选项组装（低内存模式 + 大文件护栏），验证：
+ * 用 Android 模块**自身编译的共享核心副本**（`syncCoreLibs` 同步的 `filestego` 包）提取桌面端 `FileStegoKdfInteropTest` 产出的真实隐写文件，并按移动端`StegoViewModel.extract` 的选项组装（低内存模式 + 大文件护栏），验证：
  *
  * 1. 桌面端六种载体容器的隐写产物在移动端侧均可逐字节还原；
  * 2. 桌面端 S1 档位透传后，载体元数据里记录的是 256 MiB 档而非默认 1 GiB。
@@ -32,7 +30,6 @@ import kotlin.io.path.name
  * 桌面测试产物缺失时整类跳过（`Assume`），不阻塞常规 CI。
  *
  * @author ErgouTree
- * @since 2026/8/31
  */
 class DesktopStegoInteropTest {
 

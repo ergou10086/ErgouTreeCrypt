@@ -4,8 +4,7 @@ package hbnu.project.ergoutreecrypt.mediacrypt;
  * 文件中一段连续的可加密区间，由起始偏移与长度描述。
  *
  * <p>各格式解析器扫描容器后产出一组 {@code ByteRange}
- * WAV: data payload；MP3: 各帧体；MP4: mdat payload
- * 加密器对这些区间按顺序连续 XOR keystream，区间之外的容器结构原样保留。
+ * WAV: data payload；MP3: 各帧体；MP4: mdat payload加密器对这些区间按顺序连续 XOR keystream，区间之外的容器结构原样保留。
  *
  * <p>区间在文件中应<b>按 offset 升序、互不重叠</b>，以保证 keystream 推进顺序在加解密两端一致。
  *

@@ -63,7 +63,6 @@ import java.util.Optional;
  * <p>所有隐写业务逻辑委托给门面 {@link FileStegoCodec}，本控制器不触碰密码学细节。
  *
  * @author ErgouTree
- * @since 2026/8/5
  */
 public class FileStegoController {
 
@@ -478,12 +477,10 @@ public class FileStegoController {
     }
 
     /**
-     * 执行「隐藏」操作：校验载体与待藏文件、检查容量、收集高级选项，
-     * 再委托 {@link FileStegoCodec#hide} 后台嵌入。
+     * 执行「隐藏」操作：校验载体与待藏文件、检查容量、收集高级选项，再委托 {@link FileStegoCodec#hide} 后台嵌入。
      *
      * <p>构建 {@link FileStegoOptions} 时会把设置中的 {@link Argon2DesktopMode}
-     * 档位透传为 {@link Argon2Params}（Phase S1），该参数随 {@code CarrierMetadata}
-     * 一并写入产物，提取端据此派生密钥，与当前设备的档位设置无关。
+     * 档位透传为 {@link Argon2Params}（Phase S1），该参数随 {@code CarrierMetadata}一并写入产物，提取端据此派生密钥，与当前设备的档位设置无关。
      */
     private void doHide() {
         if (carrierFile == null) {

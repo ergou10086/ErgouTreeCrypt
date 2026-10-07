@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.Color
  * <p>以蓝紫渐变色为主色调，支持亮色与暗色两套方案。
  *
  * @author ErgouTree
- * @since 2026/8/11
  */
 
 // --- 主色 ---

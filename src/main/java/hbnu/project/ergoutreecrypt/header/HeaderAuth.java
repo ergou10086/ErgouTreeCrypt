@@ -28,26 +28,26 @@ public final class HeaderAuth {
     private HeaderAuth() {
     }
 
-    // ==================== v2 Header MAC ====================
+    // ==================== v2 头部消息认证码 ====================
 
     /**
      * 计算 v2 header HMAC-SHA3-512。
      *
      * <p>MAC 覆盖顺序（必须严格匹配）：
      * <ol>
-     *   <li>version</li>
+     *   <li>版本（version）</li>
      *   <li>commentsLen（5 位十进制字符串）</li>
-     *   <li>comments</li>
+     *   <li>注释（comments）</li>
      *   <li>flags（5 字节）</li>
-     *   <li>salt</li>
-     *   <li>hkdfSalt</li>
-     *   <li>serpentIV</li>
-     *   <li>nonce</li>
-     *   <li>keyfileHash</li>
+     *   <li>盐值（salt）</li>
+     *   <li>HKDF 盐值（hkdfSalt）</li>
+     *   <li>Serpent 初始化向量（serpentIV）</li>
+     *   <li>随机数（nonce）</li>
+     *   <li>密钥文件哈希（keyfileHash）</li>
      * </ol>
      *
      * @param subkeyHeader HKDF 头 64 字节（header 子密钥）
-     * @param h            volume header
+     * @param h 卷头
      * @param keyfileHash  32 字节 keyfile hash
      * @return 64 字节 HMAC-SHA3-512 认证码
      */
@@ -55,7 +55,7 @@ public final class HeaderAuth {
         HMac hmac = new HMac(new SHA3Digest(512));
         hmac.init(new KeyParameter(subkeyHeader));
 
-        // 1. version
+        // 1. 版本
         update(hmac, h.getVersion().getBytes(StandardCharsets.UTF_8));
 
         // 2. commentsLen（5 位十进制，UTF-8 字节数）
@@ -64,7 +64,7 @@ public final class HeaderAuth {
         String commentsLenStr = String.format("%05d", commentBytes.length);
         update(hmac, commentsLenStr.getBytes(StandardCharsets.UTF_8));
 
-        // 3. comments
+        // 3. 注释
         if (h.getComments() != null && !h.getComments().isEmpty()) {
             update(hmac, h.getComments().getBytes(StandardCharsets.UTF_8));
         }
@@ -72,19 +72,19 @@ public final class HeaderAuth {
         // 4. flags（5 字节）
         update(hmac, h.getFlags().toBytes());
 
-        // 5. salt
+        // 5. 盐值
         update(hmac, h.getSalt());
 
-        // 6. hkdfSalt
+        // 6. HKDF 盐值
         update(hmac, h.getHkdfSalt());
 
-        // 7. serpentIV
+        // 7. Serpent 初始化向量
         update(hmac, h.getSerpentIV());
 
-        // 8. nonce
+        // 8. 随机数
         update(hmac, h.getNonce());
 
-        // 9. keyfileHash
+        // 9. 密钥文件哈希
         update(hmac, keyfileHash);
 
         byte[] out = new byte[hmac.getMacSize()];
@@ -92,7 +92,7 @@ public final class HeaderAuth {
         return out;
     }
 
-    // ==================== v1 KeyHash（legacy） ====================
+    // ==================== v1 密钥哈希（旧版） ====================
 
     /**
      * 计算 v1 KeyHash = SHA3-512(key)。
@@ -290,9 +290,7 @@ public final class HeaderAuth {
          * 判断异常是否为密码错误（非 keyfile 错误）。
          *
          * <p>保留基于 {@code passwordIncorrect} 标志的判定（而非 {@code kind()==WRONG_PASSWORD}）：
-         * v2 header 的密码错误与篡改在密码学上不可区分，统一抛 {@link #v2PasswordOrTamperError()}
-         * （kind 为 {@code TAMPERED_DATA}），但解密端仍须据此把该异常视作「密码候选失败」继续尝试
-         * 后续归一化候选，否则会破坏 v2 卷的多候选重试。
+         * v2 header 的密码错误与篡改在密码学上不可区分，统一抛 {@link #v2PasswordOrTamperError()}（kind 为 {@code TAMPERED_DATA}），但解密端仍须据此把该异常视作「密码候选失败」继续尝试后续归一化候选，否则会破坏 v2 卷的多候选重试。
          */
         public static boolean isPasswordError(Throwable t) {
             return t instanceof AuthException ae && ae.passwordIncorrect;

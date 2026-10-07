@@ -6,12 +6,14 @@ on:
     paths:
       - 'src/**'
       - 'pom.xml'
+      - 'scripts/build_desktop.py'
       - '.github/workflows/desktop-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'src/**'
       - 'pom.xml'
+      - 'scripts/build_desktop.py'
       - '.github/workflows/desktop-ci.yml'
   workflow_dispatch:
 
@@ -25,7 +27,7 @@ permissions:
 
 jobs:
   # ============================================================
-  # 桌面端（JavaFX / Maven）：编译 -> 全量单元测试 -> jlink 打包
+  # 桌面端（JavaFX / Maven）：编译、单元测试及带运行时的应用镜像打包。
   # ============================================================
   build-and-test:
     name: Build, Test & Package
@@ -62,15 +64,13 @@ jobs:
           if-no-files-found: ignore
           path: target/surefire-reports/
 
-      # 打包 jlink 运行时镜像，作为桌面端“可发布产物”的构建检查
-      - name: Package jlink image
-        run: mvn -B --no-transfer-progress javafx:jlink
+      # 依赖包含自动模块，使用 JDK 官方 classpath 应用镜像方案。
+      - name: Package desktop application image
+        run: python scripts/build_desktop.py
 
       - name: Upload runtime image
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-jlink-image
+          name: desktop-app-image
           if-no-files-found: warn
-          path: |
-            target/ErgouTreeCrypt/
-            target/ErgouTreeCrypt-*.zip
+          path: target/desktop-image/**

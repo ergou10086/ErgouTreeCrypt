@@ -63,6 +63,7 @@ tasks.named("processTestResources") { dependsOn(syncTestResources) }
 dependencies {
     // 共享核心依赖（与桌面端一致）
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("com.google.crypto.tink:tink:1.23.0")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("net.lingala.zip4j:zip4j:2.11.5")
     implementation("org.tukaani:xz:1.10")

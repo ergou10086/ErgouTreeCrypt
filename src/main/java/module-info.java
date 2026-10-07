@@ -7,6 +7,7 @@ module hbnu.project.ergoutreecrypt {
     requires org.kordamp.bootstrapfx.core;
 
     requires org.bouncycastle.provider;
+    requires com.google.crypto.tink;
     requires com.twelvemonkeys.imageio.webp;
 
     requires org.apache.commons.compress;

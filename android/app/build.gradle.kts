@@ -71,6 +71,12 @@ val syncZipxGolden by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("zipx-golden-assets/zipx/golden"))
 }
 
+// 极速加密测试使用同一份 Java 入口，真实 ART 与桌面分别执行。
+val syncFastInteropSupport by tasks.registering(Sync::class) {
+    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java") }
+    into(layout.buildDirectory.dir("fast-interop-java"))
+}
+
 // ============================================================
 // 版本号：唯一真源是桌面端 pom.xml 的 <version>，在此构建时解析读取，
 // 从而无需每次发版在 pom 与 gradle 之间手动同步。
@@ -186,6 +192,7 @@ android {
     // ============================================================
     sourceSets {
         named("androidTest") {
+            java.srcDir(layout.buildDirectory.dir("fast-interop-java"))
             java.srcDir(layout.buildDirectory.dir("zipx-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("zipx-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("lz4-interop-java"))
@@ -211,6 +218,7 @@ android {
 // 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n, syncLz4InteropSupport) }
 tasks.named("preBuild") { dependsOn(syncZipxInteropSupport) }
+tasks.named("preBuild") { dependsOn(syncFastInteropSupport) }
 tasks.matching { it.name.contains("AndroidTest") }.configureEach { dependsOn(syncZipxGolden) }
 
 // androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料
@@ -244,6 +252,7 @@ dependencies {
     // 共享核心加密依赖（版本与桌面端 pom.xml 严格一致）
     // ============================================================
     implementation(libs.bouncycastle)
+    implementation(libs.tink)
     implementation(libs.commons.compress)
     implementation(libs.zip4j)
     implementation(libs.tukaani.xz)

@@ -74,7 +74,7 @@ val syncZipxGolden by tasks.registering(Sync::class) {
 // 极速加密测试使用同一份 Java 入口，真实 ART 与桌面分别执行。
 val syncFastInteropSupport by tasks.registering(Sync::class) {
     from("../../src/test/java") {
-        include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java", "hbnu/project/ergoutreecrypt/volume/FastGoldenSupport.java")
+        include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java", "hbnu/project/ergoutreecrypt/volume/FastGoldenSupport.java", "hbnu/project/ergoutreecrypt/volume/FastInteropSupport.java")
     }
     into(layout.buildDirectory.dir("fast-interop-java"))
 }

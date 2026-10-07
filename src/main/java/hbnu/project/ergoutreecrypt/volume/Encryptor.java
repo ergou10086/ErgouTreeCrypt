@@ -83,8 +83,10 @@ public final class Encryptor {
                     + ", compress=" + req.isCompress());
         }
         try {
-            // 双卷可否认加密：完全独立的路径
-            if (req.isDualDeniability()) {
+            if (req.getMode() == EncryptionMode.FAST) {
+                FastEncryption.encrypt(req);
+            } else if (req.isDualDeniability()) {
+                // 双卷可否认加密使用完全独立的路径。
                 DualDeniability.encrypt(req);
             } else {
                 OperationContext ctx = new OperationContext();

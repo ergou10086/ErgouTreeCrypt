@@ -1,13 +1,9 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# 在此添加项目专用 ProGuard 规则，通过 build.gradle 的 proguardFiles 设置选择规则文件。
 #
-# For more details, see
+# 详细说明见
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
+# 如果项目在 WebView 中使用 JavaScript，取消下面的注释并填写接口类的完整名称。
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
@@ -24,7 +20,12 @@
     native <methods>;
 }
 
-# zstd-jni JNI links by original Java class and method names.
+# FAST 原子提交通过固定 JNI 符号连接，必须保留原生方法和所属类名。
+-keepclasseswithmembernames,includedescriptorclasses class hbnu.project.ergoutreecrypt.volume.FastNativeCommit {
+    native <methods>;
+}
+
+# zstd-jni 的 JNI 依赖原始 Java 类名和方法名。
 -keep class com.github.luben.zstd.** { *; }
 
 # ============================================================

@@ -60,13 +60,28 @@ public final class Verifier {
         try {
             Decryptor.decryptPreprocess(ctx, toDecryptRequest(req), true);
             if (ctx.dualDeniabilityDone) return true;
-            Decryptor.decryptReadHeader(ctx, toDecryptRequest(req));
-            Decryptor.decryptDeriveProcessVerify(ctx, toDecryptRequest(req));
-            verifyMacScan(ctx, req, true);
-            verifyCompare(ctx, req);
+            if (ctx.fastOperation) {
+                FastCapabilities.validateVerification(req);
+                var guard = hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance();
+                if (!guard.allowAttempt(req.getInputFile())) {
+                    throw new CryptoException(ErrorKind.BRUTE_FORCE_LOCKED,
+                            "FAST 认证尝试暂时锁定", guard.getMaxAttempts());
+                }
+                FastVolumeCodec.verify(Path.of(ctx.inputFile), req.getPassword(), req.getReporter(), null);
+                guard.recordSuccess(req.getInputFile());
+            } else {
+                Decryptor.decryptReadHeader(ctx, toDecryptRequest(req));
+                Decryptor.decryptDeriveProcessVerify(ctx, toDecryptRequest(req));
+                verifyMacScan(ctx, req, true);
+                verifyCompare(ctx, req);
+            }
             LogService.info("Verifier", "校验通过", (System.nanoTime() - t0) / 1_000_000L);
             return true;
         } catch (Exception e) {
+            if (ctx.fastOperation && e instanceof CryptoException ce
+                    && (ce.kind() == ErrorKind.WRONG_PASSWORD || ce.kind() == ErrorKind.TAMPERED_DATA)) {
+                hbnu.project.ergoutreecrypt.crypto.BruteForceGuard.getInstance().recordFailure(req.getInputFile());
+            }
             LogService.error("Verifier", "校验失败", e);
             throw e;
         } finally {

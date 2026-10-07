@@ -4,6 +4,7 @@ project(ergou_argon2 C)
 # 仅用参考（portable）填充路径，避免 SIMD 目标依赖；并行由 pthread（bionic libc）提供。
 add_library(ergou_argon2 SHARED
         ergou_argon2.c
+        ergou_fast_commit.c
         argon2/argon2.c
         argon2/core.c
         argon2/ref.c

@@ -21,6 +21,7 @@ import hbnu.project.ergoutreecrypt.header.HeaderAuth;
 import hbnu.project.ergoutreecrypt.header.HeaderLayout;
 import hbnu.project.ergoutreecrypt.header.HeaderReader;
 import hbnu.project.ergoutreecrypt.header.ReadResult;
+import hbnu.project.ergoutreecrypt.header.VolumeFormatProbe;
 import hbnu.project.ergoutreecrypt.i18n.Messages;
 import hbnu.project.ergoutreecrypt.keyfile.KeyfileProcessor;
 import hbnu.project.ergoutreecrypt.log.LogPhases;
@@ -93,12 +94,18 @@ public final class Decryptor {
                 LogService.info("Decryptor", "双卷可否认解密完成", (System.nanoTime() - t0) / 1_000_000L);
                 return;
             }
-            LogPhases.run("Decryptor", "readHeader", () -> decryptReadHeader(ctx, req));
-            LogPhases.run("Decryptor", "deriveProcessVerify", () -> decryptDeriveProcessVerify(ctx, req));
-            LogPhases.run("Decryptor", "decryptPayload", () -> decryptPayload(ctx, req, true));
-            LogPhases.run("Decryptor", "finalize", () -> decryptFinalize(ctx, req));
+            if (ctx.fastOperation) {
+                FastCapabilities.validateDecryption(req);
+                FastVolumeCodec.decrypt(Path.of(ctx.inputFile), Path.of(req.getOutputFile()),
+                        req.getPassword(), req.getReporter(), req.getKdfProgress());
+            } else {
+                LogPhases.run("Decryptor", "readHeader", () -> decryptReadHeader(ctx, req));
+                LogPhases.run("Decryptor", "deriveProcessVerify", () -> decryptDeriveProcessVerify(ctx, req));
+                LogPhases.run("Decryptor", "decryptPayload", () -> decryptPayload(ctx, req, true));
+                LogPhases.run("Decryptor", "finalize", () -> decryptFinalize(ctx, req));
+            }
         } catch (Exception e) {
-            cleanupDecrypt(ctx, req);
+            if (!ctx.fastOperation) cleanupDecrypt(ctx, req);
             // 记录失败尝试（暴力破解防护）：密码错误、header 认证失败或数据被篡改
             boolean isPasswordError = hbnu.project.ergoutreecrypt.header.HeaderAuth.AuthException
                     .isPasswordError(e)
@@ -146,6 +153,13 @@ public final class Decryptor {
             ctx.recombinedFile = outputPath.toString();
             Splitter.recombine(outputPath, base, ctx.reporter);
             inputFile = outputPath.toString();
+        }
+
+        // 在旧格式和可否认探测之前分派 FAST，不能误走旧 KDF 或失败清理。
+        if (VolumeFormatProbe.isFast(Path.of(inputFile))) {
+            ctx.fastOperation = true;
+            ctx.inputFile = inputFile;
+            return;
         }
 
         // 双卷可否认加密（EGTD）自动检测

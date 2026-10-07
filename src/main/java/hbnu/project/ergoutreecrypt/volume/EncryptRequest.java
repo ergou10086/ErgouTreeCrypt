@@ -14,6 +14,21 @@ import java.util.List;
  */
 public final class EncryptRequest {
 
+    /** 请求创建时默认沿用标准格式，界面启用将在后续阶段接入。 */
+    private EncryptionMode mode = EncryptionMode.STANDARD;
+
+    /** @return 本次加密模式，默认为标准格式 */
+    public EncryptionMode getMode() { return mode; }
+
+    /**
+     * 设置显式加密模式。
+     *
+     * @param mode 非空模式
+     */
+    public void setMode(EncryptionMode mode) {
+        this.mode = java.util.Objects.requireNonNull(mode);
+    }
+
     /**
      * 待加密的输入文件路径（单文件模式）。
      */

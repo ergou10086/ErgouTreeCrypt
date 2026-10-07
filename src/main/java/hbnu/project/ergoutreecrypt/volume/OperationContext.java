@@ -101,6 +101,9 @@ public final class OperationContext implements AutoCloseable {
      */
     boolean dualDeniabilityDone;
 
+    /** 已识别为 FAST，异常时由其独立临时文件机制清理。 */
+    boolean fastOperation;
+
     /**
      * 待处理的总字节数。
      */

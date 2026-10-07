@@ -73,8 +73,14 @@ val syncZipxGolden by tasks.registering(Sync::class) {
 
 // 极速加密测试使用同一份 Java 入口，真实 ART 与桌面分别执行。
 val syncFastInteropSupport by tasks.registering(Sync::class) {
-    from("../../src/test/java") { include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java") }
+    from("../../src/test/java") {
+        include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java", "hbnu/project/ergoutreecrypt/volume/FastGoldenSupport.java")
+    }
     into(layout.buildDirectory.dir("fast-interop-java"))
+}
+val syncFastGolden by tasks.registering(Sync::class) {
+    from("../../src/test/resources/fast")
+    into(layout.buildDirectory.dir("fast-golden-assets/fast"))
 }
 
 // ============================================================
@@ -193,6 +199,7 @@ android {
     sourceSets {
         named("androidTest") {
             java.srcDir(layout.buildDirectory.dir("fast-interop-java"))
+            assets.srcDir(layout.buildDirectory.dir("fast-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("zipx-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("zipx-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("lz4-interop-java"))
@@ -223,7 +230,7 @@ tasks.matching { it.name.contains("AndroidTest") }.configureEach { dependsOn(syn
 
 // androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料
 tasks.matching { it.name.matches(Regex("merge.*AndroidTestAssets")) }
-    .configureEach { dependsOn(syncInteropCorpus, syncLz4Golden) }
+    .configureEach { dependsOn(syncInteropCorpus, syncLz4Golden, syncFastGolden) }
 
 // ============================================================
 // 自定义 APK 输出文件名：ErgouTreeCrypt-v<版本号>-release.apk

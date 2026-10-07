@@ -32,6 +32,7 @@ module hbnu.project.ergoutreecrypt {
     exports hbnu.project.ergoutreecrypt.ui;
     exports hbnu.project.ergoutreecrypt.ui.support;
     exports hbnu.project.ergoutreecrypt.crypto;
+    exports hbnu.project.ergoutreecrypt.crypto.fast;
     exports hbnu.project.ergoutreecrypt.compress;
     exports hbnu.project.ergoutreecrypt.encoding;
     exports hbnu.project.ergoutreecrypt.fileops;

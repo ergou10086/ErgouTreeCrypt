@@ -29,6 +29,7 @@
 | 能力                     | 说明                                                       |
 | ------------------------ | ---------------------------------------------------------- |
 | 🔐**通用文件加密/解密**  | 对任意文件/文件夹进行高强度加密，输出`.ergou` 加密卷       |
+| ⚡**极速加密 FAST-v1**   | 可选 AES-256-GCM-HKDF 分段认证；双端自动识别解密与独立认证 |
 | 🎵**音视频格式保持加密** | 加密后仍是合法可播放的媒体文件，内容为噪声，解密逐字节还原 |
 | 🖼️**图片混淆加密**      | PNG/JPEG/GIF/BMP/WebP 封装为可预览噪声 PNG，并逐字节还原  |
 | 🔄**Picocrypt 兼容**     | 可解密 Go Picocrypt 生成的`.pcv` 文件                      |
@@ -76,6 +77,7 @@
 ## ✨ Features
 
 - **Strong cryptography**: Argon2id key derivation (4 passes / 1 GiB memory normal, 8 passes / 1 GiB paranoid) → XChaCha20 stream cipher → BLAKE2b-512 / HMAC-SHA3-512 MAC
+- **Optional FAST-v1 encryption**: Tink AES256-GCM-HKDF with 1 MiB ciphertext segments, full authentication and fixed Argon2id 64 MiB / 3 passes / 4 lanes. Desktop and Android detect FAST files automatically. Older app versions cannot read FAST; existing legacy files remain readable and are never rewritten automatically.
 - **Reed-Solomon error correction**: RS(128, 136) on all header fields and payload blocks — recovers from partial file corruption
 - **Format-preserving media encryption**: MP3 / MP4 / WAV files remain valid & playable after encryption (content is noise); decryption restores exact original bytes
 - **Image obfuscation encryption (desktop beta)**: PNG/JPEG/GIF/BMP/WebP inputs become viewable noise PNGs and restore byte-for-byte, with public-recovery and password-protected modes
@@ -101,6 +103,7 @@
 | Ikonli                  | 12.3.1 | 图标字体库                                               |
 | BootstrapFX             | 0.4.0  | 辅助样式                                                 |
 | BouncyCastle            | 1.78.1 | 密码学原语（Argon2id, Serpent, ChaCha20, BLAKE2b, SHA3） |
+| Google Tink             | 1.23.0 | FAST 流式认证加密；Android 使用 tink-android 同版本 |
 | Apache Commons Compress | 1.27.1 | 归档处理（ZIP, GZ, TAR.GZ）                              |
 | JUnit Jupiter           | 5.12.1 | 单元测试（test scope）                                   |
 | Maven                   | 3      | 构建工具                                                 |
@@ -138,7 +141,22 @@ mvn clean javafx:jlink
 mvn test
 ```
 
-测试覆盖：Argon2 密钥派生、XChaCha20 流密码、Galois Field 域运算、Reed-Solomon 编解码、Header 读写与认证、Keyfile 处理、媒体加密往返、密码规范化、卷加密往返等 16 个测试类。
+测试覆盖：Argon2 密钥派生、XChaCha20 流密码、Galois Field 域运算、Reed-Solomon 编解码、Header 读写与认证、Keyfile 处理、媒体加密往返、密码规范化、卷加密往返等；FAST 还包含头部、黄金向量、分段、输出保护和旧格式代表回归。
+
+FAST 的发行镜像、八方向互通和完整任务性能入口：
+
+```powershell
+python scripts/build_desktop.py --output target/fast-desktop
+cd android
+./gradlew.bat :app:assembleReleaseValidation :app:assembleReleaseValidationAndroidTest -PfastReleaseTest
+cd ..
+python scripts/test_fast_interop.py --desktop-image target/fast-desktop --android-build-type releaseValidation --skip-build --foreground --adb PATH_TO_ADB --serial DEVICE_SERIAL
+python scripts/benchmark_fast_tasks.py --source PATH_TO_REAL_FILE --desktop-image target/fast-desktop --output target/fast-results --foreground --adb PATH_TO_ADB --serial DEVICE_SERIAL
+```
+
+请使用新的输出目录；桌面镜像使用当前 `JAVA_HOME` 的 JDK。互通入口验证真实 JVM/ART 交换的同一产物；性能入口预热后执行三轮交替完整加密、独立认证、默认解密及复制基线，保留 CSV。加 `--large` 可执行两端超过 4 GiB 的实文件专项，需各预留约 13 GiB。普通回归不会自动启动这些大型测试。
+
+`releaseValidation` 使用独立 `.fastvalidation` 包名、调试签名、不可调试的 R8/资源缩减构建。它额外包含验收助手、测试 Provider 和 runner 所需的 API 保留规则；密码核心与助手一同优化，instrumentation 只调用测试桥。正式 `release` 不包含这些测试入口。界面验收可在互通命令上添加 `--ui`，需设备保持解锁。部分设备会冻结后台测试，可用 `--foreground` 保持验收应用前台；计时期间请暂停其他手机操作。测试过程中系统可能要求确认 USB 安装。真实语料和设备临时目录由入口清理，正式回归源码及可复用脚本保留。
 
 ---
 
@@ -166,6 +184,20 @@ mvn test
    - **密钥文件**：添加文件作为额外密钥
 4. **点击"加密"**：等待进度条完成（若启用「加密后压缩」，会额外出现橙色的压缩/打包进度条，与蓝色加解密进度分离显示）
 5. 输出文件格式为 `.ergou`
+
+#### 极速加密（FAST-v1）
+
+桌面与 Android 的通用文件加密页面均可勾选“极速加密”，默认关闭。FAST 使用 AES-256-GCM-HKDF，固定 1 MiB 密文分段和完整 128 位认证标签，密码派生固定为 Argon2id 64 MiB / 3 次 / 4 路。相较标准模式的高资源档位，密码派生成本更低；请使用强密码。密码不能为空或全为空白，合法首尾空格保留。
+
+启用 FAST 后仍可选择归档前后处理、格式和独立归档密码。偏执、纠错、可否认、分卷、密钥文件、明文注释和卷内 Zstandard 等选项会禁用；切回标准模式可恢复此前配置。文件夹默认逐文件加密，也可先整体归档。FAST 不支持强制解密绕过认证。
+
+解密和“认证文件”按内容自动识别 FAST，无需勾选极速选项。认证会扫描完整文件；解密在完整认证后才提交最终结果。Android SAF 导出使用独占任务目录，完成后显示结果目录；失败或取消仅清理本任务文件，保留已有文件。具体文档提供者的重命名能力可能不同。
+
+**兼容性：旧版程序不能读取 FAST-v1。** 分享前应确认接收端已具备 FAST 读取能力。新版继续读取旧格式，不自动转换历史密文。性能随硬件、存储、KDF 和归档/导出流程变化，不承诺所有设备固定翻倍。
+
+2026-10-11 参考测量：约 1.05 GiB 真实音频、热缓存、预热后三轮中位数，完整生产核心入口包含 KDF、关闭、认证、提交和 force。Windows 11 / i7-13700H / 捆绑 Temurin 21.0.12.1 的默认加密、解密分别为标准模式的 **5.79×、4.30×**；PLK110 / Android 16 的独立 R8 验收包分别为 **7.42×、5.88×**。两端标准 KDF 为 256 MiB/3/4，FAST 为 64 MiB/3/4。该表述仅限这些环境和输入，文件选择/导入缓存、归档及 SAF 导出另计；验收变体与正式 release 的差异见测试说明。 小文件不保证更快：本次手机 1 MiB 默认解密中位数 FAST 约 1.02 秒、标准约 0.27 秒。
+
+FAST supports archive processing, but disables conflicting advanced encryption options and requires a nonblank password. Valid leading/trailing spaces are preserved. Decryption always authenticates the complete stream before publishing the result; forced recovery cannot bypass FAST authentication. Performance depends on the device, storage and complete workflow.
 
 #### 解密操作
 

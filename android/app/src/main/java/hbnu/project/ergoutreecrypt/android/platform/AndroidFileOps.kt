@@ -50,7 +50,7 @@ sealed class PendingOutput {
      *
      * @property treeUri 目标目录树 URI
      */
-    data class Saf(val treeUri: Uri, override val tempDir: File) : PendingOutput()
+    data class Saf(val treeUri: Uri, override val tempDir: File, val preserveExisting: Boolean = false) : PendingOutput()
 
     /**
      * MediaStore 输出（API 29+ 的默认公共路径）。
@@ -61,7 +61,8 @@ sealed class PendingOutput {
     data class MediaStore(
         val relativePath: String,
         override val tempDir: File,
-        val collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS
+        val collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS,
+        val preserveExisting: Boolean = false
     ) : PendingOutput()
 }
 
@@ -482,11 +483,14 @@ class AndroidFileOps(private val context: Context) {
      */
     fun commitOutput(pending: PendingOutput): Boolean {
         return when (pending) {
-            is PendingOutput.Saf -> copyDirectoryToTree(pending.treeUri, pending.tempDir)
+            is PendingOutput.Saf -> if (pending.preserveExisting)
+                FastSafOutput(context).commit(pending.treeUri, pending.tempDir)
+                else copyDirectoryToTree(pending.treeUri, pending.tempDir)
             is PendingOutput.MediaStore -> copyDirToMediaStore(
                 pending.tempDir,
                 pending.relativePath,
-                pending.collection
+                pending.collection,
+                pending.preserveExisting
             )
         }
     }
@@ -505,7 +509,8 @@ class AndroidFileOps(private val context: Context) {
     fun copyDirToMediaStore(
         tempDir: File,
         relativePath: String,
-        collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS
+        collection: MediaStoreCollection = MediaStoreCollection.DOWNLOADS,
+        preserveExisting: Boolean = false
     ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return false
@@ -516,7 +521,7 @@ class AndroidFileOps(private val context: Context) {
         }
         var success = true
         for (f in files) {
-            if (!copyFileToMediaStore(f, relativePath, "", collection)) {
+            if (!copyFileToMediaStore(f, relativePath, "", collection, preserveExisting)) {
                 success = false
             }
         }
@@ -536,19 +541,21 @@ class AndroidFileOps(private val context: Context) {
         file: File,
         baseRel: String,
         sub: String,
-        collection: MediaStoreCollection
+        collection: MediaStoreCollection,
+        preserveExisting: Boolean
     ): Boolean {
         if (file.isDirectory) {
             val children = file.listFiles() ?: return false
             var success = true
             for (child in children) {
                 val childSub = if (sub.isEmpty()) file.name else "$sub/${file.name}"
-                if (!copyFileToMediaStore(child, baseRel, childSub, collection)) {
+                if (!copyFileToMediaStore(child, baseRel, childSub, collection, preserveExisting)) {
                     success = false
                 }
             }
             return success
         }
+        var created: Uri? = null
         return try {
             val rel = if (sub.isEmpty()) baseRel else "$baseRel/$sub"
             val values = ContentValues().apply {
@@ -563,16 +570,18 @@ class AndroidFileOps(private val context: Context) {
             }
             // 覆盖同名旧文件：仅能删除应用自有条目，失败时交由 MediaProvider 自动改名
             val collectionUri = mediaCollectionUri(collection)
-            deleteAppOwnedMediaEntries(collectionUri, rel, file.name)
+            if (!preserveExisting) deleteAppOwnedMediaEntries(collectionUri, rel, file.name)
             val uri = context.contentResolver.insert(collectionUri, values) ?: return false
+            created = uri
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 file.inputStream().use { it.copyTo(out) }
-            } ?: return false
+            } ?: throw java.io.IOException("无法打开导出输出")
             values.clear()
             values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            context.contentResolver.update(uri, values, null, null)
+            check(context.contentResolver.update(uri, values, null, null) == 1)
             true
         } catch (_: Exception) {
+            created?.let { runCatching { context.contentResolver.delete(it, null, null) } }
             false
         }
     }

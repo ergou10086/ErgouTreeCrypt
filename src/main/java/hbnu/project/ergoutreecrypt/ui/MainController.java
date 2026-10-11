@@ -207,6 +207,11 @@ public class MainController {
     @FXML
     private CheckBox paranoidCheck;
     @FXML
+    private CheckBox fastCheck;
+    @FXML
+    private Label fastInfo;
+    private Runnable restoreStandardOptions;
+    @FXML
     private Label paranoidInfo;
     @FXML
     private CheckBox reedSolomonCheck;
@@ -513,6 +518,7 @@ public class MainController {
         installMenuAsButton(logsMenu, this::onToggleLogs);
         installMenuAsButton(storageMenu, this::onOpenStorage);
 
+        fastCheck.selectedProperty().addListener((o, a, b) -> updateFastMode());
         setupInfoTooltips();
         applyTexts();
         switchMode(Mode.ENCRYPT);
@@ -738,6 +744,8 @@ public class MainController {
         optionsTitle.setText(Messages.get("options.title"));
         commentsLabel.setText(Messages.get("options.comments"));
         commentsArea.setPromptText(Messages.get("options.comments.placeholder"));
+        fastCheck.setText(Messages.get("options.fast"));
+        fastInfo.setText(Messages.get("options.fast.tip"));
         paranoidCheck.setText(Messages.get("options.paranoid"));
         reedSolomonCheck.setText(Messages.get("options.reedSolomon"));
         deniabilityCheck.setText(Messages.get("options.deniability"));
@@ -1077,6 +1085,7 @@ public class MainController {
     // ================================================================
     private void switchMode(Mode m) {
         this.mode = m;
+        updateFastMode();
         encryptTab.setSelected(m == Mode.ENCRYPT);
         decryptTab.setSelected(m == Mode.DECRYPT);
 
@@ -1094,6 +1103,41 @@ public class MainController {
 
         updateActionButtonText();
         updatePasswordFeedback();
+    }
+
+    /** 保存标准选项，极速任务只使用基础字段和归档；返回标准模式时恢复。 */
+    private void updateFastMode() {
+        boolean active = mode == Mode.ENCRYPT && fastCheck.isSelected();
+        List<CheckBox> checks = List.of(paranoidCheck, reedSolomonCheck, deniabilityCheck,
+                compressCheck, splitCheck, keyfileOrderedCheck);
+        if (active && restoreStandardOptions == null) {
+            List<Boolean> selected = checks.stream().map(CheckBox::isSelected).toList();
+            String comments = commentsArea.getText();
+            List<File> savedKeys = List.copyOf(keyfiles);
+            restoreStandardOptions = () -> {
+                for (int i = 0; i < checks.size(); i++) checks.get(i).setSelected(selected.get(i));
+                commentsArea.setText(comments);
+                keyfiles.addAll(savedKeys);
+            };
+            checks.forEach(c -> c.setSelected(false));
+            commentsArea.clear();
+            keyfiles.clear();
+        } else if (!active && restoreStandardOptions != null) {
+            restoreStandardOptions.run();
+            restoreStandardOptions = null;
+        }
+        boolean disabled = !encryptionMode().allowsAdvancedOptions();
+        checks.forEach(c -> c.setDisable(disabled));
+        commentsArea.setDisable(disabled);
+        encryptDepthSpinner.setDisable(disabled);
+        addKeyfileBtn.setDisable(disabled);
+        keyfileList.setDisable(disabled);
+        refreshKeyfileList();
+    }
+
+    /** @return 当前界面有效加密模式 */
+    private EncryptionMode encryptionMode() {
+        return mode == Mode.ENCRYPT && fastCheck.isSelected() ? EncryptionMode.FAST : EncryptionMode.STANDARD;
     }
 
     private void updateActionButtonText() {
@@ -1629,6 +1673,10 @@ public class MainController {
             return;
         }
         String pwd = passwordField.getText();
+        if (encryptionMode() == EncryptionMode.FAST && (pwd == null || pwd.isBlank())) {
+            toast.error(Messages.get("options.fast.password"));
+            return;
+        }
         if (mode == Mode.ENCRYPT && pwd != null && !pwd.isEmpty()
                 && !pwd.equals(confirmField.getText())) {
             toast.error(Messages.get("toast.no.password.confirm"));
@@ -1806,6 +1854,7 @@ public class MainController {
         }
         // 压缩后加密时核心会在输出名后补「.归档扩展名」，此处只给基础名
         EncryptRequest req = new EncryptRequest();
+        req.setMode(encryptionMode());
         req.setInputFile(selectedFile.getAbsolutePath());
         req.setOutputFile(out);
         req.setPassword(pwd == null ? "" : pwd);
@@ -1813,9 +1862,11 @@ public class MainController {
         req.setParanoid(paranoidCheck.isSelected());
         // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
         Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
-        req.setArgon2MemoryKib(kdfMode.getMemoryKib());
-        req.setArgon2Passes(kdfMode.getPasses());
-        req.setArgon2Threads(kdfMode.getThreads());
+        if (req.getMode().allowsAdvancedOptions()) {
+            req.setArgon2MemoryKib(kdfMode.getMemoryKib());
+            req.setArgon2Passes(kdfMode.getPasses());
+            req.setArgon2Threads(kdfMode.getThreads());
+        }
         req.setReedSolomon(reedSolomonCheck.isSelected());
         // 双卷可否认加密
         boolean deniability = deniabilityCheck.isSelected();
@@ -1868,14 +1919,17 @@ public class MainController {
                                                                  String postArchiveFormat,
                                                                  String postArchivePwd) {
         FolderCrypt.EncryptOptions opts = new FolderCrypt.EncryptOptions();
+        opts.mode = encryptionMode();
         opts.password = pwd == null ? "" : pwd;
         opts.comments = commentsArea.getText() == null ? "" : commentsArea.getText();
         opts.paranoid = paranoidCheck.isSelected();
         // B2：按所选 KDF 档位覆写 Argon2 参数（默认 256 MiB，移动端友好）
         Argon2DesktopMode kdfMode = SettingsManager.getKdfMode();
-        opts.argon2MemoryKib = kdfMode.getMemoryKib();
-        opts.argon2Passes = kdfMode.getPasses();
-        opts.argon2Threads = kdfMode.getThreads();
+        if (opts.mode.allowsAdvancedOptions()) {
+            opts.argon2MemoryKib = kdfMode.getMemoryKib();
+            opts.argon2Passes = kdfMode.getPasses();
+            opts.argon2Threads = kdfMode.getThreads();
+        }
         opts.reedSolomon = reedSolomonCheck.isSelected();
         opts.deniability = deniabilityCheck.isSelected();
         opts.compress = compressCheck.isSelected();

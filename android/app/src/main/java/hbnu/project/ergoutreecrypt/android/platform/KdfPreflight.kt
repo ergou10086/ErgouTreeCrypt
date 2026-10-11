@@ -6,6 +6,8 @@ import hbnu.project.ergoutreecrypt.crypto.NativeArgon2
 import hbnu.project.ergoutreecrypt.encoding.RsCodecs
 import hbnu.project.ergoutreecrypt.filestego.FileStegoCodec
 import hbnu.project.ergoutreecrypt.filestego.api.StegoPreflight
+import hbnu.project.ergoutreecrypt.header.FastHeaderReaderWriter
+import hbnu.project.ergoutreecrypt.header.VolumeFormatProbe
 import hbnu.project.ergoutreecrypt.header.HeaderReader
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptCodec
 import hbnu.project.ergoutreecrypt.imagecrypt.ImageCryptMetadata
@@ -64,6 +66,10 @@ object KdfPreflight {
      */
     fun peekArgon2MemoryKib(path: Path): Int? {
         return try {
+            if (VolumeFormatProbe.isFast(path)) {
+                Files.newInputStream(path).use { FastHeaderReaderWriter.read(it) }
+                return hbnu.project.ergoutreecrypt.crypto.fast.FastKdfPolicy.MEMORY_KIB
+            }
             Files.newInputStream(path).use { input: InputStream ->
                 val reader = HeaderReader(input, RsCodecs())
                 val header = reader.readHeader().header
@@ -85,6 +91,10 @@ object KdfPreflight {
      */
     fun peekCompressed(path: Path): Boolean? {
         return try {
+            if (VolumeFormatProbe.isFast(path)) {
+                Files.newInputStream(path).use { FastHeaderReaderWriter.read(it) }
+                return false
+            }
             Files.newInputStream(path).use { input: InputStream ->
                 val reader = HeaderReader(input, RsCodecs())
                 reader.readHeader().header.isCompressed

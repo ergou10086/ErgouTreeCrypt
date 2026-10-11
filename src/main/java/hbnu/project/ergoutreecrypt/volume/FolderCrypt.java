@@ -82,6 +82,7 @@ public final class FolderCrypt {
      * @param opts      公共加密选项（密码、RS、分卷、压缩等）
      */
     public static void encryptFolder(Path inputDir, Path outputDir, EncryptOptions opts) throws Exception {
+        validateEncryptOptions(opts);
         String folderName = inputDir.getFileName().toString();
 
         // 压缩后加密：整个文件夹先打成单个归档，再对归档整体加密，不逐文件处理
@@ -90,7 +91,7 @@ public final class FolderCrypt {
             return;
         }
 
-        int maxDepth = opts.encryptDepth;
+        int maxDepth = opts.mode == EncryptionMode.FAST ? Integer.MAX_VALUE : opts.encryptDepth;
 
         // Step 1: 按深度收集待加密文件与"深目录"
         List<Path> filesToEncrypt = new ArrayList<>();
@@ -143,7 +144,7 @@ public final class FolderCrypt {
             }
 
             // 线程数：总大小达阈值则单线程；并行时用聚合器以最慢任务为基准
-            BatchResult result = new BatchResult();
+            BatchResult result = ensureEncryptResult(opts);
             opts.batchResult = result;
             long totalBytes = sumFileSizes(filesToEncrypt) + sumDirSizes(deepDirs);
             int threads = Math.max(1, Math.min(
@@ -222,10 +223,12 @@ public final class FolderCrypt {
         ProgressReporter reporter = opts.reporter;
         ArchivePacker.Format fmt = effectiveArchiveFormat(opts.preArchiveFormat);
         Files.createDirectories(outputDir);
-        Path tempArchive = Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
+        FastOutput privateArchive = opts.mode == EncryptionMode.FAST ? FastOutput.temporary(outputDir) : null;
+        Path tempArchive = privateArchive != null ? privateArchive.path()
+                : Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
         Path destEnc = outputDir.resolve(
                 folderName + ArchivePacker.extOf(fmt) + ENC_EXT);
-        BatchResult result = new BatchResult();
+        BatchResult result = ensureEncryptResult(opts);
         opts.batchResult = result;
         try {
             ArchivePacker.packEntries(tempArchive, inputDir, entries, fmt,
@@ -244,7 +247,8 @@ public final class FolderCrypt {
                     + " entries=" + entries.size());
         } finally {
             try {
-                Files.deleteIfExists(tempArchive);
+                if (privateArchive != null) privateArchive.close();
+                else Files.deleteIfExists(tempArchive);
             } catch (IOException ignored) {
                 // 临时归档清理失败不影响已完成的加密结果
             }
@@ -278,8 +282,9 @@ public final class FolderCrypt {
      */
     public static void encryptFiles(List<Path> inputFiles, Path outputDir, EncryptOptions opts)
             throws Exception {
+        validateEncryptOptions(opts);
         String batchName = resolveBatchName(opts);
-        BatchResult result = new BatchResult();
+        BatchResult result = ensureEncryptResult(opts);
         opts.batchResult = result;
 
         List<Path> valid = filterEncryptable(inputFiles, result);
@@ -372,7 +377,9 @@ public final class FolderCrypt {
         ProgressReporter reporter = opts.reporter;
         ArchivePacker.Format fmt = effectiveArchiveFormat(opts.preArchiveFormat);
         Files.createDirectories(outputDir);
-        Path tempArchive = Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
+        FastOutput privateArchive = opts.mode == EncryptionMode.FAST ? FastOutput.temporary(outputDir) : null;
+        Path tempArchive = privateArchive != null ? privateArchive.path()
+                : Files.createTempFile("ergou-pre-", ArchivePacker.extOf(fmt));
         Path destEnc = outputDir.resolve(batchName + ArchivePacker.extOf(fmt) + ENC_EXT);
         try {
             ArchivePacker.packEntries(tempArchive, null, files, entryNames, fmt,
@@ -391,7 +398,8 @@ public final class FolderCrypt {
                     + " entries=" + files.size());
         } finally {
             try {
-                Files.deleteIfExists(tempArchive);
+                if (privateArchive != null) privateArchive.close();
+                else Files.deleteIfExists(tempArchive);
             } catch (IOException ignored) {
                 // 临时归档清理失败不影响已完成的加密结果
             }
@@ -1146,9 +1154,25 @@ public final class FolderCrypt {
     // 请求构建
     // ================================================================
 
+    /**
+     * 在创建目录或归档前拒绝 FAST 冲突配置和无效密码。
+     *
+     * @param opts 本任务选项
+     * @throws Exception 选项或密码非法
+     */
+    private static void validateEncryptOptions(EncryptOptions opts) throws Exception {
+        if (opts.mode != EncryptionMode.FAST) return;
+        EncryptRequest request = buildRequest(Path.of("input"), Path.of("output"), opts, opts.reporter);
+        request.setSplit(opts.split);
+        FastCapabilities.validateEncryption(request);
+        hbnu.project.ergoutreecrypt.crypto.SecureZero.zero(
+                hbnu.project.ergoutreecrypt.crypto.fast.FastKdfPolicy.encodePassword(opts.password));
+    }
+
     private static EncryptRequest buildRequest(Path input, Path output, EncryptOptions opts,
                                                ProgressReporter reporter) {
         EncryptRequest req = new EncryptRequest();
+        req.setMode(opts.mode);
         req.setInputFile(input.toString());
         req.setOutputFile(output.toString());
         req.setPassword(opts.password == null ? "" : opts.password);
@@ -1347,9 +1371,20 @@ public final class FolderCrypt {
             entries = walk.filter(Files::isRegularFile).sorted().toList();
         }
         if (!entries.isEmpty()) {
-            ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
-                    ArchivePacker.resolveArchivePassword(
-                            opts.archivePassword, opts.password, fmt), reporter);
+            if (opts.mode == EncryptionMode.FAST) {
+                try (FastOutput stage = FastOutput.create(archivePath)) {
+                    ArchivePacker.packEntries(stage.path(), workDir, entries, fmt,
+                            ArchivePacker.resolveArchivePassword(
+                                    opts.archivePassword, opts.password, fmt), reporter);
+                    if (reporter != null && reporter.isCancelled())
+                        throw new IOException("归档已取消");
+                    stage.commit();
+                }
+            } else {
+                ArchivePacker.packEntries(archivePath, workDir, entries, fmt,
+                        ArchivePacker.resolveArchivePassword(
+                                opts.archivePassword, opts.password, fmt), reporter);
+            }
             deleteRecursively(workDir);
         }
         if (reporter != null) {
@@ -1975,6 +2010,8 @@ public final class FolderCrypt {
      * 文件夹加密公共选项。
      */
     public static final class EncryptOptions {
+        /** 本任务的模式快照；FAST 固定逐文件策略。 */
+        public EncryptionMode mode = EncryptionMode.STANDARD;
         public String password;
         public String comments = "";
         public boolean paranoid;

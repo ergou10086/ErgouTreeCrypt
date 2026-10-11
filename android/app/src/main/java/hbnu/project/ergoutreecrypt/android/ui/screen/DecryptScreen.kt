@@ -844,7 +844,10 @@ fun DecryptScreen(
         if (pending == null) {
             return null
         }
-        val ok = withContext(Dispatchers.IO) { fileOps.commitOutput(pending) }
+        val ok = withContext(Dispatchers.IO) { fileOps.commitOutput(when (pending) {
+                is PendingOutput.Saf -> pending.copy(preserveExisting = true)
+                is PendingOutput.MediaStore -> pending.copy(preserveExisting = true)
+            }) }
         withContext(Dispatchers.IO) { pending.tempDir.deleteRecursively() }
         pendingOut = null
         return ok

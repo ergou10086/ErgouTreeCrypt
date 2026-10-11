@@ -14,6 +14,7 @@ import hbnu.project.ergoutreecrypt.exception.ErrorKind
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
 import hbnu.project.ergoutreecrypt.log.LogService
 import hbnu.project.ergoutreecrypt.volume.BatchResult
+import hbnu.project.ergoutreecrypt.volume.EncryptionMode
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
 import hbnu.project.ergoutreecrypt.volume.Encryptor
 import hbnu.project.ergoutreecrypt.volume.FolderCrypt
@@ -154,7 +155,8 @@ class EncryptViewModel : ViewModel() {
         argon2Passes: Int,
         argon2Threads: Int,
         compress: Boolean,
-        compressionLevel: Int
+        compressionLevel: Int,
+        mode: EncryptionMode = EncryptionMode.STANDARD
     ): BatchResult {
         val opts = buildFolderOptions(
             outputDir = outputDir,
@@ -174,7 +176,8 @@ class EncryptViewModel : ViewModel() {
             argon2Passes = argon2Passes,
             argon2Threads = argon2Threads,
             compress = compress,
-            compressionLevel = compressionLevel
+            compressionLevel = compressionLevel,
+            mode = mode
         )
         opts.batchName = batchName
         val paths = inputFiles.map { Paths.get(it) }
@@ -212,9 +215,12 @@ class EncryptViewModel : ViewModel() {
         argon2Passes: Int,
         argon2Threads: Int,
         compress: Boolean = false,
-        compressionLevel: Int = 3
+        compressionLevel: Int = 3,
+        mode: EncryptionMode = EncryptionMode.STANDARD
     ): FolderCrypt.EncryptOptions {
         val opts = FolderCrypt.EncryptOptions()
+        opts.mode = mode
+        opts.batchResult = BatchResult()
         opts.password = password
         opts.comments = comments
         opts.reedSolomon = reedSolomon
@@ -233,9 +239,11 @@ class EncryptViewModel : ViewModel() {
             opts.keyfileOrdered = keyfileOrdered
         }
         opts.threadCount = 1
-        opts.argon2MemoryKib = argon2MemoryKib
-        opts.argon2Passes = argon2Passes
-        opts.argon2Threads = argon2Threads
+        if (mode.allowsAdvancedOptions()) {
+            opts.argon2MemoryKib = argon2MemoryKib
+            opts.argon2Passes = argon2Passes
+            opts.argon2Threads = argon2Threads
+        }
         // 深度取上限：移动端不做深目录整体打包，避免一次性读入整个子目录造成内存峰值
         opts.encryptDepth = MAX_FOLDER_DEPTH
         return opts
@@ -374,7 +382,8 @@ class EncryptViewModel : ViewModel() {
         preArchiveFormat: String? = null,
         preArchivePassword: String? = null,
         compress: Boolean = false,
-        compressionLevel: Int = 3
+        compressionLevel: Int = 3,
+        mode: EncryptionMode = EncryptionMode.STANDARD
     ): BatchResult {
         val opts = buildFolderOptions(
             outputDir = outputDir,
@@ -394,8 +403,17 @@ class EncryptViewModel : ViewModel() {
             argon2Passes = argon2Passes,
             argon2Threads = argon2Threads,
             compress = compress,
-            compressionLevel = compressionLevel
+            compressionLevel = compressionLevel,
+            mode = mode
         )
+        if (mode == EncryptionMode.FAST) {
+            launchVolumeJob("GENERIC_ENCRYPT", logFileName(inputDir)) {
+                opts.reporter = LoggingProgressReporter(createProgressReporter(), "Volume")
+                opts.kdfProgress = createKdfProgress()
+                FolderCrypt.encryptFolder(Paths.get(inputDir), Paths.get(outputDir), opts)
+            }
+            return opts.batchResult
+        }
         val root = Paths.get(inputDir)
         val folderName = FileNameSanitizer.sanitize(root.fileName?.toString() ?: "folder")
         // 结果目录（失败/取消时用于清理半成品）

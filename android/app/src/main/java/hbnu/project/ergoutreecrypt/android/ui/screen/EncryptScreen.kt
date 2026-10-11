@@ -115,6 +115,9 @@ import hbnu.project.ergoutreecrypt.mediacrypt.MediaCryptProfile
 import hbnu.project.ergoutreecrypt.mediacrypt.MediaFormat
 import hbnu.project.ergoutreecrypt.fileops.ArchivePacker
 import hbnu.project.ergoutreecrypt.volume.BatchResult
+import hbnu.project.ergoutreecrypt.volume.EncryptionMode
+import hbnu.project.ergoutreecrypt.crypto.fast.FastKdfPolicy
+import hbnu.project.ergoutreecrypt.i18n.Messages
 import hbnu.project.ergoutreecrypt.volume.EncryptRequest
 import hbnu.project.ergoutreecrypt.filetypes.FileInputGuard
 import hbnu.project.ergoutreecrypt.filetypes.OutputNaming
@@ -322,6 +325,10 @@ fun EncryptScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     // ---- 加密选项（初始值从 DataStore 设置中加载） ----
+    var fastMode by remember { mutableStateOf(false) }
+    val encryptionMode = if (fastMode) EncryptionMode.FAST else EncryptionMode.STANDARD
+    val advancedAllowed = encryptionMode.allowsAdvancedOptions()
+    var restoreStandardOptions by remember { mutableStateOf<(() -> Unit)?>(null) }
     var reedSolomon by remember { mutableStateOf(false) }
     var deniability by remember { mutableStateOf(false) }
     var compressBefore by remember { mutableStateOf(false) }
@@ -616,8 +623,54 @@ fun EncryptScreen(
         return true
     }
 
+    // 模式切换只影响界面配置，已构造的任务继续使用独立快照。
+    fun selectFastMode(selected: Boolean) {
+        if (selected) {
+            val saved = listOf(reedSolomon, deniability, zstdBefore, split, kfOrdered, mediaMode)
+            val savedComments = comments
+            val savedUris = kfUris.toList()
+            val savedPaths = kfPaths.toList()
+            val savedNames = kfNames.toList()
+            restoreStandardOptions = {
+                reedSolomon = saved[0]; deniability = saved[1]; zstdBefore = saved[2]
+                split = saved[3]; kfOrdered = saved[4]; mediaMode = saved[5]
+                comments = savedComments; kfUris = savedUris; kfPaths = savedPaths; kfNames = savedNames
+            }
+            reedSolomon = false; deniability = false; zstdBefore = false; split = false
+            kfOrdered = false; mediaMode = false; comments = ""
+            kfUris = emptyList(); kfPaths = emptyList(); kfNames = emptyList()
+        } else {
+            restoreStandardOptions?.invoke()
+            restoreStandardOptions = null
+        }
+        fastMode = selected
+    }
+
     // ---- 开始加密 ----
     fun doEncrypt() {
+        val fastMode = fastMode
+        val encryptionMode = encryptionMode
+        val password = password
+        val reedSolomon = reedSolomon
+        val deniability = deniability
+        val zstdBefore = zstdBefore
+        val zstdLevel = zstdLevel
+        val split = split
+        val splitSize = splitSize
+        val comments = comments
+        val kfPaths = kfPaths.toList()
+        val kfOrdered = kfOrdered
+        val argon2Mode = argon2Mode
+        val compressBefore = compressBefore
+        val compressAfter = compressAfter
+        val archiveFmt = archiveFmt
+        val archivePassword = archivePassword
+        val decoyPath = decoyPath
+        val fakePwd = fakePwd
+        if (fastMode && password.isBlank()) {
+            Toast.makeText(ctx, Messages.get("options.fast.password"), Toast.LENGTH_LONG).show()
+            return
+        }
         scope.launch {
             // 启动前拦截：通用加密接受任意文件/文件夹，仅拦截路径已失效等异常输入
             if (!guardAllows(FileInputGuard.Feature.GENERIC_ENCRYPT,
@@ -631,14 +684,14 @@ fun EncryptScreen(
             val writeDir = when {
                 safUri != null -> {
                     val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
-                    pendingOut = PendingOutput.Saf(safUri, tmp)
+                    pendingOut = PendingOutput.Saf(safUri, tmp, preserveExisting = fastMode)
                     tmp.absolutePath
                 }
                 outDir != null -> outDir!!
                 resolved is OutputDirResolver.Resolved.Direct -> resolved.path
                 resolved is OutputDirResolver.Resolved.MediaStore -> {
                     val tmp = withContext(Dispatchers.IO) { fileOps.createOutputTempDir() }
-                    pendingOut = PendingOutput.MediaStore(resolved.relativePath, tmp)
+                    pendingOut = PendingOutput.MediaStore(resolved.relativePath, tmp, preserveExisting = fastMode)
                     tmp.absolutePath
                 }
                 else -> (resolved as OutputDirResolver.Resolved.AppExternal).path
@@ -665,11 +718,12 @@ fun EncryptScreen(
                     archivePassword = if (compressAfter) archPwd else null,
                     keyfiles = kfPaths.toList(),
                     keyfileOrdered = kfOrdered,
-                    argon2MemoryKib = tier.memoryKiB,
-                    argon2Passes = tier.passes,
-                    argon2Threads = tier.threads,
+                    argon2MemoryKib = if (fastMode) FastKdfPolicy.MEMORY_KIB else tier.memoryKiB,
+                    argon2Passes = if (fastMode) FastKdfPolicy.PASSES else tier.passes,
+                    argon2Threads = if (fastMode) FastKdfPolicy.LANES else tier.threads,
                     compress = zstdBefore,
-                    compressionLevel = zstdLevel
+                    compressionLevel = zstdLevel,
+                    mode = encryptionMode
                 )
                 pendingBatchResult = batch
                 pendingBatchName = batchNameFor(selectedInputs)
@@ -701,18 +755,20 @@ fun EncryptScreen(
                     archivePassword = if (compressAfter) archPwd else null,
                     keyfiles = kfPaths.toList(),
                     keyfileOrdered = kfOrdered,
-                    argon2MemoryKib = tier.memoryKiB,
-                    argon2Passes = tier.passes,
-                    argon2Threads = tier.threads,
+                    argon2MemoryKib = if (fastMode) FastKdfPolicy.MEMORY_KIB else tier.memoryKiB,
+                    argon2Passes = if (fastMode) FastKdfPolicy.PASSES else tier.passes,
+                    argon2Threads = if (fastMode) FastKdfPolicy.LANES else tier.threads,
                     preArchiveFormat = if (compressBefore) archiveFmt.ifEmpty { null } else null,
                     preArchivePassword = if (compressBefore) archPwd else null,
                     compress = zstdBefore,
-                    compressionLevel = zstdLevel
+                    compressionLevel = zstdLevel,
+                    mode = encryptionMode
                 )
                 return@launch
             }
 
             val req = EncryptRequest()
+            req.mode = encryptionMode
             req.inputFile = inPath
             // 压缩后加密时核心会把产物拼成 <基名>.<归档扩展名>.ergou，此处只给常规的
             // <基名>.ergou；界面展示与历史记录同步采用核心的最终名字。
@@ -730,9 +786,9 @@ fun EncryptScreen(
             req.setSplit(split)
             req.chunkSize = splitSize
             req.comments = comments
-            req.argon2MemoryKib = tier.memoryKiB
-            req.argon2Passes = tier.passes
-            req.argon2Threads = tier.threads
+            req.argon2MemoryKib = if (fastMode) FastKdfPolicy.MEMORY_KIB else tier.memoryKiB
+            req.argon2Passes = if (fastMode) FastKdfPolicy.PASSES else tier.passes
+            req.argon2Threads = if (fastMode) FastKdfPolicy.LANES else tier.threads
             if (preFmt != null) {
                 req.preArchiveFormat = preFmt
                 req.preArchivePassword = archPwd
@@ -822,7 +878,9 @@ fun EncryptScreen(
         if (progress.state == ProgressState.State.DONE ||
             progress.state == ProgressState.State.ERROR ||
             progress.state == ProgressState.State.CANCELLED) {
-            withContext(Dispatchers.IO) { fileOps.cleanupSecureKeyfiles() }
+            if (restoreStandardOptions == null) {
+                withContext(Dispatchers.IO) { fileOps.cleanupSecureKeyfiles() }
+            }
         }
         if (mediaProgress.state == ProgressState.State.DONE ||
             mediaProgress.state == ProgressState.State.ERROR ||
@@ -1275,13 +1333,18 @@ fun EncryptScreen(
             // 三、高级选项
             // ============================================================
             ExpandableCard(title = "高级选项") {
+                OptionRow(Messages.get("options.fast"), fastMode, { selectFastMode(it) },
+                    Messages.get("options.fast.tip"),
+                    enabled = settingsLoaded && !busy && !fileLoading && !folderLoading && !keyfileLoading && !decoyLoading)
+                if (fastMode) Text(Messages.get("options.fast.tip"), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(6.dp))
 
                 // ---- Reed-Solomon 纠错 ----
-                OptionRow("Reed-Solomon 纠错（抗损坏，体积略增）", reedSolomon, { reedSolomon = it }, TIP_RS, enabled = !mediaMode)
+                OptionRow("Reed-Solomon 纠错（抗损坏，体积略增）", reedSolomon, { reedSolomon = it }, TIP_RS, enabled = !mediaMode && advancedAllowed)
                 Spacer(Modifier.height(6.dp))
 
                 // ---- 可否认加密 (Deniability) ----
-                OptionRow("可否认加密（双卷隐藏）", deniability, { deniability = it }, TIP_DENIABILITY, enabled = !mediaMode)
+                OptionRow("可否认加密（双卷隐藏）", deniability, { deniability = it }, TIP_DENIABILITY, enabled = !mediaMode && advancedAllowed)
                 if (deniability && !mediaMode) {
                     Spacer(Modifier.height(6.dp))
                     Column(modifier = Modifier.padding(start = 36.dp)) {
@@ -1342,7 +1405,7 @@ fun EncryptScreen(
                 OptionRow("Zstandard 加密前压缩", zstdBefore, {
                     zstdBefore = it
                     if (it) compressBefore = false
-                }, TIP_ZSTD, enabled = !mediaMode)
+                }, TIP_ZSTD, enabled = !mediaMode && advancedAllowed)
                 if (zstdBefore && !mediaMode) {
                     Text("Zstandard 档位：$zstdLevel", modifier = Modifier.padding(start = 36.dp))
                     Slider(
@@ -1389,7 +1452,7 @@ fun EncryptScreen(
                 Spacer(Modifier.height(6.dp))
 
                 // ---- 分卷输出 ----
-                OptionRow("分卷输出", split, { split = it }, TIP_SPLIT, enabled = !mediaMode)
+                OptionRow("分卷输出", split, { split = it }, TIP_SPLIT, enabled = !mediaMode && advancedAllowed)
                 if (split) {
                     Spacer(Modifier.height(4.dp))
                     Column(modifier = Modifier.padding(start = 36.dp)) {
@@ -1409,21 +1472,21 @@ fun EncryptScreen(
                         selected = argon2Mode == Argon2MobileMode.AUTO,
                         onClick = { argon2Mode = Argon2MobileMode.AUTO },
                         label = { Text(Argon2MobileMode.AUTO.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                        enabled = !mediaMode,
+                        enabled = !mediaMode && advancedAllowed,
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = argon2Mode == Argon2MobileMode.BALANCED,
                         onClick = { argon2Mode = Argon2MobileMode.BALANCED },
                         label = { Text(Argon2MobileMode.BALANCED.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                        enabled = !mediaMode,
+                        enabled = !mediaMode && advancedAllowed,
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = argon2Mode == Argon2MobileMode.LIGHT,
                         onClick = { argon2Mode = Argon2MobileMode.LIGHT },
                         label = { Text(Argon2MobileMode.LIGHT.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                        enabled = !mediaMode,
+                        enabled = !mediaMode && advancedAllowed,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -1442,7 +1505,7 @@ fun EncryptScreen(
                 // ---- 音视频格式保持加密 ----
                 val mediaFmt = remember(inName) { detectMediaFormat(inName) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = mediaMode, onCheckedChange = {
+                    Checkbox(checked = mediaMode, enabled = advancedAllowed, onCheckedChange = {
                         mediaMode = it
                         // 格式保持加密仅支持单文件：切进来时把文件夹/多文件选择收起
                         if (it && (selectedInputs.size > 1 || selectedInputs.any { s -> s.isFolder })) {
@@ -1494,6 +1557,7 @@ fun EncryptScreen(
                 OutlinedTextField(
                     value = comments, onValueChange = { comments = it },
                     label = { Text("备注（明文存储，可选）") },
+                    enabled = advancedAllowed,
                     placeholder = { Text("该备注将以明文写入文件头") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
@@ -1515,7 +1579,7 @@ fun EncryptScreen(
                         }
                     }
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaMode && !keyfileLoading) {
+                    FilledTonalButton(onClick = { keyfilePicker.launch(arrayOf("*/*")) }, enabled = !mediaMode && advancedAllowed && !keyfileLoading) {
                         Icon(Icons.Default.Add, null, Modifier.size(16.dp)); Text(" 添加")
                     }
                 }

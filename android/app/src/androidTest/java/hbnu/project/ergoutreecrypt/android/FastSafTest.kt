@@ -4,9 +4,6 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import hbnu.project.ergoutreecrypt.android.platform.FastSafOutput
-import hbnu.project.ergoutreecrypt.android.platform.KdfPreflight
-import hbnu.project.ergoutreecrypt.volume.*
 import java.nio.file.Files
 import org.junit.Assert.*
 import org.junit.Test
@@ -28,31 +25,37 @@ class FastSafTest {
         fun children(): List<String> = resolver.query(
             DocumentsContract.buildChildDocumentsUriUsingTree(tree, "root"),
             arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)!!.use { cursor ->
-            buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+            val column = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            buildList { while (cursor.moveToNext()) add(cursor.getString(column)) }
         }
         control.call(base, "fast.reset", null, null)
         try {
             val input = source.resolve("中文🔐.bin").apply { writeText("真实 SAF 输入") }
             val cipher = source.resolve("中文🔐.bin.ergou")
-            val request = EncryptRequest().apply {
-                mode = EncryptionMode.FAST; inputFile = input.path; outputFile = cipher.path; password = "测试密码"
-            }
-            Encryptor.encrypt(request)
-            assertEquals(65536, KdfPreflight.peekArgon2MemoryKib(cipher.toPath()))
-            assertEquals(false, KdfPreflight.peekCompressed(cipher.toPath()))
+            FastValidationBridge.encrypt(input, cipher, "测试密码")
+            assertEquals(65536, FastValidationBridge.memory(cipher))
+            assertEquals(false, FastValidationBridge.compressed(cipher))
             val existing = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", cipher.name)!!
             resolver.openOutputStream(existing)!!.use { it.write("已有文件".toByteArray()) }
-            assertTrue(FastSafOutput(context).commit(tree, source))
+            assertTrue(FastValidationBridge.commit(context, tree, source, false))
             assertEquals("已有文件", resolver.openInputStream(existing)!!.bufferedReader().use { it.readText() })
             assertEquals(2, children().size)
+            val session = children().single { it != cipher.name }
+            val exported = DocumentsContract.buildDocumentUriUsingTree(tree, "root/$session/${cipher.name}")
+            val downloaded = source.resolve("exported.fast")
+            resolver.openInputStream(exported)!!.use { stream -> downloaded.outputStream().use { stream.copyTo(it) } }
+            assertArrayEquals(cipher.readBytes(), downloaded.readBytes())
+            val restored = source.resolve("restored.bin")
+            FastValidationBridge.authenticateAndDecrypt(downloaded, restored, "测试密码")
+            assertArrayEquals(input.readBytes(), restored.readBytes())
             val before = children().toSet()
             for (failure in listOf("fast.failWrite", "fast.failRename")) {
                 control.call(base, failure, "true", null)
-                assertFalse(FastSafOutput(context).commit(tree, source))
+                assertFalse(FastValidationBridge.commit(context, tree, source, false))
                 control.call(base, failure, "false", null)
                 assertEquals(before, children().toSet())
             }
-            assertFalse(FastSafOutput(context).commit(tree, source) { true })
+            assertFalse(FastValidationBridge.commit(context, tree, source, true))
             assertEquals(before, children().toSet())
         } finally {
             source.deleteRecursively()

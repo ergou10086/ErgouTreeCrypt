@@ -2,8 +2,6 @@ package hbnu.project.ergoutreecrypt.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import hbnu.project.ergoutreecrypt.volume.FastInteropSupport
-import java.nio.file.Files
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -16,10 +14,6 @@ class FastInteropTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val name = InstrumentationRegistry.getArguments().getString("fastRoot") ?: error("缺少语料目录")
         require(name.matches(Regex("fast-interop-[a-f0-9]{32}")))
-        val root = instrumentation.targetContext.filesDir.toPath().resolve(name)
-        val scratch = Files.createDirectory(root.resolve("scratch"))
-        FastInteropSupport.verify(root.resolve("desktop"), root.resolve("desktop/ciphers"), scratch)
-        FastInteropSupport.produce(root.resolve("desktop"), root.resolve("android"))
-        FastInteropSupport.verify(root.resolve("desktop"), root.resolve("android"), scratch)
+        FastValidationBridge.interop(java.io.File(instrumentation.targetContext.filesDir, name))
     }
 }

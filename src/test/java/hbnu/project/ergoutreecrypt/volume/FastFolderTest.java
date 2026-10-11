@@ -9,7 +9,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** FAST 文件夹与多选任务的模式、固定策略及失败保护回归。 */
 final class FastFolderTest {
-    /** @param root 独占目录 @throws Exception 模式遗漏或还原不一致 */
+    /**
+     * @param root 独占目录
+     * @throws Exception 模式遗漏或还原不一致
+     */
     @Test void allDepthsAndBatchUseFast(@TempDir Path root) throws Exception {
         Path source = Files.createDirectories(root.resolve("源/一/二/三"));
         Path file = Files.writeString(source.resolve("中文🔐.txt"), "真实目录模式快照");
@@ -33,7 +36,10 @@ final class FastFolderTest {
         verify(file, output.resolve("批量/中文🔐.txt.ergou"), root.resolve("批量还原"));
     }
 
-    /** @param root 独占目录 @throws Exception 冲突晚于文件副作用或覆盖已有输出 */
+    /**
+     * @param root 独占目录
+     * @throws Exception 冲突晚于文件副作用或覆盖已有输出
+     */
     @Test void rejectBeforeSideEffectsAndProtectExistingArchive(@TempDir Path root) throws Exception {
         Path input = Files.createDirectory(root.resolve("源"));
         Files.writeString(input.resolve("a"), "原始内容");
@@ -62,7 +68,47 @@ final class FastFolderTest {
         return opts;
     }
 
-    /** @param original 原文件 @param cipher 密文 @param output 还原输出 @throws Exception 认证或比对失败 */
+    /**
+     * 混合批量逐项探测模式并保留各项还原结果。
+     * @param root 独占目录
+     * @throws Exception 混合批量未逐项探测或丢失结果
+     */
+    @Test void mixedStandardAndFastBatchUsesDefaultDetection(@TempDir Path root) throws Exception {
+        Path input = Files.writeString(root.resolve("source"), "混合批量的原始字节🔐");
+        java.util.List<Path> ciphers = new java.util.ArrayList<>();
+        for (var mode : new EncryptionMode[]{EncryptionMode.STANDARD, EncryptionMode.FAST, EncryptionMode.STANDARD}) {
+            Path cipher = root.resolve("mixed-" + ciphers.size() + ".ergou");
+            var request = new EncryptRequest();
+            request.setMode(mode); request.setInputFile(input.toString());
+            request.setOutputFile(cipher.toString()); request.setPassword("目录测试🔐");
+            request.setRsCodecs(new hbnu.project.ergoutreecrypt.encoding.RsCodecs());
+            request.setArgon2MemoryKib(65536); request.setArgon2Passes(3); request.setArgon2Threads(4);
+            Encryptor.encrypt(request);
+            var auth = new VerifyRequest();
+            auth.setInputFile(cipher.toString()); auth.setPassword("目录测试🔐");
+            auth.setRsCodecs(new hbnu.project.ergoutreecrypt.encoding.RsCodecs());
+            assertTrue(Verifier.verify(auth));
+            ciphers.add(cipher);
+        }
+        Path output = Files.createDirectory(root.resolve("batch"));
+        var options = new FolderCrypt.DecryptOptions();
+        options.password = "目录测试🔐";
+        FolderCrypt.decryptFiles(ciphers, output, options);
+        assertEquals(3, options.batchResult.succeededCount());
+        assertEquals(0, options.batchResult.failedCount());
+        try (var files = Files.walk(output)) {
+            var restored = files.filter(Files::isRegularFile).toList();
+            assertEquals(3, restored.size());
+            for (Path plain : restored) assertEquals(-1, Files.mismatch(input, plain));
+        }
+    }
+
+    /**
+     * @param original 原文件
+     * @param cipher 密文
+     * @param output 还原输出
+     * @throws Exception 认证或比对失败
+     */
     private static void verify(Path original, Path cipher, Path output) throws Exception {
         var auth = new VerifyRequest();
         auth.setInputFile(cipher.toString());

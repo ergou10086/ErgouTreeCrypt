@@ -74,9 +74,19 @@ val syncZipxGolden by tasks.registering(Sync::class) {
 // 极速加密测试使用同一份 Java 入口，真实 ART 与桌面分别执行。
 val syncFastInteropSupport by tasks.registering(Sync::class) {
     from("../../src/test/java") {
-        include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java", "hbnu/project/ergoutreecrypt/volume/FastGoldenSupport.java", "hbnu/project/ergoutreecrypt/volume/FastInteropSupport.java")
+        include("hbnu/project/ergoutreecrypt/volume/FastPrototypeSupport.java", "hbnu/project/ergoutreecrypt/volume/FastGoldenSupport.java")
+        if (!providers.gradleProperty("fastReleaseTest").isPresent) {
+            include("hbnu/project/ergoutreecrypt/volume/FastInteropSupport.java", "hbnu/project/ergoutreecrypt/volume/FastArchiveInteropSupport.java", "hbnu/project/ergoutreecrypt/volume/FastTaskBenchmark.java", "hbnu/project/ergoutreecrypt/volume/FastLargeFileSupport.java")
+        }
     }
     into(layout.buildDirectory.dir("fast-interop-java"))
+}
+// R8 验收助手与业务核心一同优化；instrumentation 只调用小型稳定桥。
+val syncFastValidationSupport by tasks.registering(Sync::class) {
+    from("../../src/test/java") {
+        include("hbnu/project/ergoutreecrypt/volume/FastInteropSupport.java", "hbnu/project/ergoutreecrypt/volume/FastArchiveInteropSupport.java", "hbnu/project/ergoutreecrypt/volume/FastTaskBenchmark.java", "hbnu/project/ergoutreecrypt/volume/FastLargeFileSupport.java")
+    }
+    into(layout.buildDirectory.dir("fast-validation-java"))
 }
 val syncFastGolden by tasks.registering(Sync::class) {
     from("../../src/test/resources/fast")
@@ -181,7 +191,17 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // 保留 release 的 R8/资源缩减和原生库，仅使用独立包名与调试签名执行设备验收。
+        create("releaseValidation") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".fastvalidation"
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            matchingFallbacks += "release"
+            proguardFile("proguard-validation.pro")
+        }
     }
+    testBuildType = if (providers.gradleProperty("fastReleaseTest").isPresent) "releaseValidation" else "debug"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -198,12 +218,21 @@ android {
     // ============================================================
     sourceSets {
         named("androidTest") {
+            if (providers.gradleProperty("fastReleaseTest").isPresent) {
+                manifest.srcFile("src/androidTestReleaseValidation/AndroidManifest.xml")
+            } else {
+                java.srcDir("src/fastTest/java")
+            }
             java.srcDir(layout.buildDirectory.dir("fast-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("fast-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("zipx-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("zipx-golden-assets"))
             java.srcDir(layout.buildDirectory.dir("lz4-interop-java"))
             assets.srcDir(layout.buildDirectory.dir("lz4-golden-assets"))
+        }
+        named("releaseValidation") {
+            java.srcDir("src/fastTest/java")
+            java.srcDir(layout.buildDirectory.dir("fast-validation-java"))
         }
         named("main") {
             java.srcDirs(
@@ -226,6 +255,7 @@ android {
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n, syncLz4InteropSupport) }
 tasks.named("preBuild") { dependsOn(syncZipxInteropSupport) }
 tasks.named("preBuild") { dependsOn(syncFastInteropSupport) }
+tasks.named("preBuild") { dependsOn(syncFastValidationSupport) }
 tasks.matching { it.name.contains("AndroidTest") }.configureEach { dependsOn(syncZipxGolden) }
 
 // androidTest 的 assets 合并不走 preBuild，必须显式声明依赖，否则设备测试可能读到上一轮的语料

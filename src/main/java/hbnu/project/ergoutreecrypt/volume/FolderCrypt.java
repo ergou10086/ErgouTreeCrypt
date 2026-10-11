@@ -1169,6 +1169,14 @@ public final class FolderCrypt {
                 hbnu.project.ergoutreecrypt.crypto.fast.FastKdfPolicy.encodePassword(opts.password));
     }
 
+    /**
+     * 将目录任务的模式快照与共享选项传递给单卷请求。
+     * @param input 本项输入
+     * @param output 本项输出
+     * @param opts 任务启动时的加密选项
+     * @param reporter 本项进度与取消回调
+     * @return 独立单卷请求
+     */
     private static EncryptRequest buildRequest(Path input, Path output, EncryptOptions opts,
                                                ProgressReporter reporter) {
         EncryptRequest req = new EncryptRequest();

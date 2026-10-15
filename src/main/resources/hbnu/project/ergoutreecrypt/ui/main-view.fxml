@@ -172,8 +172,10 @@
                                         <Separator/>
                                         <!-- 加密专属选项 -->
                                         <VBox fx:id="encryptOptions" spacing="10">
-                                            <CheckBox fx:id="fastCheck" styleClass="check"/>
-                                            <Label fx:id="fastInfo" styleClass="field-hint" wrapText="true" maxWidth="Infinity"/>
+                                            <HBox alignment="CENTER_LEFT" spacing="2">
+                                                <CheckBox fx:id="fastCheck" styleClass="check"/>
+                                                <Label fx:id="fastInfo" styleClass="info-icon" text="i"/>
+                                            </HBox>
                                             <Label fx:id="commentsLabel" styleClass="field-label"/>
                                             <TextArea fx:id="commentsArea" styleClass="text-area" prefRowCount="2"/>
                                             <HBox alignment="CENTER_LEFT" spacing="2">

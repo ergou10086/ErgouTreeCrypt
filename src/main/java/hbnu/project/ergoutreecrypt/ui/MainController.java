@@ -745,7 +745,6 @@ public class MainController {
         commentsLabel.setText(Messages.get("options.comments"));
         commentsArea.setPromptText(Messages.get("options.comments.placeholder"));
         fastCheck.setText(Messages.get("options.fast"));
-        fastInfo.setText(Messages.get("options.fast.tip"));
         paranoidCheck.setText(Messages.get("options.paranoid"));
         reedSolomonCheck.setText(Messages.get("options.reedSolomon"));
         deniabilityCheck.setText(Messages.get("options.deniability"));
@@ -808,6 +807,7 @@ public class MainController {
      * 为每个选项后面的 ⓘ 图标挂载 Tooltip，语言切换时重新调用以刷新文案。
      */
     private void setupInfoTooltips() {
+        MainViewSupport.installTooltip(fastInfo, Messages.get("options.fast.tip"));
         MainViewSupport.installTooltip(paranoidInfo, Messages.get("options.paranoid.tip"));
         MainViewSupport.installTooltip(reedSolomonInfo, Messages.get("options.reedSolomon.tip"));
         MainViewSupport.installTooltip(deniabilityInfo, Messages.get("options.deniability.tip"));

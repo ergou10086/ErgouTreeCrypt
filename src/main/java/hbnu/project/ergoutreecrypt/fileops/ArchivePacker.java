@@ -45,13 +45,10 @@ import java.util.stream.Stream;
  *       可正确提示密码；不受工具特有加密开关影响。</li>
  *   <li><b>GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4：</b>无（或放弃）原生密码，采用本工具特有的整体
  *       AES-256-CTR 加密包裹（MAGIC + salt + IV + ciphertext），仅能用本工具解密。
- *       是否允许对这些格式加密，由
- *       {@link SettingsManager#isArchiveCustomEncryption()} 控制（默认关闭）。</li>
+ *       是否允许对这些格式加密，由{@link SettingsManager#isArchiveCustomEncryption()} 控制（默认关闭）。</li>
  * </ul>
  *
- * <p>归档密码解析见 {@link #resolveArchivePassword(String, String, Format)}，
- * 是否在归档密码为空时回退加密密码由
- * {@link SettingsManager#isArchivePasswordFallback()} 控制（默认关闭）。
+ * <p>归档密码解析见 {@link #resolveArchivePassword(String, String, Format)}，是否在归档密码为空时回退加密密码由{@link SettingsManager#isArchivePasswordFallback()} 控制（默认关闭）。
  *
  * @author ErgouTree
  */
@@ -107,8 +104,7 @@ public final class ArchivePacker {
      * <p>规则：
      * <ul>
      *   <li>对 GZ / TAR.GZ / 7Z / LZ4 / TAR.LZ4：仅当
-     *       {@link SettingsManager#isArchiveCustomEncryption()} 开启时才允许加密，
-     *       否则一律返回 null（明文归档）。</li>
+     *       {@link SettingsManager#isArchiveCustomEncryption()} 开启时才允许加密，否则一律返回 null（明文归档）。</li>
      *   <li>显式归档密码非空时直接采用。</li>
      *   <li>归档密码为空时，仅当
      *       {@link SettingsManager#isArchivePasswordFallback()} 开启才回退到加密密码。</li>
@@ -303,8 +299,7 @@ public final class ArchivePacker {
      * 将多个文件打包为单个归档，并允许逐个指定归档内条目名。
      *
      * <p>用于「多个互不相关的文件视为一个文件夹」的批处理场景：这些文件可能来自不同目录，
-     * 以 {@code baseDir} 计算相对名会退化成裸文件名并可能重名，故由调用方先行去重后传入
-     * {@link #entryNames}。{@code entryNames} 为 null 时按 {@code baseDir} 相对路径命名。
+     * 以 {@code baseDir} 计算相对名会退化成裸文件名并可能重名，故由调用方先行去重后传入{@link #entryNames}。{@code entryNames} 为 null 时按 {@code baseDir} 相对路径命名。
      *
      * @param output     输出归档路径
      * @param baseDir    计算条目相对名的基准目录，可为 null
@@ -868,7 +863,7 @@ public final class ArchivePacker {
         }
     }
 
-    /** Single-stream formats must become TAR containers when there are multiple entries. */
+    /** 单流格式在包含多个条目时必须升级为 TAR 容器。 */
     public static Format effectiveFormat(Format format, int entryCount) {
         if (entryCount > 1) {
             if (format == Format.GZ) return Format.TAR_GZ;
@@ -1112,8 +1107,7 @@ public final class ArchivePacker {
      * 计算 zip4j 双遍 IO 模式下的进度比例。
      *
      * <p>zip4j 的 totalWork 只统计写入阶段的字节数，但 CRC 预读阶段同样累加
-     * workCompleted；因此按当前任务类型（CALCULATE_CRC / ADD_ENTRY）把两遍 IO
-     * 各映射为一半进度，避免进度条在 CRC 预读结束时提前顶到 100%。
+     * workCompleted；因此按当前任务类型（CALCULATE_CRC / ADD_ENTRY）把两遍 IO各映射为一半进度，避免进度条在 CRC 预读结束时提前顶到 100%。
      *
      * @param monitor zip4j 进度监控器
      * @param from    进度映射起点
@@ -1199,7 +1193,7 @@ public final class ArchivePacker {
      */
     public enum Format {
         ZIP,
-        /** Standard ZIPX using XZ/LZMA2 and optional native WinZip AES. */
+        /** 标准 ZIPX，使用 XZ/LZMA2，并可选用 WinZip 原生 AES。 */
         ZIPX,
         GZ,
         TAR_GZ,

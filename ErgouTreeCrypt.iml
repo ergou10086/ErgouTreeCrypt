@@ -17,6 +17,9 @@
       <excludeFolder url="file://$MODULE_DIR$/android/app/src/androidTest/assets/imagecrypt" />
       <excludeFolder url="file://$MODULE_DIR$/src/test/resources/imagecrypt/test_picture" />
       <excludeFolder url="file://$MODULE_DIR$/android/app/.cxx" />
+      <excludeFolder url="file://$MODULE_DIR$/android/app/src/androidTest/assets/zstd-interop" />
+      <excludeFolder url="file://$MODULE_DIR$/src/test/resources/filetest" />
     </content>
   </component>
+  <component name="Go" enabled="true" />
 </module>

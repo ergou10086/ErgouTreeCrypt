@@ -22,18 +22,21 @@ import java.nio.file.Path;
  * <p>仅在设置开启 JVM 底层日志后启动；关闭时复位 LoggerContext，不再写文件。
  *
  * @author ErgouTree
- * @since 2026/8/27
  */
 public final class Slf4jJvmLog implements LogSink {
 
-    /** 日志目录，由 {@link #bindDirectory(Path)} 注入。 */
-    private static volatile Path logDir;
-
-    /** Logback 是否已启动。 */
-    private static volatile boolean started;
-
-    /** 配置互斥。 */
+    /**
+     * 配置互斥。
+     */
     private static final Object LOCK = new Object();
+    /**
+     * 日志目录，由 {@link #bindDirectory(Path)} 注入。
+     */
+    private static volatile Path logDir;
+    /**
+     * Logback 是否已启动。
+     */
+    private static volatile boolean started;
 
     /**
      * 绑定日志目录。应在应用启动时调用一次。

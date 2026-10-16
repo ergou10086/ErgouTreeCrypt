@@ -39,13 +39,9 @@ import java.util.List;
  *
  * <p>支持多种加密模式：
  * <ul>
- *   <li><b>原生加密（ZIP）：</b>使用 zip4j 自带 AES-256 加密，
- *       外部工具（Bandizip / 7-Zip）可正确提示密码并解压。</li>
- *   <li><b>整体包裹加密（GZ / TAR.GZ / 7Z）：</b>文件以魔数头
- *       {@code EGTC_ARCHV1} 开头，整体解密后得到明文归档再解压，
- *       需本工具解密。7Z 已不再使用原生 AES。</li>
- *   <li><b>旧版逐条目加密：</b>归档内包含 {@code .enc} 后缀条目，
- *       每个条目单独解密（向后兼容）。</li>
+ *   <li><b>原生加密（ZIP）：</b>使用 zip4j 自带 AES-256 加密，外部工具（Bandizip / 7-Zip）可正确提示密码并解压。</li>
+ *   <li><b>整体包裹加密（GZ / TAR.GZ / 7Z）：</b>文件以魔数头{@code EGTC_ARCHV1} 开头，整体解密后得到明文归档再解压，需本工具解密。7Z 已不再使用原生 AES。</li>
+ *   <li><b>旧版逐条目加密：</b>归档内包含 {@code .enc} 后缀条目，每个条目单独解密（向后兼容）。</li>
  *   <li><b>旧版 7Z 原生加密：</b>仍向后兼容，解压时可传入密码尝试打开。</li>
  * </ul>
  *
@@ -217,8 +213,7 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 检测旧版原生 AES 加密的 7Z（向后兼容）：原生 AES 下可无密码列出条目，
-     * 需尝试读取内容流；读取抛异常则视为加密。
+     * 检测旧版原生 AES 加密的 7Z（向后兼容）：原生 AES 下可无密码列出条目，需尝试读取内容流；读取抛异常则视为加密。
      *
      * @param archive 7z 路径
      * @return 是否为旧版原生加密 7Z
@@ -576,7 +571,7 @@ public final class ArchiveExtractor {
 
     private static List<Path> extractTarLz4(Path archive, Path destDir,
                                             ProgressReporter reporter, float from, float to) throws IOException {
-        // Validate the entire frame before publishing files (TAR EOF precedes the LZ4 checksum).
+        // 发布文件前验证完整数据帧，因为 TAR 结束标记早于 LZ4 校验和。
         Path stage = Files.createTempDirectory(destDir, ".lz4-stage-").toAbsolutePath().normalize();
         List<Path> files = new ArrayList<>();
         try {
@@ -915,8 +910,7 @@ public final class ArchiveExtractor {
     }
 
     /**
-     * 提取单个归档条目到目标目录（带字节级进度，以外部计数流为进度基准），
-     * 防护 Zip-Slip 路径穿越。
+     * 提取单个归档条目到目标目录（带字节级进度，以外部计数流为进度基准），防护 Zip-Slip 路径穿越。
      *
      * <p>用于 TAR.GZ：tar 头与填充字节同样计入总进度，进度基准为包裹 GZIP
      * 解压流的 {@link CountingInputStream}，与 ISIZE 总量精确对应。
@@ -1177,8 +1171,7 @@ public final class ArchiveExtractor {
      * 判断异常是否为归档密码相关，用于密码错误时提示重新输入。
      *
      * <p>错误信息含「password」关键词（如 zip4j 的 Wrong password、
-     * 本工具的 Archive password incorrect...）即视为密码相关；损坏、权限等
-     * 非密码错误不应触发重复输入密码。
+     * 本工具的 Archive password incorrect...）即视为密码相关；损坏、权限等非密码错误不应触发重复输入密码。
      *
      * @param t 异常，可为 null
      * @return true 表示错误与归档密码相关

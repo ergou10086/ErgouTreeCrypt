@@ -71,6 +71,15 @@ val syncZipxGolden by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("zipx-golden-assets/zipx/golden"))
 }
 
+// 密钥文件审计桥在桌面 JVM 和真实 Android ART 中分别执行。
+val syncKeyfileInteropSupport by tasks.registering(Sync::class) {
+    from("../../src/test/java") {
+        include("hbnu/project/ergoutreecrypt/keyfile/KeyfileInteropSupport.java")
+        include("hbnu/project/ergoutreecrypt/keyfile/KeyfileBatchInteropSupport.java")
+    }
+    into(layout.buildDirectory.dir("keyfile-interop-java"))
+}
+
 // 极速加密测试使用同一份 Java 入口，真实 ART 与桌面分别执行。
 val syncFastInteropSupport by tasks.registering(Sync::class) {
     from("../../src/test/java") {
@@ -218,6 +227,7 @@ android {
     // ============================================================
     sourceSets {
         named("androidTest") {
+            java.srcDir(layout.buildDirectory.dir("keyfile-interop-java"))
             if (providers.gradleProperty("fastReleaseTest").isPresent) {
                 manifest.srcFile("src/androidTestReleaseValidation/AndroidManifest.xml")
             } else {
@@ -254,6 +264,7 @@ android {
 // 编译前自动同步共享核心代码与 i18n 文案（桌面端 properties 为源）
 tasks.named("preBuild") { dependsOn(syncCoreLibs, syncI18n, syncLz4InteropSupport) }
 tasks.named("preBuild") { dependsOn(syncZipxInteropSupport) }
+tasks.named("preBuild") { dependsOn(syncKeyfileInteropSupport) }
 tasks.named("preBuild") { dependsOn(syncFastInteropSupport) }
 tasks.named("preBuild") { dependsOn(syncFastValidationSupport) }
 tasks.matching { it.name.contains("AndroidTest") }.configureEach { dependsOn(syncZipxGolden) }

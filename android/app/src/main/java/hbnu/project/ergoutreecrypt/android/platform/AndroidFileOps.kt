@@ -919,7 +919,8 @@ class AndroidFileOps(private val context: Context) {
         }
         val secureFile = File(secureDir, UUID.randomUUID().toString())
         return try {
-            openInputStream(uri)?.use { input ->
+            val stream = openInputStream(uri) ?: return null
+            stream.use { input ->
                 secureFile.outputStream().use { output ->
                     copyStream(input, output)
                 }

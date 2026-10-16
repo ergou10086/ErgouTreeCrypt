@@ -187,6 +187,18 @@ public final class DualDeniability {
     private DualDeniability() {
     }
 
+    /**
+     * EGTD 当前协议不携带密钥文件参数，显式拒绝以免静默丢弃安全选项。
+     * @param keyfiles 用户选择的密钥文件
+     * @throws CryptoException 选择了协议不支持的密钥文件
+     */
+    private static void requireNoKeyfiles(List<String> keyfiles) throws CryptoException {
+        if (keyfiles != null && !keyfiles.isEmpty()) {
+            throw new CryptoException(ErrorKind.UNSUPPORTED_FORMAT,
+                    "双卷可否认加密不支持密钥文件；请使用普通加密或旧版可否认加密");
+        }
+    }
+
     // ==================== 公开 API ====================
 
     /**
@@ -199,6 +211,7 @@ public final class DualDeniability {
      * @throws Exception 密码学或 I/O 错误
      */
     public static void encrypt(EncryptRequest req) throws Exception {
+        requireNoKeyfiles(req.getKeyfiles());
         LogService.info("DualDeniability", "开始双卷可否认加密");
         ProgressReporter reporter = req.getReporter();
         String realFile = req.getInputFile();
@@ -422,6 +435,7 @@ public final class DualDeniability {
 
     /** @param req 请求 @param verifyOnly 是否仅计算 MAC @throws Exception 操作失败。 */
     private static void process(DecryptRequest req, boolean verifyOnly) throws Exception {
+        requireNoKeyfiles(req.getKeyfiles());
         LogService.info("DualDeniability", "开始双卷可否认解密");
         String inputFile = req.getInputFile();
         String password = Passwordless.effectivePassword(req.getPassword());

@@ -6,9 +6,12 @@ import org.bouncycastle.crypto.digests.SHA3Digest;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Keyfile 处理器。
@@ -42,6 +45,7 @@ public final class KeyfileProcessor implements AutoCloseable {
     private boolean closed;
 
     /**
+     * 创建已派生的密钥材料容器。
      * @param key  32 字节 keyfile 派生密钥
      * @param hash 32 字节 SHA3-256(key) 哈希
      */
@@ -61,6 +65,35 @@ public final class KeyfileProcessor implements AutoCloseable {
      */
     public static KeyfileProcessor process(List<Path> paths, boolean ordered,
                                            ProgressCallback progress) throws IOException {
+        return process(paths, ordered, progress, false);
+    }
+
+    /**
+     * 处理新加密任务的密钥文件，拒绝无序模式中任何重复内容。
+     * 读取旧卷仍使用 {@link #process(List, boolean, ProgressCallback)}，保持既有派生结果。
+     *
+     * @param paths 密钥文件路径
+     * @param ordered 是否按顺序拼接
+     * @param progress 可选进度回调
+     * @return 派生密钥与哈希
+     * @throws IOException 读取失败或重复文件会导致密钥抵消
+     */
+    public static KeyfileProcessor processForEncryption(List<Path> paths, boolean ordered,
+                                                        ProgressCallback progress) throws IOException {
+        return process(paths, ordered, progress, true);
+    }
+
+    /**
+     * 读取与新加密共享派生算法，仅新加密启用重复内容校验。
+     * @param paths 密钥文件路径
+     * @param ordered 是否有序
+     * @param progress 可选进度回调
+     * @param rejectDuplicates 是否拒绝无序重复内容
+     * @return 派生结果
+     * @throws IOException 读取失败或重复内容
+     */
+    private static KeyfileProcessor process(List<Path> paths, boolean ordered,
+                                            ProgressCallback progress, boolean rejectDuplicates) throws IOException {
         if (paths == null || paths.isEmpty()) {
             // 无 keyfile 时返回全零 key 和对应 hash
             return new KeyfileProcessor(new byte[32], new byte[32]);
@@ -76,7 +109,7 @@ public final class KeyfileProcessor implements AutoCloseable {
         if (ordered) {
             key = processOrdered(paths, totalSize, progress);
         } else {
-            key = processUnordered(paths, totalSize, progress);
+            key = processUnordered(paths, totalSize, progress, rejectDuplicates);
         }
 
         // SHA3-256(key) → hash 存入 header
@@ -87,6 +120,11 @@ public final class KeyfileProcessor implements AutoCloseable {
 
     /**
      * 有序模式：将所有 keyfile 内容顺序拼接后做 SHA3-256。
+     * @param paths 密钥文件路径
+     * @param totalSize 总字节数
+     * @param progress 可选进度回调
+     * @return 拼接内容的 SHA3-256
+     * @throws IOException 文件读取失败
      */
     private static byte[] processOrdered(List<Path> paths, long totalSize,
                                          ProgressCallback progress) throws IOException {
@@ -114,40 +152,66 @@ public final class KeyfileProcessor implements AutoCloseable {
 
     /**
      * 无序模式：每个 keyfile 单独做 SHA3-256 后 XOR 合并（交换律保证顺序无关）。
+     * @param paths 文件路径
+     * @param totalSize 总字节数
+     * @param progress 进度回调
+     * @param rejectDuplicates 是否拒绝任意重复内容
+     * @return 合并密钥
+     * @throws IOException 读取失败或发现重复内容
      */
     private static byte[] processUnordered(List<Path> paths, long totalSize,
-                                           ProgressCallback progress) throws IOException {
+                                           ProgressCallback progress, boolean rejectDuplicates) throws IOException {
         byte[] combined = null;
+        Set<ByteBuffer> seen = rejectDuplicates ? new HashSet<>() : null;
         byte[] buf = new byte[CryptoConstants.MIB];
         long done = 0;
-
-        for (Path p : paths) {
-            SHA3Digest hasher = new SHA3Digest(256);
-            try (InputStream in = Files.newInputStream(p)) {
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    hasher.update(buf, 0, n);
-                    done += n;
-                    if (progress != null && totalSize > 0) {
-                        progress.onProgress((float) done / (float) totalSize);
+        boolean complete = false;
+        try {
+            for (Path p : paths) {
+                SHA3Digest hasher = new SHA3Digest(256);
+                try (InputStream in = Files.newInputStream(p)) {
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        hasher.update(buf, 0, n);
+                        done += n;
+                        if (progress != null && totalSize > 0) {
+                            progress.onProgress((float) done / (float) totalSize);
+                        }
                     }
                 }
-            }
 
-            byte[] fileHash = new byte[hasher.getDigestSize()];
-            hasher.doFinal(fileHash, 0);
+                byte[] fileHash = new byte[hasher.getDigestSize()];
+                hasher.doFinal(fileHash, 0);
 
-            // XOR 合并各文件哈希
-            if (combined == null) {
-                combined = fileHash;
-            } else {
-                for (int i = 0; i < combined.length; i++) {
-                    combined[i] ^= fileHash[i];
+                if (seen != null) {
+                    ByteBuffer fingerprint = ByteBuffer.wrap(fileHash.clone());
+                    if (!seen.add(fingerprint)) {
+                        SecureZero.zero(fingerprint.array());
+                        SecureZero.zero(fileHash);
+                        throw new IOException("无序密钥文件包含重复内容，会相互抵消；请移除重复文件或使用有序模式");
+                    }
+                }
+
+                // XOR 合并各文件哈希
+                if (combined == null) {
+                    combined = fileHash;
+                } else {
+                    for (int i = 0; i < combined.length; i++) {
+                        combined[i] ^= fileHash[i];
+                    }
+                    SecureZero.zero(fileHash);
                 }
             }
-        }
 
-        return combined;
+            complete = true;
+            return combined;
+        } finally {
+            SecureZero.zero(buf);
+            if (seen != null) {
+                for (ByteBuffer fingerprint : seen) SecureZero.zero(fingerprint.array());
+            }
+            if (!complete) SecureZero.zero(combined);
+        }
     }
 
     /**
@@ -188,6 +252,8 @@ public final class KeyfileProcessor implements AutoCloseable {
 
     /**
      * 计算 SHA3-256 哈希。
+     * @param data 待哈希字节
+     * @return 32 字节哈希
      */
     private static byte[] sha3256(byte[] data) {
         SHA3Digest digest = new SHA3Digest(256);
@@ -199,6 +265,7 @@ public final class KeyfileProcessor implements AutoCloseable {
 
     /**
      * 返回 32 字节 keyfile 派生密钥（用于与密码密钥 XOR）。
+     * @return 密钥，关闭后为 null
      */
     public byte[] key() {
         return key;
@@ -206,11 +273,13 @@ public final class KeyfileProcessor implements AutoCloseable {
 
     /**
      * 返回 32 字节 SHA3-256(key) 哈希（用于 header 存储/校验）。
+     * @return 密钥哈希
      */
     public byte[] hash() {
         return hash;
     }
 
+    /** 安全清零派生密钥，保留可公开的哈希；允许重复关闭。 */
     @Override
     public void close() {
         if (closed) return;

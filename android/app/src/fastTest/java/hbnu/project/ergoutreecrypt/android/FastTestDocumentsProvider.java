@@ -125,6 +125,7 @@ public final class FastTestDocumentsProvider extends ContentProvider {
      * @throws FileNotFoundException 注入磁盘满或打开失败
      */
     public ParcelFileDescriptor openDocument(String document, String mode, CancellationSignal signal) throws FileNotFoundException {
+        if ("root/keyfile-denied".equals(document)) throw new SecurityException("Injected keyfile permission denial");
         if (failWrite && mode.contains("w")) throw new FileNotFoundException("ENOSPC（注入故障）");
         return ParcelFileDescriptor.open(file(document), ParcelFileDescriptor.parseMode(mode));
     }

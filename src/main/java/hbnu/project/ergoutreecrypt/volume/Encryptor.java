@@ -347,7 +347,7 @@ public final class Encryptor {
         ctx.useKeyfiles = true;
 
         List<Path> paths = kfPaths.stream().map(Path::of).toList();
-        KeyfileProcessor kf = KeyfileProcessor.process(paths, req.isKeyfileOrdered(), null);
+        KeyfileProcessor kf = KeyfileProcessor.processForEncryption(paths, req.isKeyfileOrdered(), null);
         ctx.setKeyfileKey(kf.key());
         ctx.keyfileHash = kf.hash();
 

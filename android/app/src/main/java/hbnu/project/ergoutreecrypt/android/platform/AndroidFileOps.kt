@@ -110,12 +110,15 @@ class AndroidFileOps(private val context: Context) {
      * 将 Content URI 解析为可直接使用的文件路径。
      *
      * @param uri 文件 URI（通常来自文件选择器）
+     * @param preserveName 为解密保留同目录关系和原始名称，支持按内容识别改名分卷
      * @return 文件绝对路径；若无法解析返回 null
      */
-    fun resolveToPath(uri: Uri): String? {
+    fun resolveToPath(uri: Uri, preserveName: Boolean = false): String? {
         // 0. 命中缓存且文件仍可读时直接返回（临时文件可能已被清理）
         resolvedCache[uri]?.let { cached ->
-            if (isReadablePath(cached)) {
+            if (isReadablePath(cached) && (!preserveName || uri.scheme == "file"
+                        || !cached.startsWith(File(context.filesDir, "crypto_tmp").path)
+                        || cached.startsWith(File(context.filesDir, "crypto_tmp/split_$splitSession").path))) {
                 return cached
             }
             resolvedCache.remove(uri)
@@ -128,14 +131,30 @@ class AndroidFileOps(private val context: Context) {
 
         // 2. 通过 MediaStore 查询真实路径（需真正可读才采用，
         //    部分国产 ROM 上 _data 路径 exists()=true 但读取抛 EACCES）
-        val path = queryMediaStorePath(uri)
+        val path = queryMediaStorePath(uri)?.takeIf { isReadablePath(it) } ?: readableDocumentPath(uri)
         if (path != null && isReadablePath(path)) {
             resolvedCache[uri] = path
             return path
         }
 
         // 3. 拷贝到内部存储
-        return copyToInternal(uri)?.also { resolvedCache[uri] = it }
+        return copyToInternal(uri, preserveName)?.also { resolvedCache[uri] = it }
+    }
+
+    /**
+     * 只在系统文档能映射到可读本地文件时复用原件，避免大分卷的无用复制。
+     * @param uri 系统外部存储文档 URI
+     * @return 已有读取权限的路径；其他提供者或无权限时为 null
+     */
+    private fun readableDocumentPath(uri: Uri): String? {
+        if (uri.authority != EXTERNAL_STORAGE_PROVIDER_AUTHORITY) return null
+        return runCatching {
+            val parts = DocumentsContract.getDocumentId(uri).split(":", limit = 2)
+            if (parts.size != 2 || parts[0] == "home") return@runCatching null
+            val root = resolveStorageVolumeRoot(parts[0])?.let { File(it).canonicalFile } ?: return@runCatching null
+            val file = File(root, parts[1]).canonicalFile
+            if (file.toPath().startsWith(root.toPath()) && isReadablePath(file.path)) file.path else null
+        }.getOrNull()
     }
 
     /**
@@ -343,7 +362,7 @@ class AndroidFileOps(private val context: Context) {
                     while (it.moveToNext()) {
                         check(++entries <= 1_000_000) { "目录条目过多" }
                         val id = it.getString(0)
-                        val safeName = FileNameSanitizer.sanitize(it.getString(1))
+                        val safeName = safeInputName(it.getString(1))
                         check(safeName.isNotBlank() && safeName != "." && safeName != "..")
                         val target = File(parent, safeName)
                         check(!target.exists()) { "目录中有清洗后同名的文件" }
@@ -780,9 +799,9 @@ class AndroidFileOps(private val context: Context) {
      *
      * @return 拷贝后的临时文件路径，调用方负责在使用后清理
      */
-    private fun copyToInternal(uri: Uri): String? {
+    private fun copyToInternal(uri: Uri, preserveName: Boolean): String? {
         val displayName = queryDisplayName(uri) ?: ""
-        val split = Splitter.isSplitChunkPath(displayName.ifBlank { "unknown" }) ||
+        val split = preserveName || Splitter.isSplitChunkPath(displayName.ifBlank { "unknown" }) ||
             Splitter.isManifestPath(displayName.ifBlank { "unknown" })
         val parentId = runCatching { DocumentsContract.getDocumentId(uri).substringBeforeLast('/', "") }
             .getOrDefault("")
@@ -792,10 +811,10 @@ class AndroidFileOps(private val context: Context) {
         val tmpDir = if (split) File(context.filesDir, "crypto_tmp/split_$splitSession/$hash")
             else File(context.filesDir, "crypto_tmp")
         tmpDir.mkdirs()
-        val tmpFile = File(tmpDir, if (split) FileNameSanitizer.sanitize(displayName)
+        val tmpFile = File(tmpDir, if (split) safeInputName(displayName)
             else UUID.randomUUID().toString() + queryExtension(uri))
         if (split && resolvedCache.any { (other, path) -> other != uri && path == tmpFile.absolutePath }) {
-            throw java.io.IOException("同名分卷来自不同文档，请分别选择各自的分卷文件夹")
+            throw java.io.IOException("文件名称冲突，请分别选择各自的分卷文件夹")
         }
         return try {
             // 输入流打不开（如权限被收回）时返回 null，避免把空临时文件误当作有效输入
@@ -814,6 +833,25 @@ class AndroidFileOps(private val context: Context) {
             tmpFile.delete()
             null
         }
+    }
+
+    /**
+     * 清洗输入名称并为分卷后缀预留字节，避免长文件名截断卷编号。
+     * @param displayName 提供者显示名
+     * @return 保留分卷编号的安全文件名
+     */
+    private fun safeInputName(displayName: String): String {
+        val name = displayName.ifBlank { "unknown" }
+        val base = Splitter.splitChunkBase(name)
+            ?: if (Splitter.isManifestPath(name)) name.dropLast(".volumes".length)
+            else return FileNameSanitizer.sanitize(displayName)
+        val marker = base.lastIndexOf('.')
+        val suffix = displayName.substring(marker)
+        var safeBase = FileNameSanitizer.sanitize(base.substring(0, marker))
+        while ((safeBase + suffix).toByteArray(Charsets.UTF_8).size > 255 && safeBase.isNotEmpty()) {
+            safeBase = safeBase.dropLast(if (safeBase.last().isLowSurrogate()) 2 else 1)
+        }
+        return safeBase + suffix
     }
 
     /**

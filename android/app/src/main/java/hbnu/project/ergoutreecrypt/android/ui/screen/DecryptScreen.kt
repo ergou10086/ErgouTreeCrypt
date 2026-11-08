@@ -323,7 +323,6 @@ fun DecryptScreen(
     var autoUnzip by remember { mutableStateOf(true) }
     var decryptThenExtract by remember { mutableStateOf(false) }
     var verifyOnly by remember { mutableStateOf(false) }
-    var recombine by remember { mutableStateOf(false) }
     var deleteSourceAfterDecrypt by remember { mutableStateOf(false) }
     var decryptSettingsLoaded by remember { mutableStateOf(false) }
 
@@ -384,15 +383,35 @@ fun DecryptScreen(
     }
 
     var splitSummary by remember { mutableStateOf("") }
+    var splitDetected by remember { mutableStateOf(false) }
+    var splitHasIssues by remember { mutableStateOf(false) }
+    var splitChecking by remember { mutableStateOf(false) }
+    var splitSelectionError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(inPath, selectedInputs) {
         val paths = (selectedInputs.map { it.path } + listOfNotNull(inPath)).distinct()
         val selectedUris = selectedInputs.mapNotNull { it.uri } + listOfNotNull(inUri)
-        splitSummary = withContext(Dispatchers.IO) {
-            runCatching {
-                fileOps.retainSplitInputs(selectedUris)
-                Splitter.describeInputs(paths.map { File(it).toPath() })
+        splitChecking = true
+        try {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    fileOps.retainSplitInputs(selectedUris)
+                    val bases = Splitter.inputBases(paths.map { File(it).toPath() })
+                    var issues = false
+                    val summary = bases.joinToString("\n") { base ->
+                        runCatching {
+                            val info = Splitter.inspect(base)
+                            if (info.missing().isNotEmpty() || info.damaged().isNotEmpty() || info.unexpected().isNotEmpty()) issues = true
+                            info.summary()
+                        }.getOrElse { issues = true; it.message ?: "无法检查分卷" }
+                    }
+                    Triple(bases.isNotEmpty(), summary, issues)
+                }.getOrElse { Triple(false, it.message ?: "无法检查分卷", true) }
             }
-                .getOrElse { it.message ?: "无法检查分卷" }
+            splitDetected = result.first
+            splitSummary = result.second
+            splitHasIssues = result.third
+        } finally {
+            splitChecking = false
         }
     }
 
@@ -420,7 +439,7 @@ fun DecryptScreen(
             try {
                 // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
                 val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
-                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) }
+                val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u, preserveName = true) }
                 isFolder = false
                 inUri = u
                 inName = name
@@ -433,14 +452,16 @@ fun DecryptScreen(
                     inSize = size
                 } else {
                     // 路径解析失败（云盘/存储权限/磁盘不足等）时给出可见提示，避免按钮静默置灰
-                    Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
+                    withContext(Dispatchers.Main.immediate) { Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show() }
                 }
                 name.let { n ->
                     outName = FileNameSanitizer.sanitize(OutputNaming.decryptOutputName(n))
                 }
-                if (path != null) {
-                    selectedInputs = listOf(BatchInput(u, path, name, inSize))
-                }
+                selectedInputs = if (path != null) listOf(BatchInput(u, path, name, inSize)) else emptyList()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main.immediate) { Toast.makeText(ctx, e.message ?: "无法读取所选文件", Toast.LENGTH_LONG).show() }
             } finally {
                 // 仅当自身仍是最新一次选择时才复位加载状态
                 if (filePickJob === myJob) {
@@ -469,7 +490,7 @@ fun DecryptScreen(
                     for (u in uris) {
                         // 名称查询与文件解析全部移入 IO 线程，避免阻塞主线程
                         val name = withContext(Dispatchers.IO) { extractFileName(ctx, u) }
-                        val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u) } ?: continue
+                        val path = withContext(Dispatchers.IO) { fileOps.resolveToPath(u, preserveName = true) } ?: continue
                         if (!existingPaths.add(path)) {
                             continue
                         }
@@ -480,17 +501,23 @@ fun DecryptScreen(
                         existing.add(BatchInput(u, path, name, size))
                     }
                     if (existing.isEmpty()) {
-                        Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show()
+                        withContext(Dispatchers.Main.immediate) { Toast.makeText(ctx, "无法读取所选文件，请换用系统文件管理器或检查存储权限后重试", Toast.LENGTH_LONG).show() }
                     } else {
                         selectedInputs = existing
-                        inUri = null
-                        inPath = null
-                        inName = null
-                        inSize = null
+                        val single = existing.singleOrNull()
+                        inUri = single?.uri
+                        inPath = single?.path
+                        inName = single?.name
+                        inSize = single?.size
+                        if (single != null) outName = FileNameSanitizer.sanitize(OutputNaming.decryptOutputName(single.name))
                         isFolder = false
                         // 校验模式只支持单文件，批处理下强制关闭
                         verifyOnly = false
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main.immediate) { Toast.makeText(ctx, e.message ?: "无法读取所选文件", Toast.LENGTH_LONG).show() }
                 } finally {
                     // 仅当自身仍是最新一次选择时才复位加载状态
                     if (filePickJob === myJob) {
@@ -614,7 +641,24 @@ fun DecryptScreen(
     // ---- 开始解密 ----
     fun doDecrypt() {
         scope.launch {
-            val input = inPath
+            val input = inPath ?: selectedInputs.singleOrNull()?.path
+
+            // 单组分卷在创建输出或派生密钥前提示缺卷；多组批处理保留逐组错误报告。
+            val splitProblem = withContext(Dispatchers.IO) {
+                runCatching {
+                    val paths = if (selectedInputs.isNotEmpty()) selectedInputs.map { File(it.path).toPath() }
+                        else listOfNotNull(input?.let { File(it).toPath() })
+                    val bases = Splitter.inputBases(paths)
+                    val resolver = Splitter.InputResolver()
+                    if (bases.size == 1 && paths.all { !java.nio.file.Files.isDirectory(it) && resolver.base(it) != null }) {
+                        Splitter.inspect(bases.first()).requireComplete()
+                    }
+                }.exceptionOrNull()?.let { it.message ?: "无法检查分卷" }
+            }
+            if (splitProblem != null) {
+                splitSelectionError = splitProblem
+                return@launch
+            }
 
             // 多文件批处理：逐个自动识别类型，不可解密的条目由核心跳过并在结束弹窗汇报
             if (isBatch) {
@@ -690,7 +734,7 @@ fun DecryptScreen(
                     input = input,
                     password = password,
                     forceDecrypt = force,
-                    recombine = recombine,
+                    recombine = false,
                     keyfiles = kfPaths.toList()
                 )
                 return@launch
@@ -720,7 +764,7 @@ fun DecryptScreen(
             // 避免把归档文件误当作单卷送入 Decryptor 导致整包读入内存
             if (input != null && (isFolder
                     || ArchiveExtractor.isArchive(File(input).toPath())
-                    || (Splitter.isSplitChunkPath(input) || Splitter.isManifestPath(input)))) {
+                    || splitDetected)) {
                 vm.startAutoDecrypt(
                     inputs = listOf(input),
                     outputDir = writeDir,
@@ -737,7 +781,7 @@ fun DecryptScreen(
             }
 
             val req = DecryptRequest()
-            req.inputFile = inPath
+            req.inputFile = input
             val outFile = "$writeDir/${FileNameSanitizer.sanitize(outName ?: "decrypted_output")}"
             req.outputFile = outFile
             req.password = password
@@ -746,7 +790,7 @@ fun DecryptScreen(
             req.setForceDecrypt(force)
             req.setDecryptThenExtract(decryptThenExtract)
             req.setRecursiveExtract(false)
-            req.setRecombine(recombine)
+            req.setRecombine(false)
             if (kfPaths.isNotEmpty()) req.keyfiles = kfPaths.toList()
             req.rsCodecs = RsCodecs()
             vm.startDecrypt(req)
@@ -1105,6 +1149,15 @@ fun DecryptScreen(
         )
     }
 
+    splitSelectionError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { splitSelectionError = null },
+            title = { Text("分卷尚未就绪") },
+            text = { Text("$message\n\n请选择整个分卷文件夹，或使用多选／添加文件补齐全部碎片后重试。") },
+            confirmButton = { TextButton(onClick = { splitSelectionError = null }) { Text("知道了") } }
+        )
+    }
+
     Scaffold(
         // 容器透明，避免遮住全局背景图层
         containerColor = Color.Transparent,
@@ -1139,7 +1192,7 @@ fun DecryptScreen(
                         onClick = { if (mediaDecryptMode) doMediaDecrypt() else doDecrypt() },
                         modifier = Modifier.fillMaxWidth(),
                         // 允许无密码模式（密码留空即用内置公开密码）；选择处理中或全局其他操作运行中禁用；加密前压缩的文件禁用
-                        enabled = hasFile && !fileLoading && !folderLoading && !keyfileLoading && !busy && compressedNotice == null
+                        enabled = hasFile && !splitChecking && !fileLoading && !folderLoading && !keyfileLoading && !busy && compressedNotice == null
                     ) {
                         Icon(Icons.Default.LockOpen, null)
                         Text(if (mediaDecryptMode) "  格式保持解密" else "  解密")
@@ -1161,7 +1214,9 @@ fun DecryptScreen(
             // 一、文件选择区（单文件或单文件夹）
             // ============================================================
             if (splitSummary.isNotBlank()) {
-                Text(splitSummary, style = MaterialTheme.typography.bodySmall,
+                Text((if (splitDetected) "已自动识别分卷，解密或校验前将自动合并\n" else "") + splitSummary,
+                    color = if (splitHasIssues) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             }
             if (!hasFile) {
@@ -1223,7 +1278,15 @@ fun DecryptScreen(
                     names = selectedInputs.map { it.name },
                     sizes = selectedInputs.map { it.size },
                     onRemove = { index ->
-                        selectedInputs = selectedInputs.toMutableList().also { it.removeAt(index) }
+                        val remaining = selectedInputs.toMutableList().also { it.removeAt(index) }
+                        selectedInputs = remaining
+                        remaining.singleOrNull()?.let { single ->
+                            inUri = single.uri
+                            inPath = single.path
+                            inName = single.name
+                            inSize = single.size
+                            outName = FileNameSanitizer.sanitize(OutputNaming.decryptOutputName(single.name))
+                        }
                     },
                     onAdd = { multiFilePicker.launch(arrayOf("*/*")) },
                     onClear = {
@@ -1437,12 +1500,12 @@ fun DecryptScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-                // ---- 合并分卷 ----
-                val recombineAlpha = if (!mediaDecryptMode) 1f else 0.38f
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = recombine, onCheckedChange = { recombine = it }, enabled = !mediaDecryptMode)
-                    Text("输入为分卷碎片，解密前先合并", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(start = 4.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = recombineAlpha))
-                }
+                // 根据所选输入自动启用分卷合并，用户只需补齐缺少的碎片。
+                Text(
+                    "分卷会自动识别；请选择整个分卷文件夹或同时添加全部碎片",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 

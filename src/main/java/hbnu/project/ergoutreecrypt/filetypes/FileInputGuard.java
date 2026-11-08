@@ -483,7 +483,7 @@ public final class FileInputGuard {
      * @param input   输入路径
      * @return 预检结果
      */
-    private static GuardResult doCheck(final Feature feature, final Options opts, final Path input) {
+    private static GuardResult doCheck(final Feature feature, final Options opts, final Path input) throws java.io.IOException {
         if (input == null || !Files.exists(input)) {
             return GuardResult.reject(ErrorKind.INPUT_NOT_FOUND, KEY_NOT_FOUND);
         }
@@ -513,13 +513,13 @@ public final class FileInputGuard {
      * @return 预检结果
      */
     private static GuardResult checkGenericDecrypt(final Path input, final boolean directory,
-                                                   final Options opts) {
+                                                   final Options opts) throws java.io.IOException {
         // 1. 文件夹：可能包含加密文件，交由 FolderCrypt 自动识别
         if (directory) {
             return GuardResult.accept();
         }
         // 2. 分卷碎片：走合并分卷
-        if ((Splitter.isSplitChunkPath(input.toString()) || Splitter.isManifestPath(input.toString()))) {
+        if (Splitter.inputBase(input) != null) {
             return GuardResult.accept();
         }
         // 3. EGTC-IMG 图片密文：只读协议头后引导到图片还原
@@ -569,11 +569,11 @@ public final class FileInputGuard {
      * @param directory 输入是否为目录
      * @return 预检结果
      */
-    private static GuardResult checkVerify(final Path input, final boolean directory) {
+    private static GuardResult checkVerify(final Path input, final boolean directory) throws java.io.IOException {
         if (directory) {
             return GuardResult.reject(ErrorKind.UNSUPPORTED_FORMAT, GUARD_REQUIRE_FILE);
         }
-        if ((Splitter.isSplitChunkPath(input.toString()) || Splitter.isManifestPath(input.toString()))) {
+        if (Splitter.inputBase(input) != null) {
             return GuardResult.accept();
         }
         GuardResult imageCryptProbe = probeImageCryptEnvelope(input);

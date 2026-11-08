@@ -470,6 +470,7 @@ public final class FolderCrypt {
         Map<Path, Path> chunkGroups = new LinkedHashMap<>();
         int total = 0;
 
+        Splitter.InputResolver resolver = new Splitter.InputResolver();
         for (Path input : inputs == null ? List.<Path>of() : inputs) {
             if (input == null) {
                 continue;
@@ -479,10 +480,10 @@ public final class FolderCrypt {
                 aggregate.addFailure(name, Messages.get("batch.skip.notFound"));
                 continue;
             }
-            String chunkBase = Splitter.isSplitChunkPath(input.toString())
-                    ? Splitter.splitChunkBase(input.toString())
-                    : Splitter.isManifestPath(input.toString())
-                    ? input.toString().substring(0, input.toString().length() - ".volumes".length()) : null;
+            Path resolvedBase;
+            try { resolvedBase = resolver.base(input); }
+            catch (IOException e) { aggregate.addFailure(name, e.getMessage()); continue; }
+            String chunkBase = resolvedBase == null ? null : resolvedBase.toString();
             if (chunkBase != null) {
                 // 同一卷的多个碎片归为一组只处理一次；代表路径保留「碎片本身」而非基准名
                 // （基准文件在分卷后已被删除），交给 decryptAuto 按碎片路径去合并。
@@ -573,6 +574,7 @@ public final class FolderCrypt {
         BatchResult result = new BatchResult();
         opts.batchResult = result;
         DecryptStats stats = new DecryptStats();
+        Path resolvedBase = Files.isDirectory(input) ? null : Splitter.inputBase(input);
         if (Files.isDirectory(input)) {
             // 输入文件夹：可能是单文件分卷碎片夹，或普通文件夹
             String chunkBase = detectChunkBase(input);
@@ -586,7 +588,7 @@ public final class FolderCrypt {
             } else {
                 decryptDirectory(input, outputDir, preferredName == null ? input.getFileName().toString() : preferredName, opts, stats, 0, false);
             }
-        } else if (ArchiveExtractor.isArchive(input)) {
+        } else if (resolvedBase == null && ArchiveExtractor.isArchive(input)) {
             if (opts.extractThenDecrypt) {
                 decryptArchive(input, preferredName == null ? outputDir : outputDir.resolve(preferredName), opts, stats, 0);
             } else {
@@ -596,15 +598,9 @@ public final class FolderCrypt {
         } else {
             // 单个文件：可能是分卷碎片、加密文件、或不可解密文件
             String fn = input.getFileName().toString();
-            if (Splitter.isSplitChunkPath(input.toString()) || Splitter.isManifestPath(input.toString())) {
-                // 单个分卷碎片：在所在目录查找所有兄弟碎片，合并解密
-                String base = Splitter.isManifestPath(input.toString())
-                        ? input.toString().substring(0, input.toString().length() - ".volumes".length())
-                        : Splitter.splitChunkBase(input.toString());
-                if (base == null) {
-                    throw new NoDecryptableFilesException(
-                            "无法识别分卷碎片文件：" + fn);
-                }
+            if (resolvedBase != null) {
+                // 按内容或兼容文件名查找同组碎片，不修改源文件。
+                String base = resolvedBase.toString();
                 Files.createDirectories(outputDir);
                 Path out = outputDir.resolve(preferredName == null ? stripEncExt(Path.of(base).getFileName().toString()) : preferredName);
                 decryptRecombine(Path.of(base), out, opts);
@@ -909,6 +905,19 @@ public final class FolderCrypt {
      * @param allowNested 是否把内部嵌套压缩包作为可深入的归档单元（false 时仍作为单元，但后续仅原样拷贝）
      */
     private static List<Unit> collectUnits(Path dir, DecryptStats stats, boolean allowNested) throws IOException {
+        return collectUnits(dir, stats, allowNested, new Splitter.InputResolver());
+    }
+
+    /**
+     * @param dir 当前目录
+     * @param stats 统计
+     * @param allowNested 是否深入归档
+     * @param resolver 本次操作的名称索引
+     * @return 解密单元
+     * @throws IOException 目录或分卷读取失败
+     */
+    private static List<Unit> collectUnits(Path dir, DecryptStats stats, boolean allowNested,
+                                           Splitter.InputResolver resolver) throws IOException {
         List<Unit> units = new ArrayList<>();
         Map<String, List<Path>> chunkGroups = new LinkedHashMap<>(); // 基础文件映射到分卷文件
         List<Path> regularEncrypted = new ArrayList<>();
@@ -922,22 +931,15 @@ public final class FolderCrypt {
                         Path parent = child.getFileName().toString().equals(stripEncExt(cb)) ? child.getParent() : child;
                         units.add(Unit.chunkDir(child.resolve(cb), cb, parent));
                     } else {
-                        units.addAll(collectUnits(child, stats, allowNested));
+                        units.addAll(collectUnits(child, stats, allowNested, resolver));
                     }
                 } else {
                     String fn = child.getFileName().toString();
-                    if (isEncryptedName(fn)) {
+                    Path splitBase = resolver.base(child);
+                    if (splitBase != null) {
+                        chunkGroups.computeIfAbsent(splitBase.toString(), k -> new ArrayList<>()).add(child);
+                    } else if (isEncryptedName(fn)) {
                         regularEncrypted.add(child);
-                    } else if (Splitter.isSplitChunkPath(child.toString()) || Splitter.isManifestPath(child.toString())) {
-                        // 分卷碎片文件：按 base 分组
-                        String base = Splitter.isManifestPath(child.toString())
-                                ? child.toString().substring(0, child.toString().length() - ".volumes".length())
-                                : Splitter.splitChunkBase(child.toString());
-                        if (base != null) {
-                            chunkGroups.computeIfAbsent(base, k -> new ArrayList<>()).add(child);
-                        } else {
-                            stats.skipped++;
-                        }
                     } else if (ArchiveExtractor.isArchive(child)) {
                         // 嵌套压缩包：无论是否递归，都作为归档单元（递归→深入，否则→原样拷贝输出）
                         units.add(Unit.archive(child, child.getParent()));
@@ -996,16 +998,13 @@ public final class FolderCrypt {
             return null;
         }
         String foundBase = null;
+        Splitter.InputResolver resolver = new Splitter.InputResolver();
         try (Stream<Path> children = Files.list(dir)) {
             for (Path p : children.toList()) {
                 if (Files.isDirectory(p)) return null;
-                String base;
-                if (Splitter.isSplitChunkPath(p.toString())) {
-                    base = Path.of(Splitter.splitChunkBase(p.toString())).getFileName().toString();
-                } else if (Splitter.isManifestPath(p.toString())) {
-                    String name = p.getFileName().toString();
-                    base = name.substring(0, name.length() - ".volumes".length());
-                } else return null;
+                Path resolved = resolver.base(p);
+                if (resolved == null) return null;
+                String base = resolved.getFileName().toString();
                 if (foundBase == null) foundBase = base;
                 else if (!foundBase.equals(base)) return null;
             }
@@ -1024,15 +1023,19 @@ public final class FolderCrypt {
                 : name + " (" + number + ")";
     }
 
-    /** @param input 输入路径 @return 用于批处理去重的恢复名。 */
-    private static String decryptResultName(Path input) {
+    /**
+     * @param input 输入路径
+     * @return 用于批处理去重的恢复名
+     * @throws IOException 分卷读取失败
+     */
+    private static String decryptResultName(Path input) throws IOException {
         String name = input.getFileName().toString();
         if (Files.isDirectory(input)) {
             String base = detectChunkBase(input);
             return base == null ? name : stripEncExt(base);
         }
-        if (Splitter.isSplitChunkPath(input.toString())) return stripEncExt(Path.of(Splitter.splitChunkBase(input.toString())).getFileName().toString());
-        if (Splitter.isManifestPath(input.toString())) return stripEncExt(name.substring(0, name.length() - ".volumes".length()));
+        Path base = Splitter.inputBase(input);
+        if (base != null) return stripEncExt(base.getFileName().toString());
         return ArchiveExtractor.isArchive(input) ? stripArchiveExt(name) : stripEncExt(name);
     }
 

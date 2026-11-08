@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.CancellationException;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -20,7 +21,9 @@ import java.util.regex.Pattern;
 public final class Splitter {
     /** 每卷内嵌元数据长度；用户设置的卷大小应包含此开销。 */
     public static final int METADATA_BYTES = 64;
-    private static final Pattern SPLIT_CHUNK_RE = Pattern.compile("(?i)\\.(pcv|ergou)\\.[0-9]+$");
+    private static final Pattern SPLIT_CHUNK_RE = Pattern.compile(
+            "(?i)^(.*\\.(?:pcv|ergou))(?:\\s*[（(][0-9]+[)）])?\\.([0-9]+)"
+                    + "(?:\\s*[（(][0-9]+[)）])?(?:\\.[\\p{L}][\\p{L}\\p{N}._-]*)?$");
     static final int MAX_CHUNKS = 1_000_000;
     private static final String FORMAT = "EGTC-SPLIT-1";
 
@@ -84,8 +87,107 @@ public final class Splitter {
      */
     public static Inspection inspect(Path base) throws IOException { return scan(base).inspection(); }
 
-    /** 分卷检查与合并共同使用的元数据快照，避免合并过程中切换到另一批次。 */
-    private record Scan(Inspection inspection, Map<Integer, SplitMetadata> metadata) { }
+    /**
+     * 分卷检查与合并共同使用的快照，防止合并中切换批次或输入文件。
+     * @param inspection 分卷预检查结果
+     * @param metadata 按内部编号保存的元数据
+     * @param sources 全部源文件，包含内容相同的重复下载
+     */
+    private record Scan(Inspection inspection, Map<Integer, SplitMetadata> metadata, Set<Path> sources) { }
+
+    /**
+     * 按文件名或内嵌批次识别分卷，完全改名的新版碎片也可恢复。
+     * 同一批次使用编号最小的可识别文件名；无可用名称时使用批次恢复名。
+     *
+     * @param input 所选文件
+     * @return 分卷基础路径，普通文件为 null
+     * @throws IOException 读取失败或所选分卷的元数据损坏
+     */
+    public static Path inputBase(Path input) throws IOException {
+        return new InputResolver().base(input);
+    }
+
+    /** 单次选择或批处理的名称索引，每个目录只扫描一次，不跨操作复用过期状态。 */
+    public static final class InputResolver {
+        private final Map<Path, Map<SplitMetadata, Path>> directories = new HashMap<>();
+
+        /** 创建本次操作独立的分卷名称索引。 */
+        public InputResolver() { }
+
+        /**
+         * @param input 所选文件
+         * @return 同批次的统一基础路径，普通文件为 null
+         * @throws IOException 读取失败或无文件名线索的元数据损坏
+         */
+        public Path base(Path input) throws IOException {
+            if (Files.isDirectory(input)) return null;
+            Path named = namedBase(input);
+            if (!Files.isRegularFile(input)) return named;
+            SplitMetadata member;
+            try { member = SplitMetadata.read(input); }
+            catch (IOException e) {
+                if (named != null) return named;
+                throw new IOException(Messages.format("split.invalidMetadata", input.getFileName()), e);
+            }
+            if (member == null) return named;
+            Path parent = input.toAbsolutePath().normalize().getParent();
+            Map<SplitMetadata, Path> names = directories.get(parent);
+            if (names == null) {
+                names = indexNames(parent);
+                directories.put(parent, names);
+            }
+            Path preferred = names.get(groupKey(member));
+            return preferred != null ? preferred : parent.resolve("recovered-" + member.group() + ".ergou");
+        }
+
+        /**
+         * @param parent 本次读取的目录
+         * @return 按批次选择的基础名称
+         * @throws IOException 目录读取失败
+         */
+        private static Map<SplitMetadata, Path> indexNames(Path parent) throws IOException {
+            Map<SplitMetadata, Path> names = new HashMap<>();
+            Map<SplitMetadata, Integer> indices = new HashMap<>();
+            try (DirectoryStream<Path> children = Files.newDirectoryStream(parent)) {
+                for (Path child : children) {
+                    Path candidate = namedBase(child);
+                    if (candidate == null || !Files.isRegularFile(child)) continue;
+                    SplitMetadata member;
+                    try { member = SplitMetadata.read(child); }
+                    catch (IOException ignored) { continue; }
+                    if (member == null) continue;
+                    SplitMetadata key = groupKey(member);
+                    int first = indices.getOrDefault(key, Integer.MAX_VALUE);
+                    Path preferred = names.get(key);
+                    if (member.index() < first || member.index() == first
+                            && (preferred == null || candidate.compareTo(preferred) < 0)) {
+                        names.put(key, candidate);
+                        indices.put(key, member.index());
+                    }
+                }
+            }
+            return names;
+        }
+
+        /**
+         * @param member 某卷元数据
+         * @return 不包含卷编号的批次键
+         */
+        private static SplitMetadata groupKey(SplitMetadata member) {
+            return new SplitMetadata(0, member.count(), member.total(), member.chunkSize(), member.group());
+        }
+    }
+
+    /**
+     * @param input 文件路径
+     * @return 根据文件名确定的基础路径，普通文件为 null
+     */
+    private static Path namedBase(Path input) {
+        String path = input.toString();
+        String base = splitChunkBase(path);
+        if (base != null) return Path.of(base);
+        return isManifestPath(path) ? Path.of(path.substring(0, path.length() - ".volumes".length())) : null;
+    }
 
     /**
      * @param base 分卷基础路径
@@ -96,16 +198,31 @@ public final class Splitter {
         Path dir = base.getParent() == null ? Path.of(".") : base.getParent();
         String prefix = base.getFileName() + ".";
         SortedMap<Integer, Path> found = new TreeMap<>();
+        Map<Path, SplitMetadata> embedded = new LinkedHashMap<>();
+        Set<Path> sources = new LinkedHashSet<>();
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(dir)) {
             for (Path p : ds) {
                 String name = p.getFileName().toString();
-                if (!name.startsWith(prefix)) continue;
-                String suffix = name.substring(prefix.length());
-                if (!suffix.matches("[0-9]+")) continue;
+                if (Files.isRegularFile(p)) {
+                    try {
+                        SplitMetadata value = SplitMetadata.read(p);
+                        if (value != null) embedded.put(p, value);
+                    } catch (IOException ignored) {
+                        // 不能关联的损坏文件不猜测批次；命名匹配的碎片在下方报告损坏。
+                    }
+                }
+                Matcher match = SPLIT_CHUNK_RE.matcher(name);
+                String suffix;
+                if (match.matches() && match.group(1).equals(base.getFileName().toString())) suffix = match.group(2);
+                else if (name.startsWith(prefix) && name.substring(prefix.length()).matches("[0-9]+")) {
+                    suffix = name.substring(prefix.length());
+                } else continue;
                 try {
-                    int index = Integer.parseInt(suffix);
-                    if (index >= MAX_CHUNKS || !suffix.equals(Integer.toString(index))) throw new NumberFormatException();
-                    found.put(index, p);
+                    SplitMetadata member = embedded.get(p);
+                    int index = member == null ? Integer.parseInt(suffix) : member.index();
+                    if (member == null && (index >= MAX_CHUNKS || !suffix.equals(Integer.toString(index)))) throw new NumberFormatException();
+                    addChunk(found, index, p);
+                    sources.add(p);
                 } catch (NumberFormatException e) {
                     throw new IOException(Messages.format("split.invalidIndex", name), e);
                 }
@@ -121,6 +238,23 @@ public final class Splitter {
             } catch (IOException e) { invalid.add(entry.getKey()); }
         }
         SplitMetadata group = metadata.isEmpty() ? null : metadata.values().iterator().next();
+        if (group == null) {
+            for (SplitMetadata value : embedded.values()) {
+                if (base.getFileName().toString().equals("recovered-" + value.group() + ".ergou")) {
+                    group = value;
+                    break;
+                }
+            }
+        }
+        if (group != null) {
+            for (var entry : embedded.entrySet()) {
+                if (!group.sameGroup(entry.getValue()) || sources.contains(entry.getKey())) continue;
+                int index = entry.getValue().index();
+                addChunk(found, index, entry.getKey());
+                sources.add(entry.getKey());
+                metadata.put(index, entry.getValue());
+            }
+        }
         int count = group == null ? (found.isEmpty() ? 0 : found.lastKey() + 1) : group.count();
         boolean known = group != null;
         long total = group == null ? -1 : group.total(), size = group == null ? -1 : group.chunkSize();
@@ -163,7 +297,43 @@ public final class Splitter {
         }
         for (Integer i : found.keySet()) if (i >= count) extra.add(i);
         return new Scan(new Inspection(base, count, known, List.copyOf(chunks), List.copyOf(missing),
-                List.copyOf(damaged), List.copyOf(extra)), Map.copyOf(metadata));
+                List.copyOf(damaged), List.copyOf(extra)), Map.copyOf(metadata), Set.copyOf(sources));
+    }
+
+    /**
+     * 同编号的重复下载仅在字节完全相同时合并，拒绝歧义输入。
+     * @param found 已发现的碎片
+     * @param index 卷编号
+     * @param path 候选路径
+     * @throws IOException 同编号文件内容冲突或读取失败
+     */
+    private static void addChunk(Map<Integer, Path> found, int index, Path path) throws IOException {
+        Path previous = found.putIfAbsent(index, path);
+        if (previous != null && (!Files.isRegularFile(previous) || !Files.isRegularFile(path)
+                || !sameBytes(previous, path))) {
+            throw new IOException(Messages.format("split.conflict", index));
+        }
+        if (previous != null && path.compareTo(previous) < 0) found.put(index, path);
+    }
+
+    /**
+     * 使用 Android 同样支持的流 API 比较重复下载，不将大分卷载入内存。
+     * @param first 第一个文件
+     * @param second 第二个文件
+     * @return 字节是否完全一致
+     * @throws IOException 读取失败
+     */
+    private static boolean sameBytes(Path first, Path second) throws IOException {
+        if (Files.size(first) != Files.size(second)) return false;
+        try (InputStream left = Files.newInputStream(first); InputStream right = Files.newInputStream(second)) {
+            byte[] a = new byte[64 * 1024], b = new byte[a.length];
+            int count;
+            while ((count = left.readNBytes(a, 0, a.length)) != 0) {
+                if (right.readNBytes(b, 0, b.length) != count) return false;
+                for (int i = 0; i < count; i++) if (a[i] != b[i]) return false;
+            }
+            return right.read() == -1;
+        }
     }
 
     /**
@@ -183,7 +353,22 @@ public final class Splitter {
      * @throws IOException 目录扫描失败
      */
     public static String describeInputs(Collection<Path> inputs) throws IOException {
+        StringJoiner descriptions = new StringJoiner("\n");
+        for (Path base : inputBases(inputs)) {
+            try { descriptions.add(inspect(base).summary()); }
+            catch (IOException e) { descriptions.add(e.getMessage()); }
+        }
+        return descriptions.toString();
+    }
+
+    /**
+     * @param inputs 所选文件或目录
+     * @return 去重后的分卷基础路径
+     * @throws IOException 读取失败或目录过大
+     */
+    public static Set<Path> inputBases(Collection<Path> inputs) throws IOException {
         Set<Path> bases = new LinkedHashSet<>();
+        InputResolver resolver = new InputResolver();
         for (Path input : inputs) {
             if (Files.isDirectory(input)) {
                 ArrayDeque<Path> folders = new ArrayDeque<>();
@@ -194,28 +379,24 @@ public final class Splitter {
                         for (Path child : children) {
                             if (++entries > MAX_CHUNKS) throw new IOException("too many directory entries");
                             if (Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) folders.add(child);
-                            else addInputBase(child, bases);
+                            else addInputBase(child, bases, resolver);
                         }
                     }
                 }
-            } else addInputBase(input, bases);
+            } else addInputBase(input, bases, resolver);
         }
-        StringJoiner descriptions = new StringJoiner("\n");
-        for (Path base : bases) {
-            try { descriptions.add(inspect(base).summary()); }
-            catch (IOException e) { descriptions.add(e.getMessage()); }
-        }
-        return descriptions.toString();
+        return bases;
     }
 
     /**
      * @param input 路径
-     * @param bases 收集到的分卷基础路径。
+     * @param bases 收集到的分卷基础路径
+     * @param resolver 本次操作的目录索引
+     * @throws IOException 读取失败
      */
-    private static void addInputBase(Path input, Set<Path> bases) {
-        String path = input.toString();
-        if (isSplitChunkPath(path)) bases.add(Path.of(splitChunkBase(path)).toAbsolutePath().normalize());
-        else if (isManifestPath(path)) bases.add(Path.of(path.substring(0, path.length() - ".volumes".length())).toAbsolutePath().normalize());
+    private static void addInputBase(Path input, Set<Path> bases, InputResolver resolver) throws IOException {
+        Path base = resolver.base(input);
+        if (base != null) bases.add(base.toAbsolutePath().normalize());
     }
 
     /**
@@ -371,7 +552,8 @@ public final class Splitter {
             checkCancelled(reporter);
             Scan finished = scan(Path.of(inputBase));
             finished.inspection().requireComplete();
-            if (!initial.metadata().equals(finished.metadata()) || !inspection.chunks().equals(finished.inspection().chunks())) {
+            if (!initial.metadata().equals(finished.metadata()) || !inspection.chunks().equals(finished.inspection().chunks())
+                    || !initial.sources().equals(finished.sources())) {
                 throw new IOException("split group changed during recombination");
             }
             moveCompleted(tmp, output);
@@ -409,7 +591,10 @@ public final class Splitter {
      * @throws IOException 扫描失败
      */
     public static List<Path> artifacts(Path base) throws IOException {
-        List<Path> result = new ArrayList<>(listChunks(base));
+        Scan snapshot = scan(base);
+        List<Path> result = new ArrayList<>(snapshot.inspection().chunks());
+        Set<Path> selected = new HashSet<>(result);
+        snapshot.sources().stream().filter(path -> !selected.contains(path)).sorted().forEach(result::add);
         if (Files.isRegularFile(manifestPath(base))) result.add(manifestPath(base));
         return result;
     }
@@ -419,7 +604,7 @@ public final class Splitter {
      * @return 是否为受支持的分卷碎片。
      */
     public static boolean isSplitChunkPath(String path) {
-        return SPLIT_CHUNK_RE.matcher(Path.of(path).getFileName().toString()).find();
+        return SPLIT_CHUNK_RE.matcher(Path.of(path).getFileName().toString()).matches();
     }
 
     /**
@@ -427,8 +612,9 @@ public final class Splitter {
      * @return 基础路径，不是分卷时为 null。
      */
     public static String splitChunkBase(String path) {
-        if (!isSplitChunkPath(path)) return null;
-        return path.substring(0, path.lastIndexOf('.'));
+        Path input = Path.of(path);
+        Matcher match = SPLIT_CHUNK_RE.matcher(input.getFileName().toString());
+        return match.matches() ? input.resolveSibling(match.group(1)).toString() : null;
     }
 
     /**

@@ -141,13 +141,10 @@ public final class Decryptor {
         String inputFile = req.getInputFile();
 
         // 合并分卷碎片
-        if (req.isRecombine() || Splitter.isSplitChunkPath(inputFile) || Splitter.isManifestPath(inputFile)) {
+        Path splitBase = Splitter.inputBase(Path.of(inputFile));
+        if (req.isRecombine() || splitBase != null) {
             ctx.setStatus(Messages.get("status.recombining"));
-            String base = Splitter.splitChunkBase(inputFile);
-            if (base == null) {
-                base = Splitter.isManifestPath(inputFile)
-                        ? inputFile.substring(0, inputFile.length() - ".volumes".length()) : inputFile;
-            }
+            String base = splitBase == null ? inputFile : splitBase.toString();
             if (req.getOutputFile() != null) Splitter.requireSeparateOutput(Path.of(req.getOutputFile()),Path.of(base));
             Path outputPath = Files.createTempFile("ergou-recombine-", ".ergou");
             ctx.recombinedFile = outputPath.toString();

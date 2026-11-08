@@ -33,8 +33,29 @@ class SplitDecryptUiTest {
         val owner=object:ActivityResultRegistryOwner{override val activityResultRegistry=registry}
         compose.setContent{CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner){MaterialTheme{DecryptScreen()}}}
         compose.onNodeWithText("或选择多个待解密文件").performScrollTo().performClick()
-        compose.waitUntil(15000){compose.onAllNodesWithText(".1",substring=true).fetchSemanticsNodes().isNotEmpty()}
-        compose.onNodeWithText(".1",substring=true).assertExists().assertTextContains("2",substring=true)
+        compose.waitUntil(15000){compose.onAllNodesWithText("已自动识别分卷",substring=true).fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithText("已自动识别分卷",substring=true).assertExists().assertTextContains("2",substring=true).assertTextContains(".1",substring=true)
+        compose.onNodeWithText("same.bin.ergou.0").assertExists()
+    }
+
+    /** 单文件选择回调中，即使后缀完全改变，也自动提示分卷及缺少的编号。 */
+    @Test fun renamedSingleSelectionAutomaticallyDetectsAndExplainsMissingVolume() {
+        val first = DocumentsContract.buildDocumentUri("hbnu.project.ergoutreecrypt.split.tests", "root/Renamed/QQ-photo.jpg")
+        val registry = object : ActivityResultRegistry() {
+            override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
+                dispatchResult(requestCode, Activity.RESULT_OK, Intent().setData(first))
+            }
+        }
+        val owner = object : ActivityResultRegistryOwner { override val activityResultRegistry = registry }
+        compose.setContent { CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) { MaterialTheme { DecryptScreen() } } }
+        compose.onNodeWithText("点击选择要解密的文件").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText("已自动识别分卷", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("已自动识别分卷", substring = true).assertTextContains(".1", substring = true)
+        compose.onNodeWithText("输入为分卷碎片，解密前先合并").assertDoesNotExist()
+        compose.onNodeWithText("  解密").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithText("分卷尚未就绪").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("分卷尚未就绪").assertExists()
+        compose.onNodeWithText("请选择整个分卷文件夹", substring = true).assertTextContains(".1", substring = true)
     }
 
     @get:Rule val compose=createComposeRule()
@@ -51,8 +72,8 @@ class SplitDecryptUiTest {
         val owner=object:ActivityResultRegistryOwner{override val activityResultRegistry=registry}
         compose.setContent{CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner){MaterialTheme{DecryptScreen()}}}
         compose.onNodeWithText("或选择多个待解密文件").performScrollTo().performClick()
-        compose.waitUntil(15000){compose.onAllNodesWithText(".1",substring=true).fetchSemanticsNodes().isNotEmpty()}
-        compose.onNodeWithText(".1",substring=true).assertExists()
-        compose.onNodeWithText(".1",substring=true).assertTextContains("2",substring=true)
+        compose.waitUntil(15000){compose.onAllNodesWithText("已自动识别分卷",substring=true).fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithText("已自动识别分卷",substring=true).assertExists()
+        compose.onNodeWithText("已自动识别分卷",substring=true).assertTextContains("2",substring=true).assertTextContains(".1",substring=true)
     }
 }

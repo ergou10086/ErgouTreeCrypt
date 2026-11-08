@@ -28,6 +28,12 @@ public final class SplitTestDocumentsProvider extends ContentProvider {
         files.put("root/A/same.bin.ergou.volumes",manifest);files.put("root/B/same.bin.ergou.volumes",manifest);
         files.put("root/Embedded/same.bin.ergou.0",embedded(new byte[]{0,1,2,3,4},0));
         files.put("root/Embedded/same.bin.ergou.1",embedded(new byte[]{5,6,7,8,9},1));
+        files.put("root/Renamed/QQ-photo.jpg", embedded(new byte[]{0,1,2,3,4},0));
+        files.put("root/Renamed/attachment.bin", embedded(new byte[]{5,6,7,8,9},1));
+        files.put("root/Suffix/same.bin.ergou.0 (1).下载", new byte[]{0,1,2,3,4});
+        files.put("root/Suffix/same.bin.ergou (2).1", new byte[]{5,6,7,8,9});
+        files.put("root/Long/" + "长".repeat(100) + ".ergou.0", embedded(new byte[]{0,1,2,3,4},0));
+        files.put("root/Long/" + "长".repeat(100) + ".ergou.1", embedded(new byte[]{5,6,7,8,9},1));
         return true;
     }
 

@@ -52,7 +52,7 @@ public final class SplitMetadataSupport {
     }
 
     /**
-     * * 每一生成端的同一组分卷，在每一读取端分别测试认证和解密拒绝，以及 RS 载荷修复。
+     * 每一生成端的同一组分卷，在每一读取端测试认证／解密拒绝、文件名改号恢复和 RS 修复。
      * @param corpus 本轮语料
      * @param work 工作目录
      * @return 异常及修复用例数
@@ -98,7 +98,7 @@ public final class SplitMetadataSupport {
                     else b[start+(scenario.equals("start-magic")?0:scenario.equals("end-magic")?56:20)]^=1;
                     Files.write(Path.of(base+".1"),b);
                 }
-                case "extra" -> Files.write(Path.of(base+"."+original.expectedCount()),bytes.get(1));
+                case "extra" -> Files.write(Path.of(base+"."+original.expectedCount()),Arrays.copyOf(bytes.get(1),bytes.get(1).length-64));
                 case "stale-sidecar" -> writeUtf8(Splitter.manifestPath(base),"format=EGTC-SPLIT-1\ncount=1\nbytes=1\nchunkSize=1\n");
                 default -> throw new IOException("Unknown metadata mutation");
             }
@@ -109,9 +109,13 @@ public final class SplitMetadataSupport {
                 require(Splitter.describeInput(folder.getParent()).contains("移动后.pcv"),"Nested folder preview lost split group");
             }
             Path selected=Path.of(base+"."+(scenario.equals("missing-first")||scenario.equals("only-last")?last:0));
-            assertRejected(selected,folder.resolve("preserve"),List.of());
+            if (scenario.equals("swapped-indices")) {
+                require(Verifier.verify(verifyRequest(selected,List.of())),"Filename numbering overrode valid embedded indices");
+                Decryptor.decrypt(decryptRequest(selected,folder.resolve("restored"),List.of()));
+                require(Arrays.equals(Files.readAllBytes(corpus.resolve("sample.bin")),Files.readAllBytes(folder.resolve("restored"))),"Swapped filenames changed plaintext");
+            } else assertRejected(selected,folder.resolve("preserve"),List.of());
             try(var files=Files.walk(folder)){require(files.noneMatch(p->p.toString().endsWith(".incomplete")),"Temporary artifact leaked");}
-            System.out.println("METADATA REJECT verify+decrypt "+inventory.getProperty("runtime")+" "+scenario);
+            System.out.println("METADATA "+(scenario.equals("swapped-indices")?"RECOVER":"REJECT")+" verify+decrypt "+inventory.getProperty("runtime")+" "+scenario);
         }
         Path rsBase=findCaseBase(corpus,inventory,"embedded-all-options");
         Path rsFolder=Files.createDirectories(work.resolve("rs-payload")),copy=rsFolder.resolve("rs.ergou");

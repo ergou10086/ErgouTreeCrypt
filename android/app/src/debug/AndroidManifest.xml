@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 测试回调直接返回 URI；调试包显式声明虚拟 SAF 提供者的可见性。 -->
     <queries>
         <provider android:authorities="hbnu.project.ergoutreecrypt.fast.tests" />
+        <provider android:authorities="hbnu.project.ergoutreecrypt.split.tests" />
     </queries>
 </manifest>

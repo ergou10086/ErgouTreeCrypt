@@ -141,10 +141,6 @@ mvn clean javafx:jlink
 mvn test
 ```
 
-测试覆盖：Argon2 密钥派生、XChaCha20 流密码、Galois Field 域运算、Reed-Solomon 编解码、Header 读写与认证、Keyfile 处理、媒体加密往返、密码规范化、卷加密往返等；FAST 还包含头部、黄金向量、分段、输出保护和旧格式代表回归。
-
-FAST 的发行镜像、八方向互通和完整任务性能入口：
-
 ```powershell
 python scripts/build_desktop.py --output target/fast-desktop
 cd android
@@ -153,10 +149,6 @@ cd ..
 python scripts/test_fast_interop.py --desktop-image target/fast-desktop --android-build-type releaseValidation --skip-build --foreground --adb PATH_TO_ADB --serial DEVICE_SERIAL
 python scripts/benchmark_fast_tasks.py --source PATH_TO_REAL_FILE --desktop-image target/fast-desktop --output target/fast-results --foreground --adb PATH_TO_ADB --serial DEVICE_SERIAL
 ```
-
-请使用新的输出目录；桌面镜像使用当前 `JAVA_HOME` 的 JDK。互通入口验证真实 JVM/ART 交换的同一产物；性能入口预热后执行三轮交替完整加密、独立认证、默认解密及复制基线，保留 CSV。加 `--large` 可执行两端超过 4 GiB 的实文件专项，需各预留约 13 GiB。普通回归不会自动启动这些大型测试。
-
-`releaseValidation` 使用独立 `.fastvalidation` 包名、调试签名、不可调试的 R8/资源缩减构建。它额外包含验收助手、测试 Provider 和 runner 所需的 API 保留规则；密码核心与助手一同优化，instrumentation 只调用测试桥。正式 `release` 不包含这些测试入口。界面验收可在互通命令上添加 `--ui`，需设备保持解锁。部分设备会冻结后台测试，可用 `--foreground` 保持验收应用前台；计时期间请暂停其他手机操作。测试过程中系统可能要求确认 USB 安装。真实语料和设备临时目录由入口清理，正式回归源码及可复用脚本保留。
 
 ---
 
@@ -194,8 +186,6 @@ python scripts/benchmark_fast_tasks.py --source PATH_TO_REAL_FILE --desktop-imag
 解密和“认证文件”按内容自动识别 FAST，无需勾选极速选项。认证会扫描完整文件；解密在完整认证后才提交最终结果。Android SAF 导出使用独占任务目录，完成后显示结果目录；失败或取消仅清理本任务文件，保留已有文件。具体文档提供者的重命名能力可能不同。
 
 **兼容性：旧版程序不能读取 FAST-v1。** 分享前应确认接收端已具备 FAST 读取能力。新版继续读取旧格式，不自动转换历史密文。性能随硬件、存储、KDF 和归档/导出流程变化，不承诺所有设备固定翻倍。
-
-2026-10-11 参考测量：约 1.05 GiB 真实音频、热缓存、预热后三轮中位数，完整生产核心入口包含 KDF、关闭、认证、提交和 force。Windows 11 / i7-13700H / 捆绑 Temurin 21.0.12.1 的默认加密、解密分别为标准模式的 **5.79×、4.30×**；PLK110 / Android 16 的独立 R8 验收包分别为 **7.42×、5.88×**。两端标准 KDF 为 256 MiB/3/4，FAST 为 64 MiB/3/4。该表述仅限这些环境和输入，文件选择/导入缓存、归档及 SAF 导出另计；验收变体与正式 release 的差异见测试说明。 小文件不保证更快：本次手机 1 MiB 默认解密中位数 FAST 约 1.02 秒、标准约 0.27 秒。
 
 FAST supports archive processing, but disables conflicting advanced encryption options and requires a nonblank password. Valid leading/trailing spaces are preserved. Decryption always authenticates the complete stream before publishing the result; forced recovery cannot bypass FAST authentication. Performance depends on the device, storage and complete workflow.
 
@@ -371,22 +361,6 @@ UI 内建密码强度评估与随机密码生成器（默认 20 字符），参�
 - 字符集多样性（大小写字母、数字、特殊字符）
 - 常见模式检测
 
-### 归档与分卷
-
-加密后压缩、解密前解压与加解密流水线分离展示：蓝色条表示加密/解密进度，橙色条表示压缩/解压/打包进度；状态说明文案始终与当前界面语言一致。
-
-**ZIP / ZIPX 密码：** 使用标准 WinZip AES-256，密码框常显、可留空，不受工具特有加密开关影响。可在设置中开启「压缩包密码留空则使用加密密码」：开启后，加密后压缩时归档密码留空会使用加密密码；关闭时（默认）留空则生成无密码归档。ZIPX 的外部兼容性由独立 Python 和 7-Zip 样本及外部解码测试验证。
-
-ZIPX 密码在桌面和 Android 上均按 UTF-8 编码。Windows 版 7-Zip 23.01 按系统 ANSI 代码页转换 ZIP 密码，直接输入同一个中文／emoji 密码可能报错；向这类外部软件交换时建议使用 ASCII 密码。外部测试脚本显式适配真实文件场景的密码字节并分别执行 `7za t` 认证和 `7za x` 恢复，不把字节适配测试宣称为外部软件的 Unicode 界面兼容性；另有三种生产编码器的 ASCII 密码回归，直接使用未经修改的 7-Zip 验证。
-
-**ZIPX 支持范围：** 桌面和 Android 的通用加密、媒体加密后归档、解密前解压、解密后解压以及前后归档分卷流程使用同一共享实现。界面创建 ZIPX 默认使用 XZ/LZMA2；Java API `ZipxArchive.pack` 也可选择 BZip2 或 LZMA。读取支持 Store（0）、Deflate（8）、Deflate64（9）、BZip2（12）、LZMA（14）、XZ（95），以及这些方法的 AE-1/AE-2 AES-128/192/256 条目、ZIP64 和数据描述符。解码内存上限为 64 MiB，超限明确失败。
-
-PPMd（98）、JPEG（96）、MP3（94）、WavPack（97）和其他未实现方法会在解压前明确报错，**当前阶段不宣称完整支持所有 WinZip ZIPX 文件**。ZIPX 中的传统 ZipCrypto、PKWARE 强加密和原生 ZIP 多盘归档暂不支持；本工具 `.ergou` 分卷可以放入 ZIPX 并跨端还原。AES 先认证完整密文，再解码；所有文件的大小和适用 CRC 均通过验证后才提交输出。
-
-依据：[WinZip ZIPX 说明](https://kb.winzip.com/en/130326)、[PKWARE APPNOTE 6.3.10](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT)、[WinZip AES 规范](https://www.winzip.com/en/support/aes-encryption/)。可复现入口：`scripts/test_zipx_interop.py --adb PATH --sevenzip PATH`；可通过 `--source` 指定真实测试文件。14 个真实文件场景在桌面 JVM 和 Android ART 之间交换同一批字节，四种生产／读取组合每种均分别执行认证和解压／解密后 SHA-256 比对。独立格式样本保存在 `src/test/resources/zipx/golden/`，真实媒体和运行报告保存在忽略的 `target/zipx-interop/`。
-
-**GZ / TAR.GZ / 7Z 密码：** 无（或已放弃）原生密码。默认这三种格式**不支持密码**，始终生成明文包。如需为其加密，请在设置中开启「**为非 zip 格式开启工具特有压缩包加密方式**」：开启后可填写归档密码，采用本工具特有的整体 AES-256 包裹加密（`EGTC_ARCHV1` 魔数），**仅能用本工具解压，外部工具无法识别其密码**。7Z 内容方法使用 COPY（不对载荷做 LZMA2），打包快。旧版原生加密 7Z 解压仍向后兼容。
-
 #### 压缩格式
 
 
@@ -493,82 +467,6 @@ plainMac : 64B (可选)            BLAKE2b-512(原始 payload)
 
 ---
 
-## 🏗️ 项目架构
-
-```
-                    ┌────────────┐
-                    │     ui     │  JavaFX 控制器
-                    └─────┬──────┘
-                          │ 依赖
-                ┌─────────┴─────────┐
-           ┌────▼─────┐       ┌─────▼──────┐
-           │  volume  │ 编排   │ mediacrypt │ 音视频加密子系统
-           └─┬──┬──┬──┘       └─────┬──────┘
-       ┌─────┘  │  └─────┐          │
-    ┌──▼───┐ ┌──▼────┐ ┌─▼──────┐   │
-    │header│ │fileops│ │keyfile/│   │
-    │      │ │       │ │password│   │
-    └──┬───┘ └──┬────┘ └─┬──────┘   │
-       └────┬───┴────────┘          │
-       ┌────▼─────┐                 │
-       │ encoding │                 │
-       │ (RS/pad) │                 │
-       └────┬─────┘                 │
-            └──────────┬────────────┘
-                 ┌─────▼──────┐
-                 │   crypto   │  原语（被所有上层复用）
-                 └────────────┘
-```
-
-**分层设计原则**：
-
-1. `crypto` 是最底层密码学原语，被所有上层复用
-2. `mediacrypt` 与 `volume` 平级，都建立在 `crypto` 之上，互不依赖
-3. `ui` 依赖 `volume` + `mediacrypt` + `i18n`，不直接触碰密码学原语
-4. 密钥材料用完立即 `SecureZero`，`CipherSuite`/`OperationContext` 实现 `AutoCloseable`
-
-### 加密 8 阶段流水线
-
-1. **Preprocess** — 多文件压缩
-2. **GenerateValues** — 生成随机 salt/nonce/IV
-3. **WriteHeader** — RS 编码写入卷头（占位 auth）
-4. **DeriveKeys** — Argon2id 密码派生
-5. **ProcessKeyfiles** — 密钥文件哈希与 XOR 混合
-6. **ComputeAuth** — v2 Header HMAC
-7. **EncryptPayload** — XChaCha20(+Serpent) 加密 + MAC + 可选 RS
-8. **Finalize** — 回填 auth tag → rename → deniability/split/archive
-
-### 解密 8 阶段流水线
-
-1. **Preprocess** — 分卷合并 + 去可否认层
-2. **ReadHeader** — RS 解码卷头字段
-3. **DeriveProcessVerify** — 三态密码尝试 + 密钥文件 + 认证验证
-4. **DecryptPayload** — 快速 RS 解码 → XChaCha20 → Serpent
-5. **Finalize** — MAC 校验 + 全 RS 重试 + 自动解压
-
----
-
-## 📦 与 Picocrypt 的对照
-
-
-| 特性       | Go Picocrypt        | ErgouTreeCrypt                    |
-| ---------- | ------------------- | --------------------------------- |
-| 文件格式   | `.pcv`              | `.ergou`（新），兼容读取 `.pcv`   |
-| 加密算法   | XChaCha20 + Serpent | XChaCha20 + Serpent（完全兼容）   |
-| 密钥派生   | Argon2id            | Argon2id（参数相同）              |
-| RS 纠错    | infectious (Go)     | 自实现 GF(2⁸) + RS（逐字节兼容） |
-| UI 框架    | Gio UI (Go)         | JavaFX (Win11 Fluent Design)      |
-| 音视频加密 | ❌                  | ✅ 独立子系统（MP3/MP4/WAV）      |
-| 可否认加密 | ✅                  | ✅                                |
-| 密钥文件   | ✅                  | ✅                                |
-| 分卷       | ✅                  | ✅                                |
-| 归档支持   | 有限                | 完整（ZIP/GZ/TAR.GZ + 密码）      |
-| 主题       | 暗色/浅色           | 浅色/深色/跟随系统                |
-| 国际化     | 仅英文              | 中文/英文实时切换                 |
-| 设置持久化 | —                  | Java Preferences API              |
-
----
-
 ## 📁 项目结构
 
 ```
@@ -639,18 +537,6 @@ ErgouTreeCrypt/
 | `PasswordNormalizerTest`   | 密码 NFC 规范化                    |
 | `FolderCryptRoundtripTest` | 文件夹加密往返                     |
 | `VolumeRoundtripTest`      | 卷加密往返（核心）                 |
-
----
-
-## ⚠️ 安全约定
-
-- 敏感字节（key/subkey/keyfileKey）用完立即 `SecureZero` 清零
-- `CipherSuite` / `OperationContext` 实现 `AutoCloseable`，使用 `try-with-resources` 包裹
-- 密码从 UI 以 `char[]` 传入，转为 `byte[]` (NFC) 后立即清零
-- ⚠️ Java `String` 不可清零（与 Go 一致的已知限制）
-- MAC / Header 认证一律使用常量时间比较
-- 临时文件 / `.incomplete` 文件在失败时自动清理
-- 无密码模式使用公开默认密码，**安全性等于明文传输**
 
 ---
 
